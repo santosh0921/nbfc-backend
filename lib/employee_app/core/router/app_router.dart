@@ -1,0 +1,209 @@
+import 'package:flutter/widgets.dart';
+import 'package:go_router/go_router.dart';
+import '../../features/auth/presentation/pages/agency_selection_page.dart';
+import '../../features/auth/presentation/pages/forgot_password_page.dart';
+import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/auth/presentation/pages/profile_setup_page.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/dashboard/presentation/pages/dashboard_home_page.dart';
+import '../../features/dashboard/presentation/pages/dashboard_shell.dart';
+import '../../features/cases/presentation/pages/cases_list_page.dart';
+import '../../features/collections/presentation/pages/collections_page.dart';
+import '../../features/notifications/presentation/pages/notifications_page.dart';
+import '../../features/profile/presentation/pages/profile_page.dart';
+import '../../features/recovery/presentation/pages/recovery_dashboard_page.dart';
+import '../../features/recovery/presentation/pages/recovery_case_list_page.dart';
+import '../../features/recovery/presentation/pages/recovery_case_detail_page.dart';
+import '../../features/recovery/presentation/pages/recovery_visit_page.dart';
+import '../../features/recovery/presentation/pages/recovery_report_page.dart';
+import '../../features/recovery/presentation/pages/recovery_shell.dart';
+import '../constants/employee_app_module.dart';
+import '../providers/agency_provider.dart';
+import 'app_page_transition.dart';
+import 'route_names.dart';
+
+class AppRouter {
+  AppRouter._();
+
+  static const _publicPaths = [RouteNames.loginPath, RouteNames.forgotPasswordPath];
+
+  static bool _isPublicPath(String path) => _publicPaths.any((p) => path.startsWith(p));
+
+  static GoRouter build(
+    AuthProvider authProvider,
+    AgencyProvider agencyProvider, {
+    EmployeeAppModule module = EmployeeAppModule.verification,
+  }) {
+    final homePath = module == EmployeeAppModule.recovery ? RouteNames.recoveryDashboardPath : RouteNames.dashboardPath;
+    return GoRouter(
+      initialLocation: RouteNames.agencySelectPath,
+      refreshListenable: Listenable.merge([authProvider, agencyProvider]),
+      redirect: (context, state) {
+        final path = state.matchedLocation;
+
+        // Wait for the persisted agency choice to load before gating on it,
+        // otherwise the very first frame would bounce somewhere wrong.
+        if (!agencyProvider.isRestored) return null;
+
+        // Strict priority chain — each stage owns exactly one redirect
+        // target, so re-evaluating after a redirect always resolves to
+        // `null` (stay) instead of bouncing to a different stage's target.
+        final agencyChosen = agencyProvider.selectedAgency != null;
+        if (!agencyChosen) {
+          return path == RouteNames.agencySelectPath ? null : RouteNames.agencySelectPath;
+        }
+
+        final isAuthenticated = authProvider.status == AuthStatus.authenticated;
+        if (!isAuthenticated) {
+          return _isPublicPath(path) ? null : RouteNames.loginPath;
+        }
+
+        if (authProvider.needsProfileSetup) {
+          return path == RouteNames.profileSetupPath ? null : RouteNames.profileSetupPath;
+        }
+
+        final isPreAuthPath = path == RouteNames.agencySelectPath ||
+            path == RouteNames.profileSetupPath ||
+            _isPublicPath(path);
+        if (isPreAuthPath) return homePath;
+
+        return null;
+      },
+      routes: [
+        GoRoute(
+          path: RouteNames.agencySelectPath,
+          name: RouteNames.agencySelect,
+          pageBuilder: (context, state) =>
+              buildPageWithTransition(context: context, state: state, child: const AgencySelectionPage()),
+        ),
+        GoRoute(
+          path: RouteNames.loginPath,
+          name: RouteNames.login,
+          pageBuilder: (context, state) =>
+              buildPageWithTransition(context: context, state: state, child: const LoginPage()),
+        ),
+        GoRoute(
+          path: RouteNames.forgotPasswordPath,
+          name: RouteNames.forgotPassword,
+          pageBuilder: (context, state) =>
+              buildPageWithTransition(context: context, state: state, child: const ForgotPasswordPage()),
+        ),
+        GoRoute(
+          path: RouteNames.profileSetupPath,
+          name: RouteNames.profileSetup,
+          pageBuilder: (context, state) =>
+              buildPageWithTransition(context: context, state: state, child: const ProfileSetupPage()),
+        ),
+        StatefulShellRoute.indexedStack(
+          builder: (context, state, navigationShell) => DashboardShell(navigationShell: navigationShell),
+          branches: [
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: RouteNames.dashboardPath,
+                name: RouteNames.dashboard,
+                pageBuilder: (context, state) =>
+                    buildPageWithTransition(context: context, state: state, child: const DashboardHomePage()),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: RouteNames.casesPath,
+                name: RouteNames.cases,
+                pageBuilder: (context, state) =>
+                    buildPageWithTransition(context: context, state: state, child: const CasesListPage()),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: RouteNames.collectionsPath,
+                name: RouteNames.collections,
+                pageBuilder: (context, state) =>
+                    buildPageWithTransition(context: context, state: state, child: const CollectionsPage()),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: RouteNames.notificationsPath,
+                name: RouteNames.notifications,
+                pageBuilder: (context, state) =>
+                    buildPageWithTransition(context: context, state: state, child: const NotificationsPage()),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: RouteNames.profilePath,
+                name: RouteNames.profile,
+                pageBuilder: (context, state) =>
+                    buildPageWithTransition(context: context, state: state, child: const ProfilePage()),
+              ),
+            ]),
+          ],
+        ),
+        StatefulShellRoute.indexedStack(
+          builder: (context, state, navigationShell) => RecoveryShell(navigationShell: navigationShell),
+          branches: [
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: RouteNames.recoveryDashboardPath,
+                name: RouteNames.recoveryDashboard,
+                pageBuilder: (context, state) =>
+                    buildPageWithTransition(context: context, state: state, child: const RecoveryDashboardPage()),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: RouteNames.recoveryCasesPath,
+                name: RouteNames.recoveryCases,
+                pageBuilder: (context, state) =>
+                    buildPageWithTransition(context: context, state: state, child: const RecoveryCaseListPage()),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: RouteNames.recoveryAlertsPath,
+                name: RouteNames.recoveryAlerts,
+                pageBuilder: (context, state) =>
+                    buildPageWithTransition(context: context, state: state, child: const NotificationsPage()),
+              ),
+            ]),
+            StatefulShellBranch(routes: [
+              GoRoute(
+                path: RouteNames.recoveryProfilePath,
+                name: RouteNames.recoveryProfile,
+                pageBuilder: (context, state) =>
+                    buildPageWithTransition(context: context, state: state, child: const ProfilePage()),
+              ),
+            ]),
+          ],
+        ),
+        GoRoute(
+          path: RouteNames.recoveryCaseDetailPath,
+          name: RouteNames.recoveryCaseDetail,
+          pageBuilder: (context, state) => buildPageWithTransition(
+            context: context,
+            state: state,
+            child: RecoveryCaseDetailPage(caseId: state.pathParameters['id']!),
+          ),
+        ),
+        GoRoute(
+          path: RouteNames.recoveryVisitPath,
+          name: RouteNames.recoveryVisit,
+          pageBuilder: (context, state) => buildPageWithTransition(
+            context: context,
+            state: state,
+            child: RecoveryVisitPage(caseId: state.pathParameters['id']!),
+          ),
+        ),
+        GoRoute(
+          path: RouteNames.recoveryReportPath,
+          name: RouteNames.recoveryReport,
+          pageBuilder: (context, state) => buildPageWithTransition(
+            context: context,
+            state: state,
+            child: RecoveryReportPage(caseId: state.pathParameters['id']!),
+          ),
+        ),
+      ],
+    );
+  }
+}
