@@ -218,7 +218,12 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
         );
       } else if (_step == _referencesStep) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please complete both references to continue.')),
+          const SnackBar(
+            content: Text(
+              'One of the reference fields still needs attention — jumping you to it. '
+              'Aadhaar must be exactly 12 digits and PAN must match the format ABCDE1234F.',
+            ),
+          ),
         );
       } else if (_step == _specialStep) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -333,8 +338,6 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
     final references = (_referencesFormKey.currentState?.references ?? const [])
         .map((r) => r.toJson())
         .toList();
-    // ignore: avoid_print
-    print('DEBUG references at submit: currentState=${_referencesFormKey.currentState != null}, count=${references.length}, data=$references');
     final loan = await LoanApiService.apply(
       token,
       category: _productName,

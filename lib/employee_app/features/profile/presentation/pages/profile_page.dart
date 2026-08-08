@@ -6,7 +6,6 @@ import '../../../../core/components/app_scaffold.dart';
 import '../../../../core/components/gradient_header.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
-import '../../../../core/providers/theme_provider.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -34,7 +33,6 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final employee = context.watch<AuthProvider>().employee;
-    final themeProvider = context.watch<ThemeProvider>();
 
     return AppScaffold(
       showAppBar: false,
@@ -84,13 +82,6 @@ class ProfilePage extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
-                      SwitchListTile(
-                        title: const Text('Dark Mode'),
-                        secondary: const Icon(Icons.dark_mode_outlined, color: AppColors.primary),
-                        value: themeProvider.themeMode == ThemeMode.dark,
-                        onChanged: (_) => context.read<ThemeProvider>().toggle(),
-                      ),
-                      const Divider(height: 1),
                       const ListTile(
                         leading: Icon(Icons.notifications_outlined, color: AppColors.primary),
                         title: Text('Notification Preferences'),

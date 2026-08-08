@@ -11,7 +11,7 @@ import 'api_exception.dart';
 class ApiClient {
   ApiClient._();
 
-  static const String baseUrl = 'http://localhost:8080';
+  static const String baseUrl = 'https://nbfc-backend-gr1t.onrender.com';
   static const Duration _timeout = Duration(seconds: 15);
 
   static Map<String, String> _headers(String? token) => {
