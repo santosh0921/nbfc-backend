@@ -12,8 +12,9 @@ type CustomerProfile struct {
 
 	UserID uuid.UUID `gorm:"type:uuid;uniqueIndex;not null"`
 
-	FirstName string `gorm:"size:100"`
-	LastName  string `gorm:"size:100"`
+	FirstName  string  `gorm:"size:100"`
+	MiddleName *string `gorm:"size:100"`
+	LastName   string  `gorm:"size:100"`
 
 	Email string `gorm:"size:150"`
 

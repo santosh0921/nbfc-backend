@@ -46,10 +46,35 @@ class _RegistrationPageState extends State<RegistrationPage> {
     }
   }
 
+  /// Splits the single "Full Name" field into first/middle/last, matching
+  /// the backend's three-part name shape (`first_name`/`middle_name`/
+  /// `last_name`) used for the name-collision check in `POST
+  /// /auth/profile`. First word = first name, last word = last name,
+  /// anything in between = middle name. Requires at least two words —
+  /// enforced by [_validateName] before this ever runs.
+  ({String first, String? middle, String last}) _splitName(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.length == 1) {
+      return (first: parts.first, middle: null, last: parts.first);
+    }
+    final middle = parts.length > 2 ? parts.sublist(1, parts.length - 1).join(' ') : null;
+    return (first: parts.first, middle: middle, last: parts.last);
+  }
+
+  String? _validateName(String? v) {
+    final trimmed = v?.trim() ?? '';
+    if (trimmed.isEmpty) return 'Enter your full name';
+    if (!trimmed.contains(RegExp(r'\s'))) return 'Please enter your full name (first and last name)';
+    return null;
+  }
+
   void _continue() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final name = _splitName(_nameController.text.trim());
     AuthProvider.instance
-      ..pendingFullName = _nameController.text.trim()
+      ..pendingFirstName = name.first
+      ..pendingMiddleName = name.middle
+      ..pendingLastName = name.last
       ..pendingEmail = _emailController.text.trim()
       ..pendingDob = _dobValue != null ? DateFormat('yyyy-MM-dd').format(_dobValue!) : null;
     context.go('/create-mpin');
@@ -82,7 +107,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 ApplyFormField(
                   label: 'Full Name',
                   controller: _nameController,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your full name' : null,
+                  validator: _validateName,
                 ),
                 ApplyFormField(
                   label: 'Email Address',

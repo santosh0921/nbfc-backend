@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/pages/agency_selection_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/auth/presentation/pages/mpin_setup_page.dart';
+import '../../features/auth/presentation/pages/mpin_unlock_page.dart';
+import '../../features/auth/presentation/pages/otp_verify_page.dart';
 import '../../features/auth/presentation/pages/profile_setup_page.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/dashboard/presentation/pages/dashboard_home_page.dart';
@@ -58,12 +61,30 @@ class AppRouter {
           return _isPublicPath(path) ? null : RouteNames.loginPath;
         }
 
+        // A restored JWT session behind a local MPIN app-lock takes
+        // priority over everything else post-auth — nothing else (profile
+        // setup, onboarding, the dashboard) should be reachable until it's
+        // cleared.
+        if (authProvider.needsMpinUnlock) {
+          return path == RouteNames.mpinUnlockPath ? null : RouteNames.mpinUnlockPath;
+        }
+
+        // A brand-new login on this device walks through the one-time
+        // mock-OTP + MPIN-setup sequence before anything else.
+        if (authProvider.needsFirstTimeOnboarding) {
+          final onOnboardingPath = path == RouteNames.otpVerifyPath || path == RouteNames.mpinSetupPath;
+          return onOnboardingPath ? null : RouteNames.otpVerifyPath;
+        }
+
         if (authProvider.needsProfileSetup) {
           return path == RouteNames.profileSetupPath ? null : RouteNames.profileSetupPath;
         }
 
         final isPreAuthPath = path == RouteNames.agencySelectPath ||
             path == RouteNames.profileSetupPath ||
+            path == RouteNames.otpVerifyPath ||
+            path == RouteNames.mpinSetupPath ||
+            path == RouteNames.mpinUnlockPath ||
             _isPublicPath(path);
         if (isPreAuthPath) return homePath;
 
@@ -93,6 +114,24 @@ class AppRouter {
           name: RouteNames.profileSetup,
           pageBuilder: (context, state) =>
               buildPageWithTransition(context: context, state: state, child: const ProfileSetupPage()),
+        ),
+        GoRoute(
+          path: RouteNames.otpVerifyPath,
+          name: RouteNames.otpVerify,
+          pageBuilder: (context, state) =>
+              buildPageWithTransition(context: context, state: state, child: const OtpVerifyPage()),
+        ),
+        GoRoute(
+          path: RouteNames.mpinSetupPath,
+          name: RouteNames.mpinSetup,
+          pageBuilder: (context, state) =>
+              buildPageWithTransition(context: context, state: state, child: const MpinSetupPage()),
+        ),
+        GoRoute(
+          path: RouteNames.mpinUnlockPath,
+          name: RouteNames.mpinUnlock,
+          pageBuilder: (context, state) =>
+              buildPageWithTransition(context: context, state: state, child: const MpinUnlockPage()),
         ),
         StatefulShellRoute.indexedStack(
           builder: (context, state, navigationShell) => DashboardShell(navigationShell: navigationShell),

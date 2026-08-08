@@ -3,6 +3,7 @@ import '../config/app_config.dart';
 import '../network/api_exception.dart';
 import '../network/auth_api_service.dart';
 import '../network/kyc_api_service.dart';
+import '../services/last_role_storage.dart';
 import '../services/token_storage.dart';
 
 /// App-wide session state. Singleton (mirroring [ThemeProvider]'s scope,
@@ -29,7 +30,9 @@ class AuthProvider extends ChangeNotifier {
   // Collected on the post-OTP Registration screen, saved to the backend
   // profile right after the first successful login (real-backend mode
   // only).
-  String? pendingFullName;
+  String? pendingFirstName;
+  String? pendingMiddleName;
+  String? pendingLastName;
   String? pendingEmail;
   String? pendingDob;
 
@@ -72,6 +75,7 @@ class AuthProvider extends ChangeNotifier {
     if (AppConfig.useMockBackend) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
       hasSession = true;
+      await LastRoleStorage.saveCustomer();
       notifyListeners();
       return;
     }
@@ -86,33 +90,74 @@ class AuthProvider extends ChangeNotifier {
     biometricEnabled = result.biometricEnabled;
     hasSession = true;
     await TokenStorage.save(token: result.token, mobile: mobile);
+    await LastRoleStorage.saveCustomer();
     notifyListeners();
+    // Deliberately awaited (not fire-and-forget) so a 400 — most notably
+    // the name-collision guard on `POST /auth/profile` — propagates back
+    // up through [createMpinAndLogin] to the Create MPIN screen, which is
+    // the earliest point in the flow a JWT exists to even attempt this
+    // call. That lets the caller keep the user on that screen with an
+    // actionable error instead of dropping them into the app first and
+    // surfacing it later. Other failures (e.g. profile already exists
+    // from a prior run) stay non-fatal.
     await _saveRegisteredProfile();
   }
 
   /// Saves the name/email/DOB collected on the Registration screen to
-  /// the backend profile now that we have a JWT. Best-effort — a failure
-  /// here (e.g. profile already exists from a prior run) shouldn't block
-  /// getting into the app.
+  /// the backend profile now that we have a JWT.
+  ///
+  /// Rethrows on HTTP 400 (invalid input, or the name-collision guard —
+  /// "An account with this exact name already exists...") since those are
+  /// actionable by the user right now. Swallows everything else (e.g. 409
+  /// profile-already-exists on a repeat login) — best-effort, shouldn't
+  /// block getting into the app.
   Future<void> _saveRegisteredProfile() async {
     final t = token;
-    final name = pendingFullName?.trim();
-    if (t == null || name == null || name.isEmpty) return;
-    final parts = name.split(RegExp(r'\s+'));
+    final first = pendingFirstName?.trim();
+    final last = pendingLastName?.trim();
+    if (t == null || first == null || first.isEmpty || last == null || last.isEmpty) return;
     try {
       await KycApiService.createProfile(
         t,
-        firstName: parts.first,
-        lastName: parts.length > 1 ? parts.sublist(1).join(' ') : parts.first,
+        firstName: first,
+        middleName: pendingMiddleName?.trim(),
+        lastName: last,
         email: pendingEmail?.trim() ?? '',
         dateOfBirth: pendingDob ?? '',
         gender: 'Prefer not to say',
         maritalStatus: 'Prefer not to say',
         occupation: 'Not specified',
       );
-    } on ApiException {
+    } on ApiException catch (e) {
+      if (e.statusCode == 400) rethrow;
       // Non-fatal — e.g. profile already exists on a repeat login.
     }
+  }
+
+  /// Checks whether this device has a saved token/mobile from a previous
+  /// successful login (see [TokenStorage]). Used by [SplashScreen] to
+  /// decide whether a fresh app process should go through the full
+  /// phone+OTP+MPIN flow again or can offer the lightweight MPIN-unlock
+  /// screen instead. Deliberately does NOT set [hasSession] itself — the
+  /// saved token could be stale/expired, so it's only trusted after a
+  /// fresh `/auth/login` call succeeds (see [unlockWithMpin]).
+  Future<String?> savedMobileForUnlock() async {
+    if (AppConfig.useMockBackend) return null;
+    final savedToken = await TokenStorage.readToken();
+    final savedMobile = await TokenStorage.readMobile();
+    if (savedToken == null || savedMobile == null) return null;
+    return savedMobile;
+  }
+
+  /// Quick re-login for the MPIN-unlock screen: same real server-side
+  /// verification as the original login (`POST /auth/login`), just
+  /// skipping the phone+OTP steps since this device already proved it
+  /// once. On success this is functionally identical to a normal login.
+  Future<void> unlockWithMpin(String mpin) async {
+    final mobile = await TokenStorage.readMobile();
+    if (mobile == null) throw ApiException('No saved account on this device — please log in again.');
+    pendingPhoneNumber = mobile;
+    await _loginAndPersist(mobile, mpin);
   }
 
   Future<void> setBiometricEnabled(bool enabled) async {

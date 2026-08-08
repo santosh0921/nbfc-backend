@@ -39,11 +39,40 @@ class _CreateMpinPageState extends State<CreateMpinPage> {
       context.go('/biometric');
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isSubmitting = false;
-        _error = e.message;
-      });
+      setState(() => _isSubmitting = false);
+      // The MPIN/login step itself already succeeded by the time the
+      // profile-save (with its name-collision guard) can even run — a JWT
+      // is required to call `POST /auth/profile`. So on a 400 here, the
+      // account already exists and is logged in; only the profile name
+      // needs fixing. Surface that clearly and send them back to
+      // Registration to add a distinguishing middle name, rather than
+      // silently dropping them into the app with an incomplete profile.
+      if (e.statusCode == 400) {
+        _showNameCollisionDialog(e.message);
+        return;
+      }
+      setState(() => _error = e.message);
     }
+  }
+
+  void _showNameCollisionDialog(String message) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Name Already In Use'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              context.go('/register');
+            },
+            child: const Text('Edit Name'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

@@ -4,9 +4,13 @@ import '../entities/employee_entity.dart';
 import '../repositories/auth_repository.dart';
 
 class LoginParams {
-  const LoginParams({required this.identifier, required this.password});
-  final String identifier;
+  const LoginParams({required this.name, required this.password, required this.module});
+  final String name;
   final String password;
+
+  /// "verification" | "recovery" — only consulted by the backend on
+  /// first-time auto-registration; harmless to always send.
+  final String module;
 }
 
 class LoginUseCase implements UseCase<EmployeeEntity, LoginParams> {
@@ -15,7 +19,7 @@ class LoginUseCase implements UseCase<EmployeeEntity, LoginParams> {
 
   @override
   Future<Result<EmployeeEntity>> call(LoginParams params) =>
-      _repository.login(identifier: params.identifier, password: params.password);
+      _repository.login(name: params.name, password: params.password, module: params.module);
 }
 
 class BiometricLoginUseCase implements UseCase<EmployeeEntity, NoParams> {

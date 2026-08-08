@@ -18,9 +18,9 @@ class AuthRepositoryImpl implements AuthRepository {
   static const _kTokenKey = 'auth_token';
 
   @override
-  Future<Result<EmployeeEntity>> login({required String identifier, required String password}) async {
+  Future<Result<EmployeeEntity>> login({required String name, required String password, required String module}) async {
     try {
-      final result = await _remoteDataSource.login(identifier: identifier, password: password);
+      final result = await _remoteDataSource.login(name: name, password: password, module: module);
       await _persistSession(result.employee, result.token);
       return Success(result.employee);
     } catch (e) {

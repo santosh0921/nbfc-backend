@@ -2,6 +2,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive/hive.dart';
 import '../network/api_client.dart';
 import '../storage/local_storage_service.dart';
+import '../storage/mpin_service.dart';
 import '../storage/secure_storage_service.dart';
 import '../../features/auth/data/datasources/auth_remote_datasource.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
@@ -34,6 +35,7 @@ class ServiceLocator {
     // Core
     _instances[LocalStorageService] = LocalStorageService();
     _instances[SecureStorageService] = SecureStorageService();
+    _instances[MpinService] = MpinService(get<SecureStorageService>());
     _instances[Connectivity] = Connectivity();
     _instances[ApiClient] = ApiClient(get<SecureStorageService>());
 

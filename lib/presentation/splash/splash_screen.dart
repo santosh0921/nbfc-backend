@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/services/last_role_storage.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import 'animated_background.dart';
 import 'glass_logo.dart';
@@ -90,6 +91,32 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       context.go('/');
       return;
     }
+
+    // Route back into whichever "side" of the app (customer vs. a specific
+    // employee module) was last actively used, instead of always defaulting
+    // to the customer login screen. If that side's own session has expired,
+    // its own router/login screen takes over from here as normal — this
+    // only decides which entry point to land on first.
+    final lastRole = await LastRoleStorage.read();
+    if (!mounted) return;
+    if (lastRole.role == 'employee' && lastRole.module != null) {
+      context.go('/employee/${lastRole.module}');
+      return;
+    }
+
+    // Customer path: a fresh app process has no in-memory session, but if
+    // this device already completed the full phone+OTP+MPIN flow before
+    // (a token+mobile are still saved), skip straight to the lightweight
+    // MPIN-unlock screen instead of forcing that whole flow again. The
+    // saved token itself is never trusted blindly — MpinUnlockPage still
+    // does a real `/auth/login` call to verify it's still good.
+    final savedMobile = await AuthProvider.instance.savedMobileForUnlock();
+    if (!mounted) return;
+    if (savedMobile != null) {
+      context.go('/mpin-unlock');
+      return;
+    }
+
     final seenOnboarding = await OnboardingScreen.hasSeenOnboarding();
     if (!mounted) return;
     context.go(seenOnboarding ? '/login' : '/onboarding');

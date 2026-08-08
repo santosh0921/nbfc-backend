@@ -83,9 +83,40 @@ if err != nil {
 	return
 }
 
+// Name-collision guard: block a NEW customer (different user_id) from
+// registering with the exact same first+middle+last name as an existing
+// customer. A first+last match with a different (or missing) middle name
+// is allowed — only a full three-part match is treated as a likely
+// duplicate-identity attempt.
+var collision models.CustomerProfile
+collisionErr := database.DB.
+	Where("user_id <> ? AND LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?) AND LOWER(COALESCE(middle_name, '')) = LOWER(?)",
+		user.ID, req.FirstName, req.LastName, req.MiddleName).
+	First(&collision).Error
+
+if collisionErr == nil {
+	c.JSON(http.StatusBadRequest, gin.H{
+		"message": "An account with this exact name already exists. Please add a middle name (or a different middle name) to continue.",
+	})
+	return
+}
+
+if collisionErr != gorm.ErrRecordNotFound {
+	c.JSON(http.StatusInternalServerError, gin.H{
+		"message": "Database error",
+	})
+	return
+}
+
+var middleName *string
+if req.MiddleName != "" {
+	middleName = &req.MiddleName
+}
+
 profile = models.CustomerProfile{
 	UserID:           user.ID,
 	FirstName:        req.FirstName,
+	MiddleName:       middleName,
 	LastName:         req.LastName,
 	Email:            req.Email,
 	DateOfBirth:      &dob,

@@ -6,6 +6,7 @@ import '../../features/apply/quick_apply_screen.dart';
 import '../../features/auth/biometric_auth_page.dart';
 import '../../features/auth/create_mpin_page.dart';
 import '../../features/auth/login_page.dart';
+import '../../features/auth/mpin_unlock_page.dart';
 import '../../features/auth/otp_verify_page.dart';
 import '../../features/auth/registration_page.dart';
 import '../../features/compliance/compliance_screen.dart';
@@ -39,7 +40,17 @@ import '../../features/transactions/transaction_history_screen.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
-const _publicPaths = ['/splash', '/onboarding', '/login', '/otp', '/register', '/create-mpin', '/biometric', '/employee'];
+const _publicPaths = [
+  '/splash',
+  '/onboarding',
+  '/login',
+  '/otp',
+  '/register',
+  '/create-mpin',
+  '/mpin-unlock',
+  '/biometric',
+  '/employee',
+];
 
 class AppRouter {
   AppRouter._();
@@ -110,6 +121,11 @@ class AppRouter {
         path: '/create-mpin',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const CreateMpinPage(),
+      ),
+      GoRoute(
+        path: '/mpin-unlock',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const MpinUnlockPage(),
       ),
       GoRoute(
         path: '/biometric',

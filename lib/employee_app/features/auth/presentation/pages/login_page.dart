@@ -20,7 +20,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _identifierController = TextEditingController();
+  final _nameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _rememberMe = false;
   bool _biometricAvailable = false;
@@ -30,7 +30,7 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     final auth = context.read<AuthProvider>();
     if (auth.rememberedIdentifier != null) {
-      _identifierController.text = auth.rememberedIdentifier!;
+      _nameController.text = auth.rememberedIdentifier!;
       _rememberMe = true;
     }
     auth.canUseBiometrics.then((value) {
@@ -40,33 +40,42 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
-    _identifierController.dispose();
+    _nameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _afterAuthenticated(AuthProvider auth) {
+    if (auth.needsFirstTimeOnboarding) {
+      context.goNamed(RouteNames.otpVerify);
+    } else {
+      context.goNamed(RouteNames.dashboard);
+    }
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthProvider>();
     await auth.login(
-      identifier: _identifierController.text.trim(),
+      name: _nameController.text.trim(),
       password: _passwordController.text,
       remember: _rememberMe,
     );
     if (!mounted) return;
     if (auth.status == AuthStatus.authenticated) {
-      context.goNamed(RouteNames.dashboard);
+      _afterAuthenticated(auth);
     } else if (auth.errorMessage != null) {
       AppSnackbar.danger(context, auth.errorMessage!);
     }
   }
 
   // Seeded demo employees from the backend (internal/seed/seed.go) — all
-  // share the password "onefin123".
+  // share the password "onefin123". Login is name-based now, so these are
+  // the seeded employees' real names, not their old internal codes.
   void _fillDemoAccount(EmployeeAppModule module) {
-    final identifier = module == EmployeeAppModule.recovery ? 'REC-HYD-01' : 'VER-MUM-01';
+    final name = module == EmployeeAppModule.recovery ? 'Anita Rao' : 'Priya Deshmukh';
     setState(() {
-      _identifierController.text = identifier;
+      _nameController.text = name;
       _passwordController.text = 'onefin123';
     });
   }
@@ -76,7 +85,7 @@ class _LoginPageState extends State<LoginPage> {
     await auth.loginWithBiometrics();
     if (!mounted) return;
     if (auth.status == AuthStatus.authenticated) {
-      context.goNamed(RouteNames.dashboard);
+      _afterAuthenticated(auth);
     } else if (auth.errorMessage != null) {
       AppSnackbar.danger(context, auth.errorMessage!);
     }
@@ -119,14 +128,14 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   AppTextField(
-                    label: 'Employee ID / Email',
-                    hint: 'e.g. VER-MUM-01',
-                    controller: _identifierController,
+                    label: 'Full Name',
+                    hint: 'e.g. Priya Deshmukh',
+                    controller: _nameController,
                     prefixIcon: Icons.badge_outlined,
-                    keyboardType: TextInputType.emailAddress,
+                    keyboardType: TextInputType.name,
                     textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.username],
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your employee ID or email' : null,
+                    autofillHints: const [AutofillHints.name],
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your full name' : null,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   AppTextField(

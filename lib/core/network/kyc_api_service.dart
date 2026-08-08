@@ -8,6 +8,7 @@ class KycApiService {
   static Future<void> createProfile(
     String token, {
     required String firstName,
+    String? middleName,
     required String lastName,
     required String email,
     required String dateOfBirth,
@@ -17,6 +18,7 @@ class KycApiService {
   }) async {
     await ApiClient.post('/auth/profile', {
       'first_name': firstName,
+      if (middleName != null && middleName.isNotEmpty) 'middle_name': middleName,
       'last_name': lastName,
       'email': email,
       'date_of_birth': dateOfBirth,

@@ -12,15 +12,19 @@ class AuthRemoteDataSource {
   final ApiClient _apiClient;
 
   /// Returns the logged-in employee together with the JWT the backend
-  /// issued, so the repository can persist both.
+  /// issued, so the repository can persist both. `module` is only
+  /// consulted by the backend when `name` doesn't match any existing
+  /// employee (first-time auto-registration) — harmless to always send.
   Future<({EmployeeModel employee, String token})> login({
-    required String identifier,
+    required String name,
     required String password,
+    required String module,
   }) async {
     try {
       final response = await _apiClient.dio.post('/employee/login', data: {
-        'code': identifier.trim(),
+        'name': name.trim(),
         'password': password,
+        'module': module,
       });
       final data = response.data as Map<String, dynamic>;
       final employee = EmployeeModel.fromBackendJson(data['employee'] as Map<String, dynamic>);
@@ -28,7 +32,8 @@ class AuthRemoteDataSource {
       return (employee: employee, token: token);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        throw const UnauthorizedFailure('Invalid credentials.');
+        final message = (e.response?.data is Map) ? (e.response!.data['message'] as String?) : null;
+        throw UnauthorizedFailure(message ?? 'Invalid credentials.');
       }
       if (e.response?.statusCode == 403) {
         final message = (e.response?.data is Map) ? (e.response!.data['message'] as String?) : null;

@@ -15,6 +15,17 @@ class RouteNames {
   static const String profileSetup = 'profileSetup';
   static const String profileSetupPath = '/profile-setup';
 
+  // First-time onboarding (mock OTP + MPIN setup), and MPIN quick-unlock
+  // for an already-restored JWT session.
+  static const String otpVerify = 'otpVerify';
+  static const String otpVerifyPath = '/otp-verify';
+
+  static const String mpinSetup = 'mpinSetup';
+  static const String mpinSetupPath = '/mpin-setup';
+
+  static const String mpinUnlock = 'mpinUnlock';
+  static const String mpinUnlockPath = '/mpin-unlock';
+
   // Dashboard shell
   static const String dashboard = 'dashboard';
   static const String dashboardPath = '/dashboard';

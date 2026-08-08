@@ -6,6 +6,7 @@ import '../providers/agency_provider.dart';
 import '../providers/connectivity_provider.dart';
 import '../providers/theme_provider.dart';
 import '../storage/local_storage_service.dart';
+import '../storage/mpin_service.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/domain/usecases/login_usecase.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
@@ -45,6 +46,7 @@ List<SingleChildWidget> appProviders({EmployeeAppModule module = EmployeeAppModu
         forgotPasswordUseCase: sl.get<ForgotPasswordUseCase>(),
         authRepository: sl.get<AuthRepository>(),
         localStorage: sl.get<LocalStorageService>(),
+        mpinService: sl.get<MpinService>(),
         module: module,
       ),
     ),
