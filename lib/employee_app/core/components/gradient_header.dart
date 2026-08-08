@@ -37,10 +37,20 @@ class GradientHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(color: AppColors.secondary, fontSize: 22, fontWeight: FontWeight.w800)),
+                    Text(
+                      title,
+                      style: const TextStyle(color: AppColors.secondary, fontSize: 22, fontWeight: FontWeight.w800),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     if (subtitle != null) ...[
                       const SizedBox(height: 4),
-                      Text(subtitle!, style: TextStyle(color: AppColors.secondary.withValues(alpha: 0.7), fontSize: 13)),
+                      Text(
+                        subtitle!,
+                        style: TextStyle(color: AppColors.secondary.withValues(alpha: 0.7), fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ],
                 ),

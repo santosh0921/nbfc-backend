@@ -306,7 +306,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2.4, valueColor: AlwaysStoppedAnimation(Colors.white)),
                       )
-                    : Text('Pay ${currency.format(loan.nextEmiAmount)}'),
+                    : Text(
+                        'Pay ${currency.format(loan.nextEmiAmount)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
               ),
             ],
           ),

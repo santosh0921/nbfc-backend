@@ -134,7 +134,15 @@ class _EmiCalculatorScreenState extends State<EmiCalculatorScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Total Payment', style: theme.textTheme.titleSmall),
-                      Text(currency.format(_totalPayment), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                      Flexible(
+                        child: Text(
+                          currency.format(_totalPayment),
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
                     ],
                   ),
                 ],

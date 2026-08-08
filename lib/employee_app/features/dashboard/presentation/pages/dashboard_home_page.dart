@@ -103,7 +103,15 @@ class _DashboardHomePageState extends State<DashboardHomePage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("Today's Tasks", style: Theme.of(context).textTheme.headlineSmall),
+                      Flexible(
+                        child: Text(
+                          "Today's Tasks",
+                          style: Theme.of(context).textTheme.headlineSmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
                       Text(
                         DateFormat('EEE, d MMM').format(DateTime.now()),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
@@ -157,7 +165,12 @@ class _TopBar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Hello,', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-              Text(name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                name,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),
@@ -276,8 +289,17 @@ class _TaskStatusCard extends StatelessWidget {
             children: [
               Icon(icon, color: color, size: 20),
               const SizedBox(height: 6),
-              Text('$count', style: Theme.of(context).textTheme.titleLarge),
-              Text(label, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('$count', style: Theme.of(context).textTheme.titleLarge),
+              ),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),

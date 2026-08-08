@@ -332,9 +332,14 @@ class _KpiCardState extends State<_KpiCard> with SingleTickerProviderStateMixin 
             animation: _animation,
             builder: (context, _) {
               final current = widget.value * _animation.value;
-              return Text(
-                _format(current.toDouble()),
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              return FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _format(current.toDouble()),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                  maxLines: 1,
+                ),
               );
             },
           ),

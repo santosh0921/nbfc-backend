@@ -227,8 +227,8 @@ class _LoanCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(loan.category, style: theme.textTheme.titleMedium),
-                      Text('NBFC-APP-${loan.id}', style: theme.textTheme.bodySmall),
+                      Text(loan.category, style: theme.textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text('NBFC-APP-${loan.id}', style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
@@ -314,9 +314,9 @@ class _Stat extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: theme.textTheme.labelSmall),
+          Text(label, style: theme.textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 2),
-          Text(value, style: theme.textTheme.titleSmall, maxLines: 1),
+          Text(value, style: theme.textTheme.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
     );

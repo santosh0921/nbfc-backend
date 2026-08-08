@@ -166,8 +166,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(greeting, style: Theme.of(context).textTheme.bodySmall),
-                          Text(user.fullName, style: Theme.of(context).textTheme.titleMedium),
+                          Text(greeting, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(user.fullName, style: Theme.of(context).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),

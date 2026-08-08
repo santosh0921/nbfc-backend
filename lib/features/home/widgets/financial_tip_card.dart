@@ -22,9 +22,9 @@ class FinancialTipCard extends StatelessWidget {
         children: [
           Icon(Icons.lightbulb_rounded, color: tip.gradient.last),
           const SizedBox(height: 12),
-          Text(tip.title, style: theme.textTheme.titleSmall, maxLines: 2),
+          Text(tip.title, style: theme.textTheme.titleSmall, maxLines: 2, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 6),
-          Text(tip.summary, style: theme.textTheme.bodySmall, maxLines: 2),
+          Text(tip.summary, style: theme.textTheme.bodySmall, maxLines: 2, overflow: TextOverflow.ellipsis),
           const Spacer(),
           Text(tip.readTime, style: theme.textTheme.labelSmall),
         ],

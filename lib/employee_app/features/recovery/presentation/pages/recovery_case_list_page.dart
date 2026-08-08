@@ -224,21 +224,41 @@ class _RecoveryCaseCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Text('${caseItem.loanId} · ${caseItem.loanType.label}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+          Text(
+            '${caseItem.loanId} · ${caseItem.loanType.label}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: AppSpacing.sm),
-          Row(
+          Wrap(
+            spacing: AppSpacing.md,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Icon(Icons.currency_rupee, size: 14, color: AppColors.textSecondary),
-              Flexible(child: Text(caseItem.outstandingAmount.toStringAsFixed(0), style: Theme.of(context).textTheme.bodySmall)),
-              const SizedBox(width: AppSpacing.md),
-              const Icon(Icons.event_busy_outlined, size: 14, color: AppColors.textSecondary),
-              const SizedBox(width: 2),
-              Text('${caseItem.dpd} DPD', style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(width: AppSpacing.md),
-              const Icon(Icons.receipt_long_outlined, size: 14, color: AppColors.textSecondary),
-              const SizedBox(width: 2),
-              Text('${caseItem.overdueEmiCount} EMIs', style: Theme.of(context).textTheme.bodySmall),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.currency_rupee, size: 14, color: AppColors.textSecondary),
+                  Text(caseItem.outstandingAmount.toStringAsFixed(0), style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.event_busy_outlined, size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 2),
+                  Text('${caseItem.dpd} DPD', style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.receipt_long_outlined, size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 2),
+                  Text('${caseItem.overdueEmiCount} EMIs', style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),

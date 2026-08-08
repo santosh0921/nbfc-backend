@@ -67,9 +67,14 @@ class _RecoveryKpiCardState extends State<RecoveryKpiCard> with SingleTickerProv
           const SizedBox(height: AppSpacing.sm),
           AnimatedBuilder(
             animation: _animation,
-            builder: (context, _) => Text(
-              _format(widget.value * _animation.value),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            builder: (context, _) => FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _format(widget.value * _animation.value),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                maxLines: 1,
+              ),
             ),
           ),
           const SizedBox(height: 2),

@@ -134,8 +134,12 @@ class _StatCard extends StatelessWidget {
         children: [
           Icon(icon, color: AppColors.gold, size: 22),
           const SizedBox(height: 8),
-          Text(value, style: Theme.of(context).textTheme.headlineSmall),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(value, style: Theme.of(context).textTheme.headlineSmall, maxLines: 1),
+          ),
+          Text(label, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -155,8 +159,11 @@ class _MetricRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          Text(value, style: Theme.of(context).textTheme.titleSmall),
+          Flexible(
+            child: Text(label, style: Theme.of(context).textTheme.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(value, style: Theme.of(context).textTheme.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
     );

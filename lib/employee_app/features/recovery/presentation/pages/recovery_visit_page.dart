@@ -63,7 +63,7 @@ class _RecoveryVisitPageState extends State<RecoveryVisitPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _back),
-        title: Text('Visit · ${caseItem?.customerName ?? ''}'),
+        title: Text('Visit · ${caseItem?.customerName ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       body: Column(
         children: [
@@ -475,7 +475,9 @@ class _DocumentsStepState extends State<_DocumentsStep> {
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
-                    Expanded(child: Text(_checklist[i], style: Theme.of(context).textTheme.titleSmall)),
+                    Expanded(
+                      child: Text(_checklist[i], style: Theme.of(context).textTheme.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
                     if (i < visit.documentPaths.length)
                       const Icon(Icons.check_circle, color: AppColors.success)
                     else

@@ -116,8 +116,18 @@ class _AgencySelectionPageState extends State<AgencySelectionPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(agency.name, style: Theme.of(context).textTheme.titleSmall),
-                                Text('${agency.city} · ${agency.code}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                                Text(
+                                  agency.name,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  '${agency.city} · ${agency.code}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ],
                             ),
                           ),

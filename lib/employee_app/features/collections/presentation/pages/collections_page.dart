@@ -198,8 +198,21 @@ class _SummaryTile extends StatelessWidget {
         children: [
           Icon(icon, color: AppColors.secondary, size: 20),
           const SizedBox(height: 6),
-          Text(value, style: const TextStyle(color: AppColors.secondary, fontSize: 18, fontWeight: FontWeight.w800)),
-          Text(label, style: TextStyle(color: AppColors.secondary.withValues(alpha: 0.7), fontSize: 12)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(color: AppColors.secondary, fontSize: 18, fontWeight: FontWeight.w800),
+              maxLines: 1,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(color: AppColors.secondary.withValues(alpha: 0.7), fontSize: 12),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -219,8 +232,19 @@ class _ReceiptRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          Text(value, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+          Flexible(
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Flexible(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+            ),
+          ),
         ],
       ),
     );
@@ -254,15 +278,27 @@ class _CollectionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.customerName, style: Theme.of(context).textTheme.titleSmall),
+                Text(item.customerName, style: Theme.of(context).textTheme.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
-                Text(item.loanAccountNumber, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                Text(
+                  item.loanAccountNumber,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
                     AppBadge(label: badgeLabel, variant: badgeVariant),
                     const SizedBox(width: AppSpacing.sm),
-                    Text('₹${item.emiAmount.toStringAsFixed(0)}', style: Theme.of(context).textTheme.titleSmall),
+                    Flexible(
+                      child: Text(
+                        '₹${item.emiAmount.toStringAsFixed(0)}',
+                        style: Theme.of(context).textTheme.titleSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
               ],

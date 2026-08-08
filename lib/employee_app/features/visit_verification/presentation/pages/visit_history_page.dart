@@ -66,8 +66,16 @@ class _HistoryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(record.customerName, style: Theme.of(context).textTheme.titleSmall)),
-              AppBadge(label: record.recommendation, variant: _variant),
+              Expanded(
+                child: Text(
+                  record.customerName,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Flexible(child: AppBadge(label: record.recommendation, variant: _variant)),
             ],
           ),
           const SizedBox(height: 4),
@@ -77,14 +85,15 @@ class _HistoryCard extends StatelessWidget {
           ),
           if (record.pdfPath != null) ...[
             const SizedBox(height: AppSpacing.sm),
-            Row(
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: 4,
               children: [
                 TextButton.icon(
                   onPressed: () => Printing.layoutPdf(onLayout: (_) async => File(record.pdfPath!).readAsBytesSync()),
                   icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
                   label: const Text('View PDF'),
                 ),
-                const SizedBox(width: AppSpacing.sm),
                 TextButton.icon(
                   onPressed: () => Share.shareXFiles([XFile(record.pdfPath!)], text: 'Verification report for ${record.customerName}'),
                   icon: const Icon(Icons.share_outlined, size: 18),

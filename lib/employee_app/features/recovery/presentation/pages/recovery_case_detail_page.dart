@@ -106,7 +106,14 @@ class _CustomerInfoCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text('Customer Information', style: Theme.of(context).textTheme.titleMedium),
+              Flexible(
+                child: Text(
+                  'Customer Information',
+                  style: Theme.of(context).textTheme.titleMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               const Spacer(),
               AppBadge(label: caseItem.status.label, variant: _statusVariant),
             ],
@@ -208,8 +215,17 @@ class _EmiHistoryCard extends StatelessWidget {
                         color: e.paid ? AppColors.success : AppColors.danger,
                       ),
                       const SizedBox(width: AppSpacing.sm),
-                      Expanded(child: Text(e.month, style: Theme.of(context).textTheme.bodyMedium)),
-                      Text('₹${e.amount.toStringAsFixed(0)}', style: Theme.of(context).textTheme.bodyMedium),
+                      Expanded(
+                        child: Text(e.month, style: Theme.of(context).textTheme.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                      Flexible(
+                        child: Text(
+                          '₹${e.amount.toStringAsFixed(0)}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       const SizedBox(width: AppSpacing.sm),
                       AppBadge(label: e.paid ? 'Paid' : 'Overdue', variant: e.paid ? AppBadgeVariant.success : AppBadgeVariant.danger),
                     ],

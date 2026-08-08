@@ -198,8 +198,14 @@ class _CaseCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(caseItem.customerName, style: Theme.of(context).textTheme.titleSmall),
+                child: Text(
+                  caseItem.customerName,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: AppSpacing.sm),
               AppBadge(label: caseItem.priority.label, variant: _priorityVariant),
             ],
           ),
@@ -210,17 +216,32 @@ class _CaseCard extends StatelessWidget {
             children: [
               Icon(Icons.account_balance_outlined, size: 14, color: AppColors.textSecondary),
               const SizedBox(width: 4),
-              Text(caseItem.loanType.label, style: Theme.of(context).textTheme.bodySmall),
+              Flexible(
+                child: Text(
+                  caseItem.loanType.label,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               const SizedBox(width: AppSpacing.md),
               Icon(Icons.currency_rupee, size: 14, color: AppColors.textSecondary),
-              Text(caseItem.loanAmount.toStringAsFixed(0), style: Theme.of(context).textTheme.bodySmall),
+              Flexible(
+                child: Text(
+                  caseItem.loanAmount.toStringAsFixed(0),
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              AppBadge(label: caseItem.status.label, variant: _statusVariant),
+              Flexible(child: AppBadge(label: caseItem.status.label, variant: _statusVariant)),
+              const SizedBox(width: AppSpacing.sm),
               Text(
                 'Due ${caseItem.dueDate.day}/${caseItem.dueDate.month}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),

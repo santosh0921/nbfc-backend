@@ -80,7 +80,7 @@ class _VerificationFlowPageState extends State<VerificationFlowPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _back),
-        title: Text('Verification · ${widget.customerName}'),
+        title: Text('Verification · ${widget.customerName}', maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       body: Column(
         children: [
@@ -413,7 +413,9 @@ class _DocumentsStepState extends State<_DocumentsStep> {
                         child: const Icon(Icons.description_outlined, color: AppColors.textSecondary),
                       ),
                     const SizedBox(width: AppSpacing.sm),
-                    Expanded(child: Text(type, style: Theme.of(context).textTheme.titleSmall)),
+                    Expanded(
+                      child: Text(type, style: Theme.of(context).textTheme.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
                     if (capturedTypes.contains(type))
                       const Icon(Icons.check_circle, color: AppColors.success)
                     else
@@ -766,8 +768,19 @@ class _ReviewRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          Text(value.isEmpty ? '—' : value, style: Theme.of(context).textTheme.bodyMedium),
+          Flexible(
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Flexible(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: Theme.of(context).textTheme.bodyMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+            ),
+          ),
         ],
       ),
     );

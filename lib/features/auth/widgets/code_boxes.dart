@@ -122,18 +122,22 @@ class _CodeBoxesState extends State<CodeBoxes> with SingleTickerProviderStateMix
       animation: _shake,
       builder: (context, child) => Transform.translate(offset: Offset(_shake.value, 0), child: child),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: List.generate(widget.length, (index) {
-          return _Box(
-            controller: _controllers[index],
-            focusNode: _focusNodes[index],
-            obscure: widget.obscure,
-            hasError: widget.hasError,
-            autofocus: widget.autofocus && index == 0,
-            onChanged: (value) => _handleChange(index, value),
-            onBackspace: () => _handleBackspace(index),
-          );
-        }),
+        children: [
+          for (int index = 0; index < widget.length; index++) ...[
+            if (index != 0) const SizedBox(width: 8),
+            Expanded(
+              child: _Box(
+                controller: _controllers[index],
+                focusNode: _focusNodes[index],
+                obscure: widget.obscure,
+                hasError: widget.hasError,
+                autofocus: widget.autofocus && index == 0,
+                onChanged: (value) => _handleChange(index, value),
+                onBackspace: () => _handleBackspace(index),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -213,7 +217,6 @@ class _BoxState extends State<_Box> {
       curve: Curves.easeOut,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: 48,
         height: 56,
         decoration: BoxDecoration(
           color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,

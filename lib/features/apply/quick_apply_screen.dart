@@ -626,7 +626,7 @@ class _DetailsStep extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         children: [
           Text('Applying for', style: theme.textTheme.bodySmall),
-          Text(productName, style: theme.textTheme.titleLarge),
+          Text(productName, style: theme.textTheme.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 16),
           PremiumCard(
             child: Column(

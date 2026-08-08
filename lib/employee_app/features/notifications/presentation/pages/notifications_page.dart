@@ -118,6 +118,8 @@ class _NotificationTile extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                               fontWeight: notification.isRead ? FontWeight.w500 : FontWeight.w700,
                             ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     if (!notification.isRead)

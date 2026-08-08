@@ -68,7 +68,7 @@ class _ListingCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(listing.title, style: theme.textTheme.titleSmall),
+                Text(listing.title, style: theme.textTheme.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
                 Text(listing.subtitle, style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
                 Container(
@@ -83,7 +83,7 @@ class _ListingCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(listing.price, style: theme.textTheme.titleSmall),
+          Text(listing.price, style: theme.textTheme.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -111,8 +111,8 @@ class _ListingCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(listing.title, style: Theme.of(context).textTheme.titleMedium),
-                      Text(listing.price, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: AppColors.primary)),
+                      Text(listing.title, style: Theme.of(context).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(listing.price, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: AppColors.primary), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),

@@ -79,7 +79,14 @@ class _CustomerDetailsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text('Customer Details', style: Theme.of(context).textTheme.titleMedium),
+              Flexible(
+                child: Text(
+                  'Customer Details',
+                  style: Theme.of(context).textTheme.titleMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               const Spacer(),
               AppBadge(
                 label: caseItem.status.label,
@@ -203,10 +210,17 @@ class _ReferenceTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(reference.name, style: Theme.of(context).textTheme.titleSmall),
+                  Text(
+                    reference.name,
+                    style: Theme.of(context).textTheme.titleSmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   Text(
                     reference.relation,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

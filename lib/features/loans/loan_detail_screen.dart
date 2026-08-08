@@ -146,6 +146,7 @@ class LoanDetailScreen extends StatelessWidget {
                                 r.name,
                                 style: theme.textTheme.labelLarge?.copyWith(color: Colors.white),
                                 maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
@@ -165,7 +166,11 @@ class LoanDetailScreen extends StatelessWidget {
           child: ElevatedButton(
             onPressed: () => context.push('/quick-apply', extra: product),
             style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            child: Text('Apply Now for ${product.name}'),
+            child: Text(
+              'Apply Now for ${product.name}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
       ),
@@ -187,9 +192,9 @@ class _StatChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         child: Column(
           children: [
-            Text(value, style: theme.textTheme.titleMedium, textAlign: TextAlign.center, maxLines: 1),
+            Text(value, style: theme.textTheme.titleMedium, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
-            Text(label, style: theme.textTheme.labelSmall, textAlign: TextAlign.center),
+            Text(label, style: theme.textTheme.labelSmall, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
           ],
         ),
       ),
@@ -210,7 +215,16 @@ class _DetailRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: theme.textTheme.bodyMedium),
-        Text(value, style: theme.textTheme.titleSmall),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            value,
+            style: theme.textTheme.titleSmall,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }

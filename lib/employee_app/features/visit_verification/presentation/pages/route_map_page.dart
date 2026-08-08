@@ -61,7 +61,7 @@ class _RouteMapPageState extends State<RouteMapPage> {
     final center = widget.destination ?? _currentPosition ?? const latlong.LatLng(18.5204, 73.8567);
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Stack(
@@ -117,7 +117,14 @@ class _RouteMapPageState extends State<RouteMapPage> {
                         children: [
                           const Icon(Icons.location_on, color: AppColors.danger),
                           const SizedBox(width: AppSpacing.sm),
-                          Expanded(child: Text(widget.destinationLabel!, style: Theme.of(context).textTheme.bodyMedium)),
+                          Expanded(
+                            child: Text(
+                              widget.destinationLabel!,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                     ),

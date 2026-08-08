@@ -177,6 +177,7 @@ class _BannerCard extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                         ),
                     maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Text(
@@ -185,6 +186,7 @@ class _BannerCard extends StatelessWidget {
                         color: Colors.white.withValues(alpha: 0.9),
                       ),
                   maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Align(
                   alignment: Alignment.centerLeft,

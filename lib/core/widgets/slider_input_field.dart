@@ -89,7 +89,15 @@ class _SliderInputFieldState extends State<SliderInputField> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(widget.label, style: theme.textTheme.bodyMedium),
+            Expanded(
+              child: Text(
+                widget.label,
+                style: theme.textTheme.bodyMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
             SizedBox(
               width: widget.fieldWidth,
               child: Row(
