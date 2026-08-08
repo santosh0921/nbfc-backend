@@ -32,15 +32,28 @@ var DemoMode bool
 
 func Load() *Config {
 
-	err := godotenv.Load()
+	// godotenv.Load() only applies when a .env file is actually present
+	// (local dev). On a deploy platform (Render, etc.) there is no .env
+	// file — secrets are injected directly as real environment variables
+	// — so a missing file here is expected, not fatal.
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env file not found — reading configuration from real environment variables instead")
+	}
 
-	if err != nil {
-		log.Fatal(".env file not found")
+	appPort := os.Getenv("APP_PORT")
+	if appPort == "" {
+		// Render (and most PaaS platforms) inject the port to bind to via
+		// $PORT rather than a custom var — fall back to it so the app is
+		// deployable with zero platform-specific config.
+		appPort = os.Getenv("PORT")
+	}
+	if appPort == "" {
+		appPort = "8080"
 	}
 
 	return &Config{
 		AppName: os.Getenv("APP_NAME"),
-		AppPort:    os.Getenv("APP_PORT"),
+		AppPort:    appPort,
 		GinMode: os.Getenv("GIN_MODE"),
 
 		DBHost:     os.Getenv("DB_HOST"),
