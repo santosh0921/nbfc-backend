@@ -12,11 +12,6 @@ class LoanApiService {
   /// practice, the same `LoanProduct.name` shown in the UI — see
   /// `internal/loans/service.go`'s `autoApproveCategories` map, which
   /// keys on "Instant Loan" / "Personal Loan" exactly).
-  ///
-  /// `references` must contain EXACTLY 2 entries shaped like
-  /// `{name, relation, phone, aadhaarNumber, panNumber}` — the backend's
-  /// `validateReferences` (`internal/loans/reference.go`) rejects
-  /// anything else with a 400.
   static Future<LoanApplication> apply(
     String token, {
     required String category,
@@ -26,7 +21,6 @@ class LoanApiService {
     required String applicantPhone,
     required String addressLine,
     required String city,
-    required List<Map<String, dynamic>> references,
   }) async {
     final res = await ApiClient.post('/auth/loans/apply', {
       'category': category,
@@ -36,7 +30,6 @@ class LoanApiService {
       'applicantPhone': applicantPhone,
       'addressLine': addressLine,
       'city': city,
-      'references': references,
     }, token: token);
     return LoanApplication.fromJson(res);
   }
@@ -55,19 +48,16 @@ class LoanApiService {
   /// (`POST /auth/loans/:id/topup`, `internal/loans/customer_handler.go`
   /// `TopUpLoanHandler`). Creates a brand new [LoanApplication] linked to
   /// [loanId] via `parentLoanId`, run through the same verification/sanction
-  /// pipeline as any other application. Also requires EXACTLY 2
-  /// `references`, same shape/validation as [apply].
+  /// pipeline as any other application.
   static Future<LoanApplication> topUp(
     String token,
     int loanId, {
     required double amount,
     required String purpose,
-    required List<Map<String, dynamic>> references,
   }) async {
     final res = await ApiClient.post('/auth/loans/$loanId/topup', {
       'amount': amount,
       'purpose': purpose,
-      'references': references,
     }, token: token);
     return LoanApplication.fromJson(res);
   }

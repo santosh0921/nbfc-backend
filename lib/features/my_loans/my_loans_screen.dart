@@ -7,7 +7,6 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../models/loan_application.dart';
-import '../apply/widgets/references_step.dart';
 import 'widgets/loan_letter_actions.dart';
 
 class MyLoansScreen extends StatefulWidget {
@@ -503,7 +502,6 @@ class _TopUpSheet extends StatefulWidget {
 
 class _TopUpSheetState extends State<_TopUpSheet> {
   final _formKey = GlobalKey<FormState>();
-  final _referencesKey = GlobalKey<ReferencesFormWidgetState>();
   final _amountController = TextEditingController();
   final _purposeController = TextEditingController();
   bool _submitting = false;
@@ -518,15 +516,7 @@ class _TopUpSheetState extends State<_TopUpSheet> {
 
   Future<void> _submit() async {
     final formValid = _formKey.currentState?.validate() ?? false;
-    final referencesValid = _referencesKey.currentState?.validate() ?? false;
-    if (!formValid || !referencesValid) {
-      if (!referencesValid) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please complete both references to continue.')),
-        );
-      }
-      return;
-    }
+    if (!formValid) return;
     final token = AuthProvider.instance.token;
     if (token == null) return;
     setState(() {
@@ -534,13 +524,11 @@ class _TopUpSheetState extends State<_TopUpSheet> {
       _error = null;
     });
     try {
-      final references = _referencesKey.currentState!.references.map((r) => r.toJson()).toList();
       await LoanApiService.topUp(
         token,
         widget.loan.id,
         amount: double.parse(_amountController.text.trim()),
         purpose: _purposeController.text.trim(),
-        references: references,
       );
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -619,8 +607,6 @@ class _TopUpSheetState extends State<_TopUpSheet> {
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Please describe the purpose' : null,
                 ),
-                const SizedBox(height: 20),
-                ReferencesFormWidget(key: _referencesKey),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error)),

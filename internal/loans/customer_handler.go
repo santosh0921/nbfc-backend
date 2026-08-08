@@ -1,7 +1,6 @@
 package loans
 
 import (
-	"log"
 	"net/http"
 	"strconv"
 
@@ -34,23 +33,15 @@ func SubmitLoanHandler(c *gin.Context) {
 	}
 
 	var body struct {
-		Category        string           `json:"category" binding:"required"`
-		AmountRequested float64          `json:"amountRequested" binding:"required"`
-		Purpose         string           `json:"purpose"`
-		ApplicantName   string           `json:"applicantName" binding:"required"`
-		ApplicantPhone  string           `json:"applicantPhone"`
-		AddressLine     string           `json:"addressLine"`
-		City            string           `json:"city" binding:"required"`
-		References      []ReferenceInput `json:"references"`
+		Category        string  `json:"category" binding:"required"`
+		AmountRequested float64 `json:"amountRequested" binding:"required"`
+		Purpose         string  `json:"purpose"`
+		ApplicantName   string  `json:"applicantName" binding:"required"`
+		ApplicantPhone  string  `json:"applicantPhone"`
+		AddressLine     string  `json:"addressLine"`
+		City            string  `json:"city" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		log.Println("DEBUG /auth/loans/apply bind error:", err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
-
-	if err := validateReferences(body.References); err != nil {
-		log.Println("DEBUG /auth/loans/apply reference validation error:", err.Error(), "| references received:", len(body.References))
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
@@ -68,11 +59,6 @@ func SubmitLoanHandler(c *gin.Context) {
 	}
 
 	loan = submitLoanApplication(loan)
-
-	if err := createReferences(loan.ID, body.References); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "loan created but failed to save references: " + err.Error()})
-		return
-	}
 
 	c.JSON(http.StatusCreated, withReferences(loan))
 }
@@ -107,16 +93,10 @@ func TopUpLoanHandler(c *gin.Context) {
 	}
 
 	var body struct {
-		Amount     float64          `json:"amount" binding:"required"`
-		Purpose    string           `json:"purpose"`
-		References []ReferenceInput `json:"references"`
+		Amount  float64 `json:"amount" binding:"required"`
+		Purpose string  `json:"purpose"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
-
-	if err := validateReferences(body.References); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
@@ -136,11 +116,6 @@ func TopUpLoanHandler(c *gin.Context) {
 	}
 
 	loan = submitLoanApplication(loan)
-
-	if err := createReferences(loan.ID, body.References); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "loan created but failed to save references: " + err.Error()})
-		return
-	}
 
 	c.JSON(http.StatusCreated, withReferences(loan))
 }

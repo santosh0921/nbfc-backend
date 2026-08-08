@@ -22,7 +22,6 @@ import '../../models/loan_product.dart';
 import 'widgets/apply_form_field.dart';
 import 'widgets/document_upload_tile.dart';
 import 'widgets/loan_agreement_pdf.dart';
-import 'widgets/references_step.dart';
 
 enum _EmploymentType { salaried, selfEmployed, businessOwner }
 
@@ -60,17 +59,15 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
   bool get _showsProcessingNotice =>
       widget.product?.category == LoanCategory.housing || widget.product?.category == LoanCategory.business;
 
-  int get _stepCount => 7;
+  int get _stepCount => 6;
   int get _kycStep => 2;
-  int get _referencesStep => 3;
-  int get _bankStep => 4;
-  int get _specialStep => 5; // Verification scheduling, or Instant Loan consent
+  int get _bankStep => 3;
+  int get _specialStep => 4; // Verification scheduling, or Instant Loan consent
 
   List<String> get _stepTitles => [
         'Details',
         'Address',
         'KYC Documents',
-        'References',
         'Bank Details',
         _skipVideoKyc ? 'Loan Consent' : 'Verification',
         'Terms & Conditions',
@@ -127,10 +124,7 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
       _aadhaarConsent &&
       (!_isBusinessLoan || (_gstCertificateVerified && _businessPremisesVerified));
 
-  // Step 3: References
-  final _referencesFormKey = GlobalKey<ReferencesFormWidgetState>();
-
-  // Step 4: Bank Details
+  // Step 3: Bank Details
   final _bankFormKey = GlobalKey<FormState>();
   final _accountHolderController = TextEditingController(text: MockData.currentUser.fullName);
   final _accountNumberController = TextEditingController();
@@ -191,7 +185,6 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
     if (_step == 0) return _detailsFormKey.currentState?.validate() ?? false;
     if (_step == 1) return _addressFormKey.currentState?.validate() ?? false;
     if (_step == _kycStep) return _allDocumentsVerified;
-    if (_step == _referencesStep) return _referencesFormKey.currentState?.validate() ?? false;
     if (_step == _bankStep) return _bankFormKey.currentState?.validate() ?? false;
     if (_step == _specialStep) {
       if (_skipVideoKyc) return _instantConsentAgreed;
@@ -213,15 +206,6 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
                       : _isBusinessLoan && (!_gstCertificateVerified || !_businessPremisesVerified)
                           ? 'Please upload the GST Certificate and Proof of Business Premises to continue.'
                           : 'Please upload and verify all KYC documents to continue.',
-            ),
-          ),
-        );
-      } else if (_step == _referencesStep) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'One of the reference fields still needs attention — jumping you to it. '
-              'Aadhaar must be exactly 12 digits and PAN must match the format ABCDE1234F.',
             ),
           ),
         );
@@ -335,9 +319,6 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
     // Category is the loan product's display name, which is exactly what
     // the backend's auto-approve map keys on ("Instant Loan" / "Personal
     // Loan" — see internal/loans/service.go).
-    final references = (_referencesFormKey.currentState?.references ?? const [])
-        .map((r) => r.toJson())
-        .toList();
     final loan = await LoanApiService.apply(
       token,
       category: _productName,
@@ -347,7 +328,6 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
       applicantPhone: AuthProvider.instance.pendingPhoneNumber ?? '',
       addressLine: _addressLineController.text.trim(),
       city: _selectedCity ?? '',
-      references: references,
     );
     _applicationId = 'NBFC-APP-${loan.id}';
   }
@@ -523,10 +503,6 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
                     isBusinessLoan: _isBusinessLoan,
                     onGstCertificateChanged: (v) => setState(() => _gstCertificateVerified = v),
                     onBusinessPremisesChanged: (v) => setState(() => _businessPremisesVerified = v),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: SingleChildScrollView(child: ReferencesFormWidget(key: _referencesFormKey)),
                   ),
                   _BankDetailsStep(
                     formKey: _bankFormKey,
