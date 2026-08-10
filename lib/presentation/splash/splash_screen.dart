@@ -235,7 +235,7 @@ class _BrandWordmark extends StatelessWidget {
         ],
       ).createShader(bounds),
       child: Text(
-        'Jayashri Capital',
+        'OneFinance',
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: compact ? 30 : 36,
