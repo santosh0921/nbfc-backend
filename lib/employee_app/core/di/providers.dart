@@ -14,7 +14,7 @@ import '../../features/cases/domain/repositories/cases_repository.dart';
 import '../../features/cases/presentation/providers/cases_provider.dart';
 import '../../features/collections/data/repositories/collections_repository_mock.dart';
 import '../../features/collections/presentation/providers/collections_provider.dart';
-import '../../features/dashboard/data/repositories/dashboard_repository_mock.dart';
+import '../../features/dashboard/data/repositories/dashboard_repository_http.dart';
 import '../../features/dashboard/presentation/providers/dashboard_provider.dart';
 import '../../features/notifications/data/repositories/notifications_repository_http.dart';
 import '../../features/notifications/presentation/providers/notifications_provider.dart';
@@ -51,7 +51,7 @@ List<SingleChildWidget> appProviders({EmployeeAppModule module = EmployeeAppModu
       ),
     ),
     ChangeNotifierProvider<DashboardProvider>(
-      create: (_) => DashboardProvider(sl.get<DashboardRepositoryMock>()),
+      create: (_) => DashboardProvider(sl.get<DashboardRepositoryHttp>()),
     ),
     Provider<CasesRepository>.value(value: sl.get<CasesRepository>()),
     ChangeNotifierProvider<CasesProvider>(

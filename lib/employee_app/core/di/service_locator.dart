@@ -8,7 +8,7 @@ import '../../features/auth/data/datasources/auth_remote_datasource.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/domain/usecases/login_usecase.dart';
-import '../../features/dashboard/data/repositories/dashboard_repository_mock.dart';
+import '../../features/dashboard/data/repositories/dashboard_repository_http.dart';
 import '../../features/cases/data/repositories/cases_repository_http.dart';
 import '../../features/cases/domain/repositories/cases_repository.dart';
 import '../../features/collections/data/repositories/collections_repository_mock.dart';
@@ -47,11 +47,12 @@ class ServiceLocator {
     _instances[LogoutUseCase] = LogoutUseCase(get<AuthRepository>());
     _instances[ForgotPasswordUseCase] = ForgotPasswordUseCase(get<AuthRepository>());
 
-    // Dashboard
-    _instances[DashboardRepositoryMock] = DashboardRepositoryMock();
-
     // Cases (verification tasks) — real backend
     _instances[CasesRepository] = CasesRepositoryHttp(get<ApiClient>());
+
+    // Dashboard — reuses CasesRepository's data (same
+    // GET /employee/tasks/today), so it must be registered after it.
+    _instances[DashboardRepositoryHttp] = DashboardRepositoryHttp(get<CasesRepository>());
 
     // Collections
     _instances[CollectionsRepositoryMock] = CollectionsRepositoryMock();

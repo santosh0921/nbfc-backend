@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../data/repositories/dashboard_repository_mock.dart';
+import '../../data/repositories/dashboard_repository_http.dart';
 import '../../domain/entities/dashboard_summary.dart';
 
 class DashboardProvider extends ChangeNotifier {
   DashboardProvider(this._repository);
 
-  final DashboardRepositoryMock _repository;
+  final DashboardRepositoryHttp _repository;
 
   bool isLoading = false;
   List<TaskItem> tasks = const [];
