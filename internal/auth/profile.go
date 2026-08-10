@@ -42,16 +42,29 @@ func GetProfile(c *gin.Context) {
 	return
 }
 
+	// The customer's name lives on CustomerProfile (internal/profile),
+	// created separately after registration — this handler used to never
+	// look it up at all, so there was no way for a client to learn the
+	// logged-in customer's actual name (e.g. for a "Good morning, X"
+	// greeting) without duplicating it into local/mock state. Best-effort:
+	// a customer who hasn't completed profile creation yet simply gets
+	// empty name fields, not an error.
+	var customerProfile models.CustomerProfile
+	database.DB.Where("user_id = ?", user.ID).First(&customerProfile)
+
 	c.JSON(http.StatusOK, gin.H{
-	"message": "Profile fetched successfully",
-	"user": gin.H{
-		"id":                 user.ID,
-		"mobile":             user.Mobile,
-		"is_mobile_verified": user.IsMobileVerified,
-		"biometric_enabled":  user.BiometricEnabled,
-		"is_active":          user.IsActive,
-	},
-})
+		"message": "Profile fetched successfully",
+		"user": gin.H{
+			"id":                 user.ID,
+			"mobile":             user.Mobile,
+			"is_mobile_verified": user.IsMobileVerified,
+			"biometric_enabled":  user.BiometricEnabled,
+			"is_active":          user.IsActive,
+			"first_name":         customerProfile.FirstName,
+			"middle_name":        customerProfile.MiddleName,
+			"last_name":          customerProfile.LastName,
+		},
+	})
 }
 func ToggleBiometric(c *gin.Context) {
 

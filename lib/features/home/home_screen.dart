@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/network/auth_api_service.dart';
 import '../../core/network/emi_api_service.dart';
 import '../../core/network/notification_api_service.dart';
 import '../../core/providers/auth_provider.dart';
@@ -40,6 +41,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _hasImportantUnread = false;
   bool _hasAnyUnread = false;
 
+  /// The logged-in customer's real name for the header greeting — was
+  /// previously always MockData.currentUser's hardcoded "Rajesh Verma"
+  /// regardless of who was actually signed in. Null until
+  /// [_loadDisplayName] resolves (or if it fails / the profile hasn't
+  /// been created yet), in which case the greeting falls back to the mock
+  /// name rather than showing nothing.
+  String? _displayName;
+  String? _avatarInitials;
+
   late final AnimationController _bellController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 3200),
@@ -66,6 +76,37 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     WidgetsBinding.instance.addPostFrameCallback((_) => _startTour());
     Future.delayed(const Duration(seconds: 2), _showCongratulationsNotification);
     _loadNotificationState();
+    _loadDisplayName();
+  }
+
+  /// Best-effort, same pattern as [_loadNotificationState]/[_loadEmiSummary]:
+  /// a failure (offline, token expired, profile not created yet) just
+  /// means the greeting falls back to the mock name rather than blocking
+  /// the dashboard.
+  Future<void> _loadDisplayName() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return;
+    try {
+      final res = await AuthApiService.getProfile(token);
+      final user = res['user'] as Map<String, dynamic>?;
+      final first = (user?['first_name'] as String?)?.trim() ?? '';
+      final last = (user?['last_name'] as String?)?.trim() ?? '';
+      if (first.isEmpty && last.isEmpty) return;
+      final fullName = [first, last].where((s) => s.isNotEmpty).join(' ');
+      final initials = [first, last]
+          .where((s) => s.isNotEmpty)
+          .map((s) => s[0].toUpperCase())
+          .join();
+      if (!mounted) return;
+      setState(() {
+        _displayName = fullName;
+        _avatarInitials = initials.isEmpty ? null : initials;
+      });
+    } on ApiException {
+      // Non-fatal — greeting falls back to the mock name.
+    } catch (_) {
+      // Non-fatal.
+    }
   }
 
   @override
@@ -157,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       radius: 22,
                       backgroundColor: AppColors.primary.withValues(alpha: 0.12),
                       child: Text(
-                        user.avatarInitials,
+                        _avatarInitials ?? user.avatarInitials,
                         style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800),
                       ),
                     ),
@@ -167,7 +208,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(greeting, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          Text(user.fullName, style: Theme.of(context).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(_displayName ?? user.fullName, style: Theme.of(context).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
