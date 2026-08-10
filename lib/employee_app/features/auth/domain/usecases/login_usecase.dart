@@ -8,8 +8,9 @@ class LoginParams {
   final String name;
   final String password;
 
-  /// "verification" | "recovery" — only consulted by the backend on
-  /// first-time auto-registration; harmless to always send.
+  /// "verification" | "recovery". Employee accounts are admin-provisioned
+  /// only (no self-registration) — the backend no longer consults this on
+  /// login, it's kept purely for wire-format compatibility.
   final String module;
 }
 

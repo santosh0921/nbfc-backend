@@ -14,15 +14,19 @@ class AuthRemoteDataSource {
   final ApiClient _apiClient;
 
   /// Returns the logged-in employee together with the JWT the backend
-  /// issued, so the repository can persist both. `module` is only
-  /// consulted by the backend when `name` doesn't match any existing
-  /// employee (first-time auto-registration) — harmless to always send.
+  /// issued, so the repository can persist both. Employee accounts are
+  /// admin-provisioned only — `module` is accepted for wire-format
+  /// compatibility but the backend no longer acts on it.
   ///
   /// When [AppConfig.useMockData] is on, login never touches the network —
   /// any non-empty name+password succeeds locally, so signing in doesn't
   /// depend on the backend being reachable (every other call still does).
-  /// The employee code is derived deterministically from the name so the
-  /// same person gets the same code across sessions on this device.
+  /// This is strictly a local dev/offline-testing aid: both the
+  /// `development` and `production` [AppConfig]s currently ship with
+  /// `useMockData: false`, so this path isn't reachable in any built app —
+  /// it mirrors the backend's real admin-provisioned accounts, not
+  /// self-registration, only in that it never rejects an unrecognized
+  /// name (there's no real employee table to check locally).
   Future<({EmployeeModel employee, String token})> login({
     required String name,
     required String password,

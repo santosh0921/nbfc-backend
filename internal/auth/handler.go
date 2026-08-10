@@ -1,10 +1,10 @@
 package auth
 
 import (
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"net/http"
 	"time"
-    "gorm.io/gorm"
-	"github.com/gin-gonic/gin"
 
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
@@ -45,6 +45,17 @@ func CreateMPINHandler(c *gin.Context) {
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Database error",
+		})
+		return
+	}
+
+	// VerifyOTP checks ExpiresAt, but this handler — which actually resets
+	// the credential for an EXISTING user — used not to check it at all.
+	// A user who verified an OTP and then abandoned the flow left a
+	// permanent, still-usable MPIN-reset token behind with no time limit.
+	if time.Now().After(otpRecord.ExpiresAt) {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "OTP has expired. Please verify again.",
 		})
 		return
 	}
@@ -189,8 +200,6 @@ func LoginHandler(c *gin.Context) {
 		})
 		return
 	}
-    
-	
 
 	var user models.User
 
@@ -199,100 +208,121 @@ func LoginHandler(c *gin.Context) {
 		First(&user).Error
 
 	if err != nil {
-    if err == gorm.ErrRecordNotFound {
-        c.JSON(http.StatusUnauthorized, gin.H{
-            "message": "Invalid Mobile Number",
-        })
-        return
-    }
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"message": "Invalid Mobile Number",
+			})
+			return
+		}
 
-    c.JSON(http.StatusInternalServerError, gin.H{
-        "message": "Database error",
-    })
-    return
-}
-
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Database error",
+		})
+		return
+	}
 
 	if !user.IsMobileVerified {
-    c.JSON(http.StatusUnauthorized, gin.H{
-        "message": "Mobile number not verified",
-    })
-    return
-}
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Mobile number not verified",
+		})
+		return
+	}
 
-// Mobile exists but account is blocked
-if !user.IsActive {
-    c.JSON(http.StatusForbidden, gin.H{
-        "message": "Account is blocked",
-    })
-    return
-}
+	// Mobile exists but account is blocked
+	if !user.IsActive {
+		c.JSON(http.StatusForbidden, gin.H{
+			"message": "Account is blocked",
+		})
+		return
+	}
 
-	// Check if account is temporarily locked
-if user.LockedUntil != nil && user.LockedUntil.After(time.Now()) {
-    c.JSON(http.StatusForbidden, gin.H{
-        "message": "Account is temporarily locked. Try again later.",
-    })
-    return
-}
+	// Check if account is temporarily locked.
+	if user.LockedUntil != nil {
+		if user.LockedUntil.After(time.Now()) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"message": "Account is temporarily locked. Try again later.",
+			})
+			return
+		}
 
-// Verify MPIN
-if !CheckMPIN(user.MPIN, req.MPIN) {
+		// The lock has expired. It used to be left in place (still
+		// non-nil) until the NEXT successful login, and the re-lock
+		// condition below required LockedUntil == nil — so once a lock
+		// expired once, that guard could never be true again, and the
+		// account could never be re-locked for the rest of its life
+		// no matter how many more attempts followed. Clearing it here,
+		// as soon as it's known to be expired, gives the attempt
+		// counter a genuinely fresh window and lets a second lockout
+		// actually trigger.
+		user.LockedUntil = nil
+		user.FailedLoginAttempts = 0
+		if err := database.DB.Model(&user).Updates(map[string]interface{}{
+			"failed_login_attempts": 0,
+			"locked_until":          nil,
+		}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"message": "Database error",
+			})
+			return
+		}
+	}
 
-    user.FailedLoginAttempts++
+	// Verify MPIN
+	if !CheckMPIN(user.MPIN, req.MPIN) {
 
-if user.FailedLoginAttempts >= 5 && user.LockedUntil == nil {
-    lockTime := time.Now().Add(15 * time.Minute)
-    user.LockedUntil = &lockTime
-}
+		user.FailedLoginAttempts++
 
- if err := database.DB.Model(&user).Updates(map[string]interface{}{
-    "failed_login_attempts": user.FailedLoginAttempts,
-    "locked_until":          user.LockedUntil,
-}).Error; err != nil {
-    c.JSON(http.StatusInternalServerError, gin.H{
-        "message": "Database error",
-    })
-    return
-}
+		if user.FailedLoginAttempts >= 5 && user.LockedUntil == nil {
+			lockTime := time.Now().Add(15 * time.Minute)
+			user.LockedUntil = &lockTime
+		}
 
-    c.JSON(http.StatusUnauthorized, gin.H{
-        "message": "Invalid MPIN",
-    })
-    return
-}
+		if err := database.DB.Model(&user).Updates(map[string]interface{}{
+			"failed_login_attempts": user.FailedLoginAttempts,
+			"locked_until":          user.LockedUntil,
+		}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"message": "Database error",
+			})
+			return
+		}
+
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Invalid MPIN",
+		})
+		return
+	}
 
 	token, err := GenerateToken(user.Mobile)
 
-    if err != nil {
-	    c.JSON(http.StatusInternalServerError, gin.H{
-		    "message": "Unable to generate token",
-	        })
-	    return
-    }
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Unable to generate token",
+		})
+		return
+	}
 
 	// Reset failed login attempts after successful login
-user.FailedLoginAttempts = 0
-user.LockedUntil = nil
+	user.FailedLoginAttempts = 0
+	user.LockedUntil = nil
 
-if err := database.DB.Model(&user).Updates(map[string]interface{}{
-    "failed_login_attempts": 0,
-    "locked_until":          nil,
-}).Error; err != nil {
-    c.JSON(http.StatusInternalServerError, gin.H{
-        "message": "Database error",
-    })
-    return
-}
-
+	if err := database.DB.Model(&user).Updates(map[string]interface{}{
+		"failed_login_attempts": 0,
+		"locked_until":          nil,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Database error",
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-    "message": "Login Successful",
-    "token":   token,
-    "user": gin.H{
-        "id":                  user.ID,
-        "mobile":              user.Mobile,
-        "biometric_enabled":   user.BiometricEnabled,
-    },
-})
+		"message": "Login Successful",
+		"token":   token,
+		"user": gin.H{
+			"id":                user.ID,
+			"mobile":            user.Mobile,
+			"biometric_enabled": user.BiometricEnabled,
+		},
+	})
 }

@@ -17,7 +17,9 @@ type Config struct {
 	DBPassword string
 	DBName     string
 
-	JWTSecret  string
+	JWTSecret         string
+	AdminJWTSecret    string
+	EmployeeJWTSecret string
 
 	SurepassBaseURL    string
     SurepassBearerToken string
@@ -62,8 +64,10 @@ func Load() *Config {
 		DBPassword: os.Getenv("DB_PASSWORD"),
 		DBName: os.Getenv("DB_NAME"),
 
-		JWTSecret:  os.Getenv("JWT_SECRET"),
-		
+		JWTSecret:         os.Getenv("JWT_SECRET"),
+		AdminJWTSecret:    os.Getenv("ADMIN_JWT_SECRET"),
+		EmployeeJWTSecret: os.Getenv("EMPLOYEE_JWT_SECRET"),
+
 		SurepassBaseURL: os.Getenv("SUREPASS_BASE_URL"),
         SurepassBearerToken:   os.Getenv("SUREPASS_BEARER_TOKEN"),
 

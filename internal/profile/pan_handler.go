@@ -3,6 +3,7 @@ package profile
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"strings"
 	"regexp"
@@ -152,6 +153,12 @@ if config.DemoMode {
 	panResponse, err := surepass.API.VerifyPAN(req.PANNumber)
 
 	if err != nil {
+		var provErr *surepass.ProviderError
+		if errors.As(err, &provErr) {
+			log.Printf("Surepass PAN verification unavailable (status %d) — treating as a system error, not an invalid PAN", provErr.StatusCode)
+		} else {
+			log.Println("Surepass PAN verification request failed:", err)
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Unable to verify PAN",
 		})

@@ -27,9 +27,17 @@ func RegisterRoutes(router *gin.Engine) {
 	authRateLimit := middleware.RateLimit(1, 5)
 
 	// Public Routes
+	//
+	// verify-otp and create-mpin used to be the only two public auth
+	// endpoints WITHOUT authRateLimit — verify-otp guards OTP brute-force
+	// (otp.VerifyOTP's 5-attempt cap was otherwise trivially bypassed by
+	// just calling send-otp again for a fresh counter, since nothing
+	// throttled how often that loop could repeat), and create-mpin is
+	// effectively a password-reset endpoint for an existing account, which
+	// should never be unthrottled regardless of what credential it checks.
 	router.POST("/auth/send-otp", authRateLimit, otp.SendOTPHandler)
-	router.POST("/auth/verify-otp", otp.VerifyOTPHandler)
-	router.POST("/auth/create-mpin", auth.CreateMPINHandler)
+	router.POST("/auth/verify-otp", authRateLimit, otp.VerifyOTPHandler)
+	router.POST("/auth/create-mpin", authRateLimit, auth.CreateMPINHandler)
 	router.POST("/auth/login", authRateLimit, auth.LoginHandler)
 
 

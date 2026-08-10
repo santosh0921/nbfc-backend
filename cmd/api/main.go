@@ -8,8 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/santosh0921/nbfc-backend/internal/admin"
+	"github.com/santosh0921/nbfc-backend/internal/auth"
 	"github.com/santosh0921/nbfc-backend/internal/config"
 	"github.com/santosh0921/nbfc-backend/internal/database"
+	"github.com/santosh0921/nbfc-backend/internal/employee"
 	"github.com/santosh0921/nbfc-backend/internal/users"
     "github.com/santosh0921/nbfc-backend/internal/routes"
 	"github.com/santosh0921/nbfc-backend/internal/otp"
@@ -28,6 +30,21 @@ func main() {
 	config.SetDemoMode(cfg.DemoMode)
 	if cfg.DemoMode {
 		log.Println("⚠️  DEMO_MODE=true — PAN/Aadhaar verification is bypassed, do not use in production")
+	}
+
+	// JWT signing secrets must be loaded here — after config.Load() has
+	// read the real environment — and never as package-level var
+	// initializers, which run before main() and therefore before .env is
+	// loaded. A missing secret fails startup immediately rather than
+	// silently falling back to a hardcoded default.
+	if err := auth.InitJWTSecret(cfg.JWTSecret); err != nil {
+		log.Fatal(err)
+	}
+	if err := admin.InitJWTSecret(cfg.AdminJWTSecret); err != nil {
+		log.Fatal(err)
+	}
+	if err := employee.InitJWTSecret(cfg.EmployeeJWTSecret); err != nil {
+		log.Fatal(err)
 	}
 
 	database.Connect(cfg)

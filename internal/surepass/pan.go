@@ -14,10 +14,6 @@ func (c *Client) VerifyPAN(pan string) (*PANResponse, error) {
 		IDNumber: pan,
 	}
 
-
-	jsonBody, _ := json.Marshal(req)
-        println(string(jsonBody))
-
 	body, err := c.Post("/api/v1/pan/pan-comprehensive", req)
 	if err != nil {
 		return nil, err

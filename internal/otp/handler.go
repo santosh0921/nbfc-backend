@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/santosh0921/nbfc-backend/internal/config"
 )
 
 func SendOTPHandler(c *gin.Context) {
@@ -28,11 +30,18 @@ func SendOTPHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"success": true,
 		"message": "OTP generated successfully",
-		"otp": otp, // Remove this later when SMS service is integrated
-	})
+	}
+	// The OTP itself is never returned outside DEMO_MODE — no SMS provider
+	// is wired up yet, so this is the only way to test the OTP flow without
+	// one, but it must never ship in a response the production app can see.
+	// (See internal/config.DemoMode.)
+	if config.DemoMode {
+		resp["otp"] = otp
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func VerifyOTPHandler(c *gin.Context) {

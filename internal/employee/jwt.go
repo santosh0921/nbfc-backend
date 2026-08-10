@@ -1,21 +1,34 @@
 package employee
 
 import (
-	"os"
+	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 // JWTSecret is kept separate from customer/admin secrets so tokens can never
-// be interchanged across roles.
-var JWTSecret = []byte(envOrDefault("EMPLOYEE_JWT_SECRET", "employee-super-secret-key"))
+// be interchanged across roles. It is nil until InitJWTSecret is called
+// from main(), after config.Load().
+//
+// It used to be a package-level var reading os.Getenv at package-init
+// time — before main() runs, and therefore before config.Load()'s
+// godotenv.Load() had populated the environment from a local .env file —
+// so EMPLOYEE_JWT_SECRET was always ignored in that setup. Worse, no .env
+// in this project ever defined EMPLOYEE_JWT_SECRET at all, so the
+// hardcoded "employee-super-secret-key" fallback was in effect always in
+// use, in every environment, including production.
+var JWTSecret []byte
 
-func envOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// InitJWTSecret must be called exactly once at startup, after config.Load().
+// Fails fast rather than falling back to a default, for the same reason as
+// the customer/admin JWT secrets.
+func InitJWTSecret(secret string) error {
+	if secret == "" {
+		return errors.New("EMPLOYEE_JWT_SECRET is not set — refusing to start with no employee JWT signing secret")
 	}
-	return fallback
+	JWTSecret = []byte(secret)
+	return nil
 }
 
 type Claims struct {

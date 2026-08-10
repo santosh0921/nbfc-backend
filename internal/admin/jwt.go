@@ -1,22 +1,34 @@
 package admin
 
 import (
-	"os"
+	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 // JWTSecret is kept separate from the customer auth.JWTSecret so admin and
-// customer tokens can never be interchanged. Falls back to a dev default if
-// ADMIN_JWT_SECRET isn't set, mirroring the existing customer auth package.
-var JWTSecret = []byte(envOrDefault("ADMIN_JWT_SECRET", "admin-super-secret-key"))
+// customer tokens can never be interchanged. It is nil until InitJWTSecret
+// is called from main(), after config.Load().
+//
+// It used to be a package-level var reading os.Getenv at package-init
+// time — which in Go runs BEFORE main(), and therefore before
+// config.Load()'s godotenv.Load() had populated the environment from a
+// local .env file. The result: in that setup ADMIN_JWT_SECRET was silently
+// ignored and the hardcoded "admin-super-secret-key" fallback was always
+// used instead — a forgeable admin token grants full /admin/* access to
+// every customer record, every loan decision, every disbursement.
+var JWTSecret []byte
 
-func envOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// InitJWTSecret must be called exactly once at startup, after config.Load().
+// Fails fast rather than falling back to a default, for the same reason as
+// the customer/employee JWT secrets.
+func InitJWTSecret(secret string) error {
+	if secret == "" {
+		return errors.New("ADMIN_JWT_SECRET is not set — refusing to start with no admin JWT signing secret")
 	}
-	return fallback
+	JWTSecret = []byte(secret)
+	return nil
 }
 
 type Claims struct {
