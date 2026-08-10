@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/auth_illustration.dart';
@@ -26,7 +25,6 @@ class OtpVerifyPage extends StatefulWidget {
 
 class _OtpVerifyPageState extends State<OtpVerifyPage> {
   static const int _resendSeconds = 30;
-  static const _hasShownHintKey = 'has_shown_demo_otp_hint';
 
   String _code = '';
   String? _devOtp;
@@ -36,28 +34,11 @@ class _OtpVerifyPageState extends State<OtpVerifyPage> {
   int _secondsRemaining = _resendSeconds;
   Timer? _timer;
 
-  // Whether the on-screen "Dev mode — OTP: …" hint text should render.
-  // The OTP mock itself keeps working identically regardless of this —
-  // this only controls whether we print it, and only the very first time
-  // a customer ever lands on this screen on this device.
-  bool _showHintText = false;
-
   @override
   void initState() {
     super.initState();
     _devOtp = widget.devOtp;
     _startTimer();
-    _initHintVisibility();
-  }
-
-  Future<void> _initHintVisibility() async {
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyShown = prefs.getBool(_hasShownHintKey) ?? false;
-    if (!mounted) return;
-    if (!alreadyShown) {
-      setState(() => _showHintText = true);
-      await prefs.setBool(_hasShownHintKey, true);
-    }
   }
 
   void _startTimer() {
@@ -131,7 +112,7 @@ class _OtpVerifyPageState extends State<OtpVerifyPage> {
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium,
               ),
-              if (_devOtp != null && _showHintText) ...[
+              if (_devOtp != null) ...[
                 const SizedBox(height: 8),
                 Text(
                   'Dev mode — OTP: $_devOtp',
