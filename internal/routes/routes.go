@@ -108,6 +108,7 @@ func RegisterRoutes(router *gin.Engine) {
 	authorized.GET("/dashboard/emi-summary", loans.CustomerEmiSummaryHandler)
 	authorized.POST("/loans/:id/topup", loans.TopUpLoanHandler)
 	authorized.POST("/loans/:id/esign", loans.CustomerEsignLetterHandler)
+	authorized.GET("/transactions", loans.CustomerTransactionsHandler)
 
 	authorized.POST("/support/messages", support.PostMessageHandler)
 	authorized.GET("/support/messages", support.ListMessagesHandler)

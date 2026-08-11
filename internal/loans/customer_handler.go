@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/santosh0921/nbfc-backend/internal/database"
@@ -70,8 +71,26 @@ func SubmitLoanHandler(c *gin.Context) {
 	}
 
 	loan = submitLoanApplication(loan)
+	attachOrphanedDocuments(user.ID, loan.ID)
 
 	c.JSON(http.StatusCreated, withReferences(loan))
+}
+
+// attachOrphanedDocuments retroactively tags this customer's documents
+// that don't belong to a loan yet (loan_id IS NULL) with the loan that
+// was just created. KYC docs and the apply flow's chequebook/passbook
+// upload all happen DURING the apply wizard, before this loan record
+// exists — without this, those documents never appear in the admin's
+// per-loan Documents view (internal/documents/handler.go
+// AdminListLoanDocumentsHandler filters strictly by loan_id), for every
+// loan category, auto-approved or not, since nothing ever assigned them
+// one. Scoped to this customer and to only currently-unattached
+// documents, so an earlier loan's already-tagged documents are never
+// reassigned.
+func attachOrphanedDocuments(customerID uuid.UUID, loanID uint) {
+	database.DB.Model(&models.Document{}).
+		Where("customer_id = ? AND loan_id IS NULL", customerID).
+		Update("loan_id", loanID)
 }
 
 // TopUpLoanHandler handles POST /auth/loans/:id/topup — customer-initiated

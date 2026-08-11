@@ -25,8 +25,13 @@ class DocumentApiService {
     return UploadedDocument.fromJson(res);
   }
 
-  static Future<List<UploadedDocument>> mine(String token) async {
-    final res = await ApiClient.getList('/auth/documents', token: token);
+  /// [loanId], when given, scopes the result to documents tied to that
+  /// specific loan (e.g. verification photos an employee captured for
+  /// it) — useful for a customer with more than one loan who shouldn't
+  /// see every document across every loan in one undifferentiated list.
+  static Future<List<UploadedDocument>> mine(String token, {int? loanId}) async {
+    final path = loanId == null ? '/auth/documents' : '/auth/documents?loanId=$loanId';
+    final res = await ApiClient.getList(path, token: token);
     return res.map((e) => UploadedDocument.fromJson(e as Map<String, dynamic>)).toList();
   }
 }

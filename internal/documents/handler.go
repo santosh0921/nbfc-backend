@@ -150,8 +150,16 @@ func ListCustomerDocumentsHandler(c *gin.Context) {
 		return
 	}
 
+	query := database.DB.Where("customer_id = ?", user.ID)
+	// Optional filter so a customer with multiple loans can see just the
+	// documents (e.g. verification photos captured by the assigned
+	// employee) tied to one specific loan, instead of always getting
+	// every document across every loan they've ever applied for.
+	if loanID := c.Query("loanId"); loanID != "" {
+		query = query.Where("loan_id = ?", loanID)
+	}
 	var docs []models.Document
-	database.DB.Where("customer_id = ?", user.ID).Order("created_at desc").Find(&docs)
+	query.Order("created_at desc").Find(&docs)
 	c.JSON(http.StatusOK, docs)
 }
 

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../core/network/api_exception.dart';
+import '../../core/network/loan_api_service.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/widgets/premium_card.dart';
+import '../../models/loan_application.dart';
 
 class _Stage {
   const _Stage(this.title, this.subtitle, this.icon);
@@ -10,11 +15,36 @@ class _Stage {
   final IconData icon;
 }
 
+// Honest, reduced set of stages matching what the backend actually
+// tracks (internal/models/loan.go's status vocabulary) — the previous
+// version invented UI-only stages ("Bank Details Verification", "Video
+// KYC Call", "Agreement e-Signed") that don't correspond to any real
+// status transition, so there was no way to ever compute where a real
+// loan actually sat on that timeline.
+const _stages = [
+  _Stage('Application Submitted', 'Your details and documents were received.', Icons.description_rounded),
+  _Stage('Verification', 'Being auto-verified or reviewed by a field officer.', Icons.fact_check_rounded),
+  _Stage('Credit Assessment & Sanction', 'Underwriting review and sanction decision.', Icons.insights_rounded),
+  _Stage('Disbursement', 'Loan amount transferred to your bank account.', Icons.account_balance_rounded),
+];
+
+/// Maps a real backend `LoanApplication.status` string onto an index into
+/// [_stages] — null return means "rejected", which is shown as a distinct
+/// terminal state rather than forced onto the linear progress track.
+int? _stageIndexFor(String status) => switch (status) {
+      'submitted' => 0,
+      'assigned' || 'verified' || 'auto_verified' => 1,
+      'sanctioned' => 2,
+      'disbursed' => 3,
+      'rejected' => null,
+      _ => 0,
+    };
+
 /// Menu → Track Application: a real loan-application status tracker
-/// (distinct from the application form itself). Shows a mock in-progress
-/// application moving through underwriting stages with a live-animated
-/// timeline — staggered entrance, a filling progress bar, a pulsing
-/// "radar" ring on the active stage, and a blinking Live indicator.
+/// driven by the customer's actual loan data (`GET /auth/loans/mine`),
+/// not a fixed mock stage. If the customer has more than one loan, the
+/// most recent one still in progress is tracked by default, with a
+/// selector to switch between all of them.
 class TrackApplicationScreen extends StatefulWidget {
   const TrackApplicationScreen({super.key});
 
@@ -23,19 +53,28 @@ class TrackApplicationScreen extends StatefulWidget {
 }
 
 class _TrackApplicationScreenState extends State<TrackApplicationScreen> with TickerProviderStateMixin {
-  static const _stages = [
-    _Stage('Application Submitted', 'Your details and documents were received.', Icons.description_rounded),
-    _Stage('Document Verification', 'KYC and income documents are being verified.', Icons.fact_check_rounded),
-    _Stage('Bank Details Verification', 'Your bank account and IFSC details are being validated.', Icons.account_balance_wallet_rounded),
-    _Stage('Video KYC Call', 'Our employee will contact you for video KYC — keep your documentation ready.', Icons.video_call_rounded),
-    _Stage('Credit Assessment', 'Your credit profile is under underwriting review.', Icons.insights_rounded),
-    _Stage('Loan Approval', 'Final approval and sanction letter generation.', Icons.verified_rounded),
-    _Stage('Agreement e-Signed', 'Your loan agreement has been signed and recorded.', Icons.draw_rounded),
-    _Stage('Disbursement Initiated', 'Your loan amount is being processed for transfer.', Icons.sync_alt_rounded),
-    _Stage('Funds Disbursed', 'Loan amount has been credited to your bank account.', Icons.account_balance_rounded),
-  ];
+  late Future<List<LoanApplication>> _future;
+  LoanApplication? _selected;
 
-  static const int _currentStage = 4;
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<List<LoanApplication>> _load() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return const [];
+    final loans = await LoanApiService.mine(token);
+    // Default to the most recently applied loan that's still actively in
+    // progress (not yet disbursed or rejected); fall back to the single
+    // most recent loan overall if every one of them is already final.
+    final inProgress = loans.where((l) => l.status != 'disbursed' && l.status != 'rejected').toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final sorted = List<LoanApplication>.from(loans)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _selected = inProgress.isNotEmpty ? inProgress.first : (sorted.isNotEmpty ? sorted.first : null);
+    return sorted;
+  }
 
   late final AnimationController _entranceController = AnimationController(
     vsync: this,
@@ -52,11 +91,6 @@ class _TrackApplicationScreenState extends State<TrackApplicationScreen> with Ti
     duration: const Duration(milliseconds: 1000),
   )..repeat(reverse: true);
 
-  late final Animation<double> _progressAnim = Tween<double>(
-    begin: 0,
-    end: _currentStage / (_stages.length - 1),
-  ).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic)));
-
   @override
   void dispose() {
     _entranceController.dispose();
@@ -71,74 +105,114 @@ class _TrackApplicationScreenState extends State<TrackApplicationScreen> with Ti
     return Scaffold(
       appBar: AppBar(title: const Text('Track Application')),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            PremiumCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+        child: FutureBuilder<List<LoanApplication>>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              final message = snapshot.error is ApiException ? (snapshot.error as ApiException).message : 'Could not load your applications.';
+              return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(message, textAlign: TextAlign.center)));
+            }
+            final loans = snapshot.data ?? const [];
+            if (loans.isEmpty || _selected == null) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                        ),
-                        child: const Icon(Icons.request_quote_rounded, color: AppColors.primary),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Personal Loan · ₹3,00,000', style: theme.textTheme.titleSmall),
-                            const SizedBox(height: 4),
-                            Text('Application ID: NBFC-APL-208451', style: theme.textTheme.bodySmall),
-                          ],
-                        ),
-                      ),
-                      AnimatedBuilder(
-                        animation: _liveDotController,
-                        builder: (context, _) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(AppRadius.pill),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 7,
-                                height: 7,
-                                decoration: BoxDecoration(
-                                  color: AppColors.success.withValues(alpha: 0.4 + _liveDotController.value * 0.6),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 5),
-                              Text('LIVE', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.success, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
-                            ],
-                          ),
-                        ),
-                      ),
+                      const Icon(Icons.description_outlined, size: 48, color: AppColors.textSecondaryLight),
+                      const SizedBox(height: 12),
+                      Text('No loan applications yet.', style: theme.textTheme.titleMedium),
                     ],
                   ),
-                  const SizedBox(height: 18),
-                  AnimatedBuilder(
-                    animation: _progressAnim,
-                    builder: (context, _) => Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                ),
+              );
+            }
+
+            final loan = _selected!;
+            final stageIndex = _stageIndexFor(loan.status);
+            final currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+
+            return ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                if (loans.length > 1) ...[
+                  DropdownButtonFormField<LoanApplication>(
+                    value: loan,
+                    decoration: const InputDecoration(labelText: 'Tracking', border: OutlineInputBorder()),
+                    items: [
+                      for (final l in loans)
+                        DropdownMenuItem(value: l, child: Text('${l.category} · NBFC-APP-${l.id}', overflow: TextOverflow.ellipsis)),
+                    ],
+                    onChanged: (v) => setState(() => _selected = v),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                PremiumCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                            ),
+                            child: const Icon(Icons.request_quote_rounded, color: AppColors.primary),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${loan.category} · ${currency.format(loan.amountRequested)}', style: theme.textTheme.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                const SizedBox(height: 4),
+                                Text('Application ID: NBFC-APP-${loan.id}', style: theme.textTheme.bodySmall),
+                              ],
+                            ),
+                          ),
+                          if (stageIndex != null)
+                            AnimatedBuilder(
+                              animation: _liveDotController,
+                              builder: (context, _) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: AppColors.success.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 7,
+                                      height: 7,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.success.withValues(alpha: 0.4 + _liveDotController.value * 0.6),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text('LIVE', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.success, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (stageIndex != null) ...[
+                        const SizedBox(height: 18),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text('Overall Progress', style: theme.textTheme.bodySmall),
                             Text(
-                              '${(_progressAnim.value * 100).round()}%',
+                              '${(((stageIndex + 1) / _stages.length) * 100).round()}%',
                               style: theme.textTheme.labelMedium?.copyWith(color: AppColors.primary, fontWeight: FontWeight.w800),
                             ),
                           ],
@@ -147,56 +221,79 @@ class _TrackApplicationScreenState extends State<TrackApplicationScreen> with Ti
                         ClipRRect(
                           borderRadius: BorderRadius.circular(AppRadius.pill),
                           child: LinearProgressIndicator(
-                            value: _progressAnim.value,
+                            value: (stageIndex + 1) / _stages.length,
                             minHeight: 7,
                             backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                             valueColor: const AlwaysStoppedAnimation(AppColors.primary),
                           ),
                         ),
                       ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                if (stageIndex == null) ...[
+                  PremiumCard(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.cancel_rounded, color: AppColors.error),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Application Rejected', style: theme.textTheme.titleSmall?.copyWith(color: AppColors.error)),
+                              if (loan.decisionRemarks != null && loan.decisionRemarks!.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(loan.decisionRemarks!, style: theme.textTheme.bodySmall),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Text('Application Progress', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  for (int i = 0; i < _stages.length; i++)
+                    _AnimatedStageTile(
+                      entrance: _entranceController,
+                      pulse: _pulseController,
+                      index: i,
+                      total: _stages.length,
+                      stage: _stages[i],
+                      state: i < stageIndex
+                          ? _StageState.done
+                          : i == stageIndex
+                              ? _StageState.active
+                              : _StageState.pending,
+                      isLast: i == _stages.length - 1,
+                    ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Credit assessment usually takes 1-2 business days. You\'ll be notified the moment your status changes.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text('Application Progress', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 16),
-            for (int i = 0; i < _stages.length; i++)
-              _AnimatedStageTile(
-                entrance: _entranceController,
-                pulse: _pulseController,
-                index: i,
-                total: _stages.length,
-                stage: _stages[i],
-                state: i < _currentStage
-                    ? _StageState.done
-                    : i == _currentStage
-                        ? _StageState.active
-                        : _StageState.pending,
-                isLast: i == _stages.length - 1,
-              ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Credit assessment usually takes 1-2 business days. You\'ll be notified the moment your status changes.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );

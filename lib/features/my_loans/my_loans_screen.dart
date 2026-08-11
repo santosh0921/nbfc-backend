@@ -1,12 +1,16 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/network/document_api_service.dart';
 import '../../core/network/loan_api_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../models/loan_application.dart';
+import '../../models/uploaded_document.dart';
 import 'widgets/loan_letter_actions.dart';
 
 class MyLoansScreen extends StatefulWidget {
@@ -335,10 +339,48 @@ class _LoanDetailSheet extends StatefulWidget {
 
 class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   late final Future<LoanApplication> _future = _load();
+  late final Future<List<UploadedDocument>> _documentsFuture = _loadDocuments();
 
   Future<LoanApplication> _load() async {
     final token = AuthProvider.instance.token!;
     return LoanApiService.detail(token, widget.loanId);
+  }
+
+  /// Documents tied specifically to this loan — mainly verification
+  /// photos an employee captured during a site visit, which a customer
+  /// with more than one loan previously had no way to see at all (the
+  /// account-wide Documents screen only shows KYC docs like Aadhaar/PAN,
+  /// which aren't loan-specific).
+  Future<List<UploadedDocument>> _loadDocuments() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return const [];
+    try {
+      return await DocumentApiService.mine(token, loanId: widget.loanId);
+    } on ApiException {
+      return const [];
+    }
+  }
+
+  Future<void> _viewDocument(UploadedDocument doc) async {
+    try {
+      final bytes = base64Decode(doc.dataBase64);
+      if (doc.isImage) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (_) => Dialog(
+            child: InteractiveViewer(child: Image.memory(bytes, fit: BoxFit.contain)),
+          ),
+        );
+      } else if (doc.isPdf) {
+        await Printing.layoutPdf(onLayout: (_) async => bytes);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open this document.')),
+      );
+    }
   }
 
   @override
@@ -459,6 +501,37 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                       ),
                     ),
                   ],
+                  FutureBuilder<List<UploadedDocument>>(
+                    future: _documentsFuture,
+                    builder: (context, docSnapshot) {
+                      final docs = docSnapshot.data ?? const [];
+                      if (docs.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: PremiumCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Documents for this Loan', style: theme.textTheme.titleSmall),
+                              const SizedBox(height: 8),
+                              for (final doc in docs)
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(doc.isImage ? Icons.image_rounded : Icons.picture_as_pdf_rounded, color: AppColors.primary),
+                                  title: Text(doc.docType, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(
+                                    DateFormat('d MMM yyyy').format(doc.createdAt),
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                  trailing: const Icon(Icons.chevron_right_rounded),
+                                  onTap: () => _viewDocument(doc),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               );
             },
