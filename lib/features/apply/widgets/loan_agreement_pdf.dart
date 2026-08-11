@@ -63,7 +63,7 @@ class LoanAgreementPdf {
               pw.Divider(),
               kfsRow('Processing Fee', processingFee),
               pw.Divider(),
-              kfsRow('Penal Charges', '2% p.m. on overdue amount'),
+              kfsRow('Overdue Charges', '2% p.m. on overdue amount'),
               pw.Divider(),
               kfsRow('Estimated Monthly EMI', currency.format(emi)),
             ]),
@@ -103,7 +103,7 @@ class LoanAgreementPdf {
 
 3. REPAYMENT: The borrower agrees to repay the loan through Equated Monthly Instalments (EMIs) as per the agreed schedule, via the registered bank account (NACH/auto-debit) or any other payment method made available in the app.
 
-4. PENAL CHARGES: In the event of delayed or missed EMI payments, penal charges as stated in the Key Facts Statement will apply on the overdue amount, calculated from the due date until the date of actual payment.
+4. OVERDUE CHARGES: In the event of delayed or missed EMI payments, overdue charges as stated in the Key Facts Statement will apply on the overdue amount, calculated from the due date until the date of actual payment.
 
 5. PREPAYMENT & FORECLOSURE: The borrower may prepay or foreclose the loan, in part or in full, subject to the applicable prepayment charges (if any) disclosed at the time of such request, in accordance with RBI's Fair Practices Code.
 

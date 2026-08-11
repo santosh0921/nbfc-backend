@@ -111,6 +111,15 @@ class _CustomerDetailsCard extends StatelessWidget {
             label: 'Due Date',
             value: '${caseItem.dueDate.day}/${caseItem.dueDate.month}/${caseItem.dueDate.year}',
           ),
+          if (caseItem.timingPreference != null)
+            _DetailRow(icon: Icons.schedule_outlined, label: 'Preferred Call Time', value: caseItem.timingPreference!),
+          if (caseItem.visitDate != null)
+            _DetailRow(
+              icon: Icons.home_work_outlined,
+              label: 'Property Visit',
+              value: '${caseItem.visitDate!.day}/${caseItem.visitDate!.month}/${caseItem.visitDate!.year}'
+                  '${caseItem.visitTimeSlot != null ? ', ${caseItem.visitTimeSlot}' : ''}',
+            ),
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [

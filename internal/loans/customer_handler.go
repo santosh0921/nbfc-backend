@@ -3,6 +3,7 @@ package loans
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -33,13 +34,16 @@ func SubmitLoanHandler(c *gin.Context) {
 	}
 
 	var body struct {
-		Category        string  `json:"category" binding:"required"`
-		AmountRequested float64 `json:"amountRequested" binding:"required"`
-		Purpose         string  `json:"purpose"`
-		ApplicantName   string  `json:"applicantName" binding:"required"`
-		ApplicantPhone  string  `json:"applicantPhone"`
-		AddressLine     string  `json:"addressLine"`
-		City            string  `json:"city" binding:"required"`
+		Category         string  `json:"category" binding:"required"`
+		AmountRequested  float64 `json:"amountRequested" binding:"required"`
+		Purpose          string  `json:"purpose"`
+		ApplicantName    string  `json:"applicantName" binding:"required"`
+		ApplicantPhone   string  `json:"applicantPhone"`
+		AddressLine      string  `json:"addressLine"`
+		City             string  `json:"city" binding:"required"`
+		TimingPreference string  `json:"timingPreference"`
+		VisitDate        string  `json:"visitDate"` // "2006-01-02", optional
+		VisitTimeSlot    string  `json:"visitTimeSlot"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -47,15 +51,22 @@ func SubmitLoanHandler(c *gin.Context) {
 	}
 
 	loan := models.LoanApplication{
-		CustomerID:      user.ID,
-		Category:        body.Category,
-		AmountRequested: body.AmountRequested,
-		Purpose:         body.Purpose,
-		ApplicantName:   body.ApplicantName,
-		ApplicantPhone:  body.ApplicantPhone,
-		AddressLine:     body.AddressLine,
-		City:            body.City,
-		CibilScore:      getOrCreateCibilScore(user),
+		CustomerID:       user.ID,
+		Category:         body.Category,
+		AmountRequested:  body.AmountRequested,
+		Purpose:          body.Purpose,
+		ApplicantName:    body.ApplicantName,
+		ApplicantPhone:   body.ApplicantPhone,
+		AddressLine:      body.AddressLine,
+		City:             body.City,
+		CibilScore:       getOrCreateCibilScore(user),
+		TimingPreference: body.TimingPreference,
+		VisitTimeSlot:    body.VisitTimeSlot,
+	}
+	if body.VisitDate != "" {
+		if parsed, err := time.Parse("2006-01-02", body.VisitDate); err == nil {
+			loan.VisitDate = &parsed
+		}
 	}
 
 	loan = submitLoanApplication(loan)

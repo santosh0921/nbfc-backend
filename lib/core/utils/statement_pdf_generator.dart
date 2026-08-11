@@ -48,6 +48,9 @@ class StatementPdfGenerator {
     required DateTime date,
     required String paymentMethod,
     required String status,
+    double? loanAmount,
+    double? interestAmount,
+    double? totalPayable,
   }) async {
     final pdf = pw.Document();
     pdf.addPage(
@@ -65,6 +68,9 @@ class StatementPdfGenerator {
             _kv('Date & Time', _dateFmt.format(date)),
             _kv('Payment Method', paymentMethod),
             _kv('Status', status),
+            if (loanAmount != null) _kv('Loan Amount', _currency.format(loanAmount)),
+            if (interestAmount != null) _kv('Interest Amount', _currency.format(interestAmount)),
+            if (totalPayable != null) _kv('Total Amount (with Interest)', _currency.format(totalPayable)),
             _footer(),
           ],
         ),

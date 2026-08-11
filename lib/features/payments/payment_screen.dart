@@ -345,6 +345,12 @@ class _PaymentSuccessView extends StatefulWidget {
 }
 
 class _PaymentSuccessViewState extends State<_PaymentSuccessView> with SingleTickerProviderStateMixin {
+  /// Total repayable over the full tenure at a constant EMI — the same
+  /// principal-plus-interest approximation used elsewhere in the app
+  /// (see internal/loans/letter.go's "Estimated Total Repayment").
+  double get _totalPayable => widget.loan.nextEmiAmount * widget.loan.tenureMonths;
+  double get _totalInterest => _totalPayable - widget.loan.principal;
+
   Future<File> _buildReceiptFile() async {
     final bytes = await StatementPdfGenerator.buildPaymentReceipt(
       referenceNumber: widget.referenceNumber,
@@ -354,6 +360,9 @@ class _PaymentSuccessViewState extends State<_PaymentSuccessView> with SingleTic
       date: DateTime.now(),
       paymentMethod: widget.methodSummary,
       status: 'Success',
+      loanAmount: widget.loan.principal,
+      interestAmount: _totalInterest,
+      totalPayable: _totalPayable,
     );
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/receipt_${widget.referenceNumber}.pdf');
@@ -443,6 +452,16 @@ class _PaymentSuccessViewState extends State<_PaymentSuccessView> with SingleTic
                           _ReceiptRow(label: 'Date & Time', value: date),
                           const Divider(height: 20),
                           _ReceiptRow(label: 'Payment Method', value: widget.methodSummary),
+                          const Divider(height: 20),
+                          _ReceiptRow(label: 'Loan Amount', value: currency.format(widget.loan.principal)),
+                          const Divider(height: 20),
+                          _ReceiptRow(label: 'Interest Amount', value: currency.format(_totalInterest)),
+                          const Divider(height: 20),
+                          _ReceiptRow(
+                            label: 'Total Amount (with Interest)',
+                            value: currency.format(_totalPayable),
+                            emphasize: true,
+                          ),
                         ],
                       ),
                     ),
@@ -666,10 +685,11 @@ class _MethodTile extends StatelessWidget {
 }
 
 class _ReceiptRow extends StatelessWidget {
-  const _ReceiptRow({required this.label, required this.value});
+  const _ReceiptRow({required this.label, required this.value, this.emphasize = false});
 
   final String label;
   final String value;
+  final bool emphasize;
 
   @override
   Widget build(BuildContext context) {
@@ -677,9 +697,20 @@ class _ReceiptRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: theme.textTheme.bodyMedium),
+        Text(
+          label,
+          style: emphasize ? theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700) : theme.textTheme.bodyMedium,
+        ),
         Flexible(
-          child: Text(value, style: theme.textTheme.titleSmall, textAlign: TextAlign.right),
+          child: Text(
+            value,
+            style: emphasize
+                ? theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: AppColors.primary)
+                : theme.textTheme.titleSmall,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../../../core/widgets/success_celebration.dart';
 import '../../domain/entities/visit_record.dart';
 
 class VerificationSuccessPage extends StatelessWidget {
@@ -23,13 +24,7 @@ class VerificationSuccessPage extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 88,
-                height: 88,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.12), shape: BoxShape.circle),
-                child: const Icon(Icons.check_circle, color: AppColors.success, size: 56),
-              ),
+              const SuccessCelebration(size: 88),
               const SizedBox(height: AppSpacing.lg),
               Text('Verification Submitted', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: AppSpacing.sm),

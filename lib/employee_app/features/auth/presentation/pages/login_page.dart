@@ -6,10 +6,16 @@ import '../../../../core/components/app_snackbar.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/employee_app_module.dart';
+import '../../../../core/providers/agency_provider.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
+
+// Branch cities the backend actually seeds employees under
+// (internal/seed/seed.go) — alphabetical, verification and recovery
+// cities combined since either module's employee can pick any of them.
+const _employeeCities = ['Ahmedabad', 'Bengaluru', 'Chennai', 'Delhi', 'Hyderabad', 'Mumbai', 'Pune', 'Thane'];
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -24,6 +30,7 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _rememberMe = false;
   bool _biometricAvailable = false;
+  String? _selectedCity;
 
   @override
   void initState() {
@@ -36,6 +43,7 @@ class _LoginPageState extends State<LoginPage> {
     auth.canUseBiometrics.then((value) {
       if (mounted) setState(() => _biometricAvailable = value);
     });
+    _selectedCity = context.read<AgencyProvider>().selectedAgency;
   }
 
   @override
@@ -55,6 +63,10 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedCity != null) {
+      await context.read<AgencyProvider>().selectAgency(_selectedCity!);
+    }
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
     await auth.login(
       name: _nameController.text.trim(),
@@ -146,6 +158,22 @@ class _LoginPageState extends State<LoginPage> {
                     textInputAction: TextInputAction.done,
                     autofillHints: const [AutofillHints.password],
                     validator: (v) => (v == null || v.length < 4) ? 'Enter a valid password' : null,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text('Branch City', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: AppSpacing.xs),
+                  DropdownButtonFormField<String>(
+                    value: _selectedCity,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.location_city_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                    hint: const Text('Select your branch city'),
+                    items: [
+                      for (final city in _employeeCities) DropdownMenuItem(value: city, child: Text(city)),
+                    ],
+                    onChanged: (v) => setState(() => _selectedCity = v),
+                    validator: (v) => v == null ? 'Select your branch city' : null,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Row(

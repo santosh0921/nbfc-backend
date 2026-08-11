@@ -112,6 +112,9 @@ class CasesRepositoryHttp implements CasesRepository {
       dueDate: createdAt.add(const Duration(days: 2)),
       cibilScore: (json['cibilScore'] as num?)?.toInt(),
       references: referencesJson.map(_fromReferenceJson).toList(),
+      timingPreference: json['timingPreference'] as String?,
+      visitDate: DateTime.tryParse(json['visitDate'] as String? ?? ''),
+      visitTimeSlot: json['visitTimeSlot'] as String?,
     );
   }
 

@@ -176,7 +176,7 @@ class _LoanSummaryCard extends StatelessWidget {
           Text('Loan Summary', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: AppSpacing.md),
           _DetailRow(icon: Icons.currency_rupee, label: 'Outstanding', value: '₹${caseItem.outstandingAmount.toStringAsFixed(0)}'),
-          _DetailRow(icon: Icons.warning_amber_outlined, label: 'Penalty', value: '₹${caseItem.penaltyAmount.toStringAsFixed(0)}'),
+          _DetailRow(icon: Icons.warning_amber_outlined, label: 'Overdue Charge', value: '₹${caseItem.penaltyAmount.toStringAsFixed(0)}'),
           _DetailRow(icon: Icons.percent_outlined, label: 'Interest', value: '₹${caseItem.interestAmount.toStringAsFixed(0)}'),
           _DetailRow(icon: Icons.receipt_long_outlined, label: 'Overdue EMIs', value: '${caseItem.overdueEmiCount}'),
           _DetailRow(icon: Icons.event_busy_outlined, label: 'DPD', value: '${caseItem.dpd} days'),

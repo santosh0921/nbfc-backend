@@ -167,9 +167,7 @@ func AdminDisburseHandler(c *gin.Context) {
 		return
 	}
 
-	createNotification("customer", loan.CustomerID.String(), "Loan disbursed",
-		"Amount Rs."+strconv.FormatFloat(amt, 'f', 2, 64)+" for loan #"+itoa(loan.ID)+" disbursed on "+now.Format("2006-01-02")+
-			". Please review, sign, and re-upload your Disbursement Letter.")
+	notifyDisbursement(loan, amt, now)
 
 	audit.Record(c.GetString("admin_username"), "loan.disburse", "loan", itoa(loan.ID),
 		"Disbursed Rs."+strconv.FormatFloat(amt, 'f', 2, 64)+" on "+now.Format("2006-01-02"))
@@ -179,6 +177,51 @@ func AdminDisburseHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, withReferences(loan))
+}
+
+// letterNotificationMergeWindow: how recently the sanction notification for
+// this loan must have been created for the disbursement notification to
+// merge into it instead of creating a second entry. Sanction and
+// disbursement are genuinely separate real-world events (disbursement
+// often happens days after sanction, once the signed sanction letter comes
+// back), so they should normally each get their own bell entry — this only
+// collapses the two when they happen in quick succession (e.g. same
+// admin session), where two near-identical "please sign a letter" entries
+// for the same loan is just noise rather than useful separate information.
+const letterNotificationMergeWindow = 24 * time.Hour
+
+// notifyDisbursement sends the "your loan was disbursed" notification,
+// merging into the still-unread sanction notification for this loan (if one
+// exists within letterNotificationMergeWindow) rather than always adding a
+// new bell entry.
+func notifyDisbursement(loan models.LoanApplication, amt float64, disbursedAt time.Time) {
+	amountText := "Rs." + strconv.FormatFloat(amt, 'f', 2, 64)
+	loanRef := "#" + itoa(loan.ID)
+
+	// A plain `LIKE '%#53%'` would also match an unrelated loan's
+	// notification body containing "#530" or "#153" — the regex requires
+	// a non-digit (or end of string) right after the loan number so only
+	// an exact "#53" reference matches.
+	var existing models.Notification
+	err := database.DB.
+		Where("role = ? AND user_id = ? AND read = ? AND body ~ ? AND body LIKE ? AND created_at >= ?",
+			"customer", loan.CustomerID.String(), false, "#"+itoa(loan.ID)+"([^0-9]|$)", "%Sanction Letter%",
+			time.Now().Add(-letterNotificationMergeWindow)).
+		Order("created_at desc").
+		First(&existing).Error
+
+	if err == nil {
+		existing.Title = "Loan sanctioned and disbursed"
+		existing.Body = "Your " + loan.Category + " application " + loanRef + " has been sanctioned and disbursed. Amount " +
+			amountText + " disbursed on " + disbursedAt.Format("2006-01-02") +
+			". Please review, sign, and re-upload your Sanction Letter and Disbursement Letter."
+		database.DB.Save(&existing)
+		return
+	}
+
+	createNotification("customer", loan.CustomerID.String(), "Loan disbursed",
+		"Amount "+amountText+" for loan "+loanRef+" disbursed on "+disbursedAt.Format("2006-01-02")+
+			". Please review, sign, and re-upload your Disbursement Letter.")
 }
 
 // AdminRestructureLoanHandler handles POST /admin/loans/:id/restructure —

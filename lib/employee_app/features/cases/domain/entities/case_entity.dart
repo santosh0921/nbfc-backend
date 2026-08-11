@@ -70,6 +70,9 @@ class CaseEntity extends Equatable {
     required this.dueDate,
     this.cibilScore,
     this.references = const [],
+    this.timingPreference,
+    this.visitDate,
+    this.visitTimeSlot,
   });
 
   /// Backend `LoanApplication.ID` (see internal/models/loan.go), as a
@@ -94,6 +97,14 @@ class CaseEntity extends Equatable {
   /// `MaskedReference`), always masked for Aadhaar/PAN.
   final List<LoanReference> references;
 
+  /// The customer's preferred call/visit window from the apply flow's
+  /// "Verification Scheduling" step (internal/models/loan.go
+  /// `TimingPreference`/`VisitDate`/`VisitTimeSlot`) — null for loans that
+  /// skip that step (e.g. auto-approved Instant/Personal Loans).
+  final String? timingPreference;
+  final DateTime? visitDate;
+  final String? visitTimeSlot;
+
   @override
   List<Object?> get props => [
         id,
@@ -104,6 +115,9 @@ class CaseEntity extends Equatable {
         loanType,
         loanAmount,
         priority,
+        timingPreference,
+        visitDate,
+        visitTimeSlot,
         status,
         assignedDate,
         dueDate,

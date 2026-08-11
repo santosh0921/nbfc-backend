@@ -1,10 +1,6 @@
 class RouteNames {
   RouteNames._();
 
-  // Pre-auth
-  static const String agencySelect = 'agencySelect';
-  static const String agencySelectPath = '/agency-select';
-
   // Auth
   static const String login = 'login';
   static const String loginPath = '/login';

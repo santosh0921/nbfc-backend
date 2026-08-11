@@ -12,6 +12,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/widgets/premium_card.dart';
 import '../../../core/widgets/signature_pad.dart';
+import '../../../core/widgets/success_celebration.dart';
 import '../../../models/loan_application.dart';
 import '../../../models/uploaded_document.dart';
 
@@ -470,8 +471,8 @@ class _EsignScreenState extends State<_EsignScreen> {
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 48),
-                    const SizedBox(height: 12),
+                    const SuccessCelebration(size: 84),
+                    const SizedBox(height: 4),
                     Text('eSigned successfully', style: theme.textTheme.titleMedium),
                     const SizedBox(height: 4),
                     Text(

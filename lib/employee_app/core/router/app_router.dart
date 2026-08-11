@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
-import '../../features/auth/presentation/pages/agency_selection_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/mpin_setup_page.dart';
@@ -39,23 +38,14 @@ class AppRouter {
   }) {
     final homePath = module == EmployeeAppModule.recovery ? RouteNames.recoveryDashboardPath : RouteNames.dashboardPath;
     return GoRouter(
-      initialLocation: RouteNames.agencySelectPath,
+      initialLocation: RouteNames.loginPath,
       refreshListenable: Listenable.merge([authProvider, agencyProvider]),
       redirect: (context, state) {
         final path = state.matchedLocation;
 
-        // Wait for the persisted agency choice to load before gating on it,
-        // otherwise the very first frame would bounce somewhere wrong.
-        if (!agencyProvider.isRestored) return null;
-
         // Strict priority chain — each stage owns exactly one redirect
         // target, so re-evaluating after a redirect always resolves to
         // `null` (stay) instead of bouncing to a different stage's target.
-        final agencyChosen = agencyProvider.selectedAgency != null;
-        if (!agencyChosen) {
-          return path == RouteNames.agencySelectPath ? null : RouteNames.agencySelectPath;
-        }
-
         final isAuthenticated = authProvider.status == AuthStatus.authenticated;
         if (!isAuthenticated) {
           return _isPublicPath(path) ? null : RouteNames.loginPath;
@@ -80,8 +70,7 @@ class AppRouter {
           return path == RouteNames.profileSetupPath ? null : RouteNames.profileSetupPath;
         }
 
-        final isPreAuthPath = path == RouteNames.agencySelectPath ||
-            path == RouteNames.profileSetupPath ||
+        final isPreAuthPath = path == RouteNames.profileSetupPath ||
             path == RouteNames.otpVerifyPath ||
             path == RouteNames.mpinSetupPath ||
             path == RouteNames.mpinUnlockPath ||
@@ -91,12 +80,6 @@ class AppRouter {
         return null;
       },
       routes: [
-        GoRoute(
-          path: RouteNames.agencySelectPath,
-          name: RouteNames.agencySelect,
-          pageBuilder: (context, state) =>
-              buildPageWithTransition(context: context, state: state, child: const AgencySelectionPage()),
-        ),
         GoRoute(
           path: RouteNames.loginPath,
           name: RouteNames.login,

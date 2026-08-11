@@ -20,6 +20,7 @@ import '../../mock/india_locations.dart';
 import '../../mock/mock_data.dart';
 import '../../models/loan_product.dart';
 import 'widgets/apply_form_field.dart';
+import 'widgets/bank_document_upload_tile.dart';
 import 'widgets/document_upload_tile.dart';
 import 'widgets/loan_agreement_pdf.dart';
 
@@ -328,6 +329,9 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
       applicantPhone: AuthProvider.instance.pendingPhoneNumber ?? '',
       addressLine: _addressLineController.text.trim(),
       city: _selectedCity ?? '',
+      timingPreference: _timingPreference,
+      visitDate: _visitDate,
+      visitTimeSlot: _visitTimeSlot,
     );
     _applicationId = 'NBFC-APP-${loan.id}';
   }
@@ -1089,6 +1093,17 @@ class _BankDetailsStep extends StatelessWidget {
             labelBuilder: (v) => v,
             onChanged: onAccountTypeChanged,
           ),
+          const SizedBox(height: 20),
+          Text('Supporting Documents', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'Optional, but speeds up verification — a chequebook or passbook photo/PDF confirming your account details.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          const BankDocumentUploadTile(label: 'Chequebook', icon: Icons.receipt_long_rounded, docType: 'chequebook'),
+          const SizedBox(height: 12),
+          const BankDocumentUploadTile(label: 'Passbook', icon: Icons.menu_book_rounded, docType: 'passbook'),
         ],
       ),
     );
@@ -1333,7 +1348,7 @@ class _InstantLoanConsentStepState extends State<_InstantLoanConsentStep> with S
             children: [
               Text(
                 '• The full loan amount, along with applicable interest and charges, is due within 35 days of disbursement.\n\n'
-                '• Late repayment will attract penal charges as disclosed in the Key Facts Statement and may affect your credit score.\n\n'
+                '• Late repayment will attract overdue charges as disclosed in the Key Facts Statement and may affect your credit score.\n\n'
                 '• Instant Loans are processed without a video KYC call — please ensure all your documents and details are accurate before submitting.\n\n'
                 '• This loan is governed by the same RBI Digital Lending Guidelines and grievance redressal process as every other product in the app.',
                 style: theme.textTheme.bodySmall?.copyWith(height: 1.6),
@@ -1407,8 +1422,8 @@ class _TermsStepState extends State<_TermsStep> {
       'You agree to repay the loan through Equated Monthly Instalments (EMIs) as per the agreed schedule, via your registered bank account (NACH/auto-debit) or any other payment method made available in the app.',
     ),
     (
-      'Penal Charges',
-      'In the event of delayed or missed EMI payments, penal charges as stated in the Key Facts Statement will apply on the overdue amount, calculated from the due date until the date of actual payment.',
+      'Overdue Charges',
+      'In the event of delayed or missed EMI payments, overdue charges as stated in the Key Facts Statement will apply on the overdue amount, calculated from the due date until the date of actual payment.',
     ),
     (
       'Prepayment & Foreclosure',
@@ -1504,7 +1519,7 @@ class _TermsStepState extends State<_TermsStep> {
                     const Divider(height: 20),
                     _KfsRow(label: 'Processing Fee', value: widget.processingFee),
                     const Divider(height: 20),
-                    _KfsRow(label: 'Penal Charges', value: '2% p.m. on overdue amount'),
+                    _KfsRow(label: 'Overdue Charges', value: '2% p.m. on overdue amount'),
                     const Divider(height: 20),
                     _KfsRow(label: 'Estimated Monthly EMI', value: currency.format(widget.emi)),
                   ],

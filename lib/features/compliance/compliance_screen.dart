@@ -66,7 +66,7 @@ class ComplianceScreen extends StatelessWidget {
                 children: const [
                   _ChargeRow(label: 'GST', value: '18% on processing fee & applicable charges'),
                   Divider(height: 24),
-                  _ChargeRow(label: 'Penal Charges', value: '2% per month on overdue amount (not compounded)'),
+                  _ChargeRow(label: 'Overdue Charges', value: '2% per month on overdue amount (not compounded)'),
                   Divider(height: 24),
                   _ChargeRow(label: 'Foreclosure Charges', value: 'Nil on floating-rate loans after 12 EMIs'),
                   Divider(height: 24),

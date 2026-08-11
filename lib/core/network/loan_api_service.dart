@@ -21,6 +21,9 @@ class LoanApiService {
     required String applicantPhone,
     required String addressLine,
     required String city,
+    String? timingPreference,
+    DateTime? visitDate,
+    String? visitTimeSlot,
   }) async {
     final res = await ApiClient.post('/auth/loans/apply', {
       'category': category,
@@ -30,6 +33,9 @@ class LoanApiService {
       'applicantPhone': applicantPhone,
       'addressLine': addressLine,
       'city': city,
+      if (timingPreference != null) 'timingPreference': timingPreference,
+      if (visitDate != null) 'visitDate': '${visitDate.year.toString().padLeft(4, '0')}-${visitDate.month.toString().padLeft(2, '0')}-${visitDate.day.toString().padLeft(2, '0')}',
+      if (visitTimeSlot != null) 'visitTimeSlot': visitTimeSlot,
     }, token: token);
     return LoanApplication.fromJson(res);
   }

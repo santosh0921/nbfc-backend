@@ -9,6 +9,7 @@ import '../../core/theme/app_radius.dart';
 import '../../core/utils/statement_pdf_generator.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../models/emi_schedule.dart';
+import 'widgets/emi_calendar_view.dart';
 
 /// Menu → EMI Schedule: the real backend-computed amortization schedule
 /// for a disbursed loan (`GET /auth/loans/:id/emi-schedule`), reached
@@ -27,6 +28,7 @@ class EmiScheduleScreen extends StatefulWidget {
 class _EmiScheduleScreenState extends State<EmiScheduleScreen> {
   late Future<EmiSchedule> _future;
   bool _paying = false;
+  bool _showCalendar = false;
 
   int? get _loanId => int.tryParse(widget.loanId ?? '');
 
@@ -96,6 +98,11 @@ class _EmiScheduleScreenState extends State<EmiScheduleScreen> {
       appBar: AppBar(
         title: const Text('EMI Schedule'),
         actions: [
+          IconButton(
+            icon: Icon(_showCalendar ? Icons.view_list_rounded : Icons.calendar_month_rounded),
+            tooltip: _showCalendar ? 'List View' : 'Calendar View',
+            onPressed: () => setState(() => _showCalendar = !_showCalendar),
+          ),
           FutureBuilder<EmiSchedule>(
             future: _future,
             builder: (context, snapshot) {
@@ -136,6 +143,22 @@ class _EmiScheduleScreenState extends State<EmiScheduleScreen> {
                 children: [
                   _ScheduleHeader(schedule: schedule),
                   const SizedBox(height: 24),
+                  if (_showCalendar) ...[
+                    EmiCalendarView(
+                      installments: schedule.installments,
+                      onSelectInstallment: (installment) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Installment #${installment.installmentNumber} — ${_currency.format(installment.amount)} '
+                              '(${EmiStatusInfo.forStatus(installment.status).label}), due ${_dateFmt.format(installment.dueDate)}',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                   Text('Installments', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 4),
                   Text(

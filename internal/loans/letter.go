@@ -189,7 +189,7 @@ func buildSanctionLetterPDF(loan models.LoanApplication, signaturePNG []byte, si
 	tableRow(pdf, "Estimated Monthly EMI", rupees(monthlyEmi), 65)
 	tableRow(pdf, "Estimated Total Repayment", rupees(totalRepayment)+" (principal + interest over full tenure)", 65)
 	tableRow(pdf, "CIBIL Score Considered", cibilLabel(loan.CibilScore), 65)
-	tableRow(pdf, "Penal Charges (Late Payment)", "2% per month on overdue installment amount", 65)
+	tableRow(pdf, "Overdue Charges (Late Payment)", "2% per month on overdue installment amount", 65)
 	tableRow(pdf, "Foreclosure Charges", "Nil", 65)
 
 	sectionHeading(pdf, "Borrower Acknowledgement")
@@ -272,7 +272,7 @@ func buildDisbursementLetterPDF(loan models.LoanApplication, signaturePNG []byte
 	if totalRepayment > 0 {
 		tableRow(pdf, "Total Repayment Amount", rupees(totalRepayment), 65)
 	}
-	tableRow(pdf, "Penalty on Late Payment", "2% per month on overdue installment amount", 65)
+	tableRow(pdf, "Overdue Charges (Late Payment)", "2% per month on overdue installment amount", 65)
 
 	sectionHeading(pdf, "Important Note")
 	pdf.SetFont("Arial", "", 10)

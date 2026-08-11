@@ -32,7 +32,7 @@ const _faqs = [
   ('How is my EMI calculated?', 'Your EMI is calculated using your loan amount, interest rate, and tenure — reducing balance method. Use the EMI Calculator on any loan\'s detail page to estimate it.'),
   ('Can I prepay or foreclose my loan?', 'Yes. Go to My Loans → select your loan → Part Payment or Foreclosure. Nil charges apply on floating-rate loans after 12 EMIs.'),
   ('How do I update my KYC documents?', 'Visit Profile → Documents, or re-upload your Aadhaar/PAN during your next application — updates are verified within 24 hours.'),
-  ('What happens if I miss an EMI payment?', 'A grace period of 3 days applies before penal charges (2% p.m. on overdue amount) are levied. Repeated defaults are reported to credit bureaus.'),
+  ('What happens if I miss an EMI payment?', 'A grace period of 3 days applies before overdue charges (2% p.m. on overdue amount) are levied. Repeated defaults are reported to credit bureaus.'),
 ];
 
 /// Real Customer Support screen: searchable FAQs, a complaint form
