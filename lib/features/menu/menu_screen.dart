@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/network/api_exception.dart';
+import '../../core/network/emi_api_service.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/widgets/premium_card.dart';
@@ -10,6 +13,37 @@ import '../../mock/mock_data.dart';
 /// buttons — mirrors the structure of established NBFC-style app menus.
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
+
+  /// The EMI Schedule route needs a specific loanId (see
+  /// emi_schedule_screen.dart) — unlike every other Menu row, this entry
+  /// point has no loan already in context, so it used to navigate with no
+  /// loanId at all and hit "This loan could not be found." on literally
+  /// every tap. Resolves a real loanId (the customer's current/most
+  /// recent active loan) first, or tells the customer there's nothing to
+  /// show instead of taking them to a guaranteed-broken screen.
+  Future<void> _openEmiSchedule(BuildContext context) async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return;
+    try {
+      final summary = await EmiApiService.dashboardSummary(token);
+      if (!context.mounted) return;
+      if (!summary.hasUpcomingEmi || summary.loanId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No active EMI schedule to show yet.')),
+        );
+        return;
+      }
+      context.push('/emi-schedule', extra: '${summary.loanId}');
+    } on ApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load your EMI schedule right now.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +123,7 @@ class MenuScreen extends StatelessWidget {
             _MenuRow(
               icon: Icons.event_note_rounded,
               label: 'EMI Schedule',
-              onTap: () => context.push('/emi-schedule'),
+              onTap: () => _openEmiSchedule(context),
             ),
             _MenuRow(
               icon: Icons.receipt_long_rounded,

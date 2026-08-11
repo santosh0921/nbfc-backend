@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/utils/pdf_generator.dart';
@@ -6,7 +9,7 @@ import '../../data/repositories/visit_history_repository.dart';
 import '../../domain/entities/visit_record.dart';
 
 /// Holds the working state of a single in-progress verification visit —
-/// customer details, nominees, captured documents, the geotagged site
+/// customer details, witnesses, captured documents, the geotagged site
 /// photo, and both signatures — from the moment the officer starts a visit
 /// until it's submitted and persisted to history (locally, for the PDF/visit
 /// trail) and reported to the backend via `POST /employee/loans/:id/verify`.
@@ -23,7 +26,7 @@ class VerificationDraftProvider extends ChangeNotifier {
   String occupation = '';
   String monthlyIncome = '';
   String remarks = '';
-  List<NomineeInfo> nominees = [];
+  List<WitnessInfo> witnesses = [];
   List<CapturedDocument> documents = [];
   GeoPhoto? geoPhoto;
   String? customerSignaturePath;
@@ -41,7 +44,7 @@ class VerificationDraftProvider extends ChangeNotifier {
     occupation = '';
     monthlyIncome = '';
     remarks = '';
-    nominees = [];
+    witnesses = [];
     documents = [];
     geoPhoto = null;
     customerSignaturePath = null;
@@ -59,14 +62,41 @@ class VerificationDraftProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addNominee(NomineeInfo nominee) {
-    nominees = [...nominees, nominee];
+  void addWitness(WitnessInfo witness) {
+    witnesses = [...witnesses, witness];
     notifyListeners();
   }
 
-  void removeNominee(int index) {
-    nominees = [...nominees]..removeAt(index);
+  void removeWitness(int index) {
+    witnesses = [...witnesses]..removeAt(index);
     notifyListeners();
+  }
+
+  /// Attaches a captured ID document photo to the witness at [index],
+  /// both locally (so the review screen and PDF can show it) and to the
+  /// backend so it appears in the admin panel like every other
+  /// verification document. Upload failure is non-blocking — the local
+  /// attachment is the source of truth for the on-device flow.
+  Future<void> addWitnessDocument(int index, String filePath) async {
+    if (index < 0 || index >= witnesses.length) return;
+    final updated = [...witnesses];
+    updated[index] = updated[index].copyWith(documentPath: filePath);
+    witnesses = updated;
+    notifyListeners();
+
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      await _casesRepository.uploadLoanDocument(
+        caseId,
+        docType: 'witness_${index + 1}_id',
+        fileName: filePath.split(Platform.pathSeparator).last,
+        mimeType: 'image/jpeg',
+        dataBase64: base64Encode(bytes),
+      );
+    } catch (_) {
+      // Non-fatal — same pattern as the checklist document upload below;
+      // the local copy still exists and still goes into the PDF.
+    }
   }
 
   void addDocument(CapturedDocument document) {
@@ -112,7 +142,7 @@ class VerificationDraftProvider extends ChangeNotifier {
       occupation: occupation,
       monthlyIncome: monthlyIncome,
       remarks: remarks,
-      nominees: nominees,
+      witnesses: witnesses,
       documents: documents,
       geoPhoto: geoPhoto,
       customerSignaturePath: customerSignaturePath,

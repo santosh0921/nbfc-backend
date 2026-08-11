@@ -22,7 +22,7 @@ import '../../domain/entities/visit_record.dart';
 import '../providers/verification_draft_provider.dart';
 import 'verification_success_page.dart';
 
-/// End-to-end field verification: customer & loan details -> nominees ->
+/// End-to-end field verification: customer & loan details -> witnesses ->
 /// document capture -> geotagged site photo -> e-signatures (customer +
 /// officer) -> review & submit. Mirrors the real-world visit workflow that
 /// starts once a customer agrees to proceed during the pre-visit call.
@@ -33,6 +33,8 @@ class VerificationFlowPage extends StatefulWidget {
     required this.customerName,
     required this.loanType,
     this.documentChecklist = const ['Aadhaar Card', 'PAN Card', 'Salary Slip', 'Bank Statement'],
+    this.customerPhone,
+    this.timingPreference,
   });
 
   final String caseId;
@@ -40,13 +42,18 @@ class VerificationFlowPage extends StatefulWidget {
   final String loanType;
   final List<String> documentChecklist;
 
+  /// Threaded through from the case so it's still visible throughout the
+  /// visit, not just on the case detail screen before the call.
+  final String? customerPhone;
+  final String? timingPreference;
+
   @override
   State<VerificationFlowPage> createState() => _VerificationFlowPageState();
 }
 
 class _VerificationFlowPageState extends State<VerificationFlowPage> {
   int _step = 0;
-  static const _stepTitles = ['Details', 'Nominees', 'Documents', 'Site Photo', 'Sign-off', 'Review'];
+  static const _stepTitles = ['Details', 'Witnesses', 'Documents', 'Site Photo', 'Sign-off', 'Review'];
 
   @override
   void initState() {
@@ -93,8 +100,8 @@ class _VerificationFlowPageState extends State<VerificationFlowPage> {
             child: IndexedStack(
               index: _step,
               children: [
-                _DetailsStep(onNext: _next),
-                _NomineesStep(onNext: _next),
+                _DetailsStep(onNext: _next, customerPhone: widget.customerPhone, timingPreference: widget.timingPreference),
+                _WitnessesStep(onNext: _next),
                 _DocumentsStep(checklist: widget.documentChecklist, onNext: _next),
                 _GeoPhotoStep(onNext: _next),
                 _SignOffStep(onNext: _next),
@@ -170,9 +177,11 @@ class _StepScaffold extends StatelessWidget {
 }
 
 class _DetailsStep extends StatefulWidget {
-  const _DetailsStep({required this.onNext});
+  const _DetailsStep({required this.onNext, this.customerPhone, this.timingPreference});
 
   final VoidCallback onNext;
+  final String? customerPhone;
+  final String? timingPreference;
 
   @override
   State<_DetailsStep> createState() => _DetailsStepState();
@@ -198,7 +207,7 @@ class _DetailsStepState extends State<_DetailsStep> {
     return _StepScaffold(
       title: 'Customer & Loan Details',
       footer: AppButton(
-        label: 'Next: Nominees',
+        label: 'Next: Witnesses',
         onPressed: () {
           draft.updateDetails(
             occupation: _occupationController.text.trim(),
@@ -215,6 +224,33 @@ class _DetailsStepState extends State<_DetailsStep> {
           Text(draft.customerName, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(draft.loanType, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+          if (widget.customerPhone != null && widget.customerPhone!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.phone_outlined, size: 16, color: AppColors.textSecondary),
+                const SizedBox(width: 6),
+                Text(widget.customerPhone!, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+          ],
+          if (widget.timingPreference != null && widget.timingPreference!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.schedule_outlined, size: 16, color: AppColors.textSecondary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Preferred call time: ${widget.timingPreference}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           AppTextField(label: 'Occupation', controller: _occupationController, prefixIcon: Icons.work_outline),
           const SizedBox(height: AppSpacing.md),
@@ -232,27 +268,28 @@ class _DetailsStepState extends State<_DetailsStep> {
   }
 }
 
-class _NomineesStep extends StatefulWidget {
-  const _NomineesStep({required this.onNext});
+class _WitnessesStep extends StatefulWidget {
+  const _WitnessesStep({required this.onNext});
 
   final VoidCallback onNext;
 
   @override
-  State<_NomineesStep> createState() => _NomineesStepState();
+  State<_WitnessesStep> createState() => _WitnessesStepState();
 }
 
-class _NomineesStepState extends State<_NomineesStep> {
+class _WitnessesStepState extends State<_WitnessesStep> {
   final _nameController = TextEditingController();
   final _relationController = TextEditingController();
   final _phoneController = TextEditingController();
   final _dobController = TextEditingController();
+  bool _capturingDocFor = false;
 
-  void _addNominee() {
+  void _addWitness() {
     if (_nameController.text.trim().isEmpty) {
-      AppSnackbar.danger(context, 'Enter nominee name');
+      AppSnackbar.danger(context, 'Enter witness name');
       return;
     }
-    context.read<VerificationDraftProvider>().addNominee(NomineeInfo(
+    context.read<VerificationDraftProvider>().addWitness(WitnessInfo(
           name: _nameController.text.trim(),
           relation: _relationController.text.trim(),
           phone: _phoneController.text.trim(),
@@ -265,34 +302,82 @@ class _NomineesStepState extends State<_NomineesStep> {
     setState(() {});
   }
 
+  Future<void> _captureWitnessDocument(int index) async {
+    setState(() => _capturingDocFor = true);
+    try {
+      final photo = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 70);
+      if (photo != null && mounted) {
+        await context.read<VerificationDraftProvider>().addWitnessDocument(index, photo.path);
+      }
+    } catch (_) {
+      if (mounted) AppSnackbar.danger(context, 'Could not capture witness document');
+    } finally {
+      if (mounted) setState(() => _capturingDocFor = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final draft = context.watch<VerificationDraftProvider>();
 
     return _StepScaffold(
-      title: 'Nominee Details',
+      title: 'Witness Details',
       footer: AppButton(label: 'Next: Documents', onPressed: widget.onNext),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ...draft.nominees.asMap().entries.map((entry) => AppCard(
+          ...draft.witnesses.asMap().entries.map((entry) => AppCard(
                 padding: const EdgeInsets.all(AppSpacing.sm),
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(entry.value.name),
-                  subtitle: Text('${entry.value.relation} · ${entry.value.phone} · DOB ${entry.value.dob}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-                    onPressed: () => context.read<VerificationDraftProvider>().removeNominee(entry.key),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(entry.value.name),
+                      subtitle: Text('${entry.value.relation} · ${entry.value.phone} · DOB ${entry.value.dob}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                        onPressed: () => context.read<VerificationDraftProvider>().removeWitness(entry.key),
+                      ),
+                    ),
+                    if (entry.value.documentPath != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: AppSpacing.sm, bottom: AppSpacing.xs),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                              child: Image.file(File(entry.value.documentPath!), width: 36, height: 36, fit: BoxFit.cover),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            const Icon(Icons.check_circle, color: AppColors.success, size: 18),
+                            const SizedBox(width: 4),
+                            Text('ID document captured', style: Theme.of(context).textTheme.bodySmall),
+                          ],
+                        ),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.only(left: AppSpacing.sm, bottom: AppSpacing.xs),
+                        child: AppButton(
+                          label: 'Capture Witness ID',
+                          size: AppButtonSize.small,
+                          expanded: false,
+                          variant: AppButtonVariant.outline,
+                          icon: Icons.camera_alt_outlined,
+                          isLoading: _capturingDocFor,
+                          onPressed: () => _captureWitnessDocument(entry.key),
+                        ),
+                      ),
+                  ],
                 ),
               )),
-          if (draft.nominees.isNotEmpty) const SizedBox(height: AppSpacing.sm),
+          if (draft.witnesses.isNotEmpty) const SizedBox(height: AppSpacing.sm),
           AppCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Add Nominee', style: Theme.of(context).textTheme.titleSmall),
+                Text('Add Witness', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.sm),
                 AppTextField(label: 'Full Name', controller: _nameController),
                 const SizedBox(height: AppSpacing.sm),
@@ -302,7 +387,7 @@ class _NomineesStepState extends State<_NomineesStep> {
                 const SizedBox(height: AppSpacing.sm),
                 AppTextField(label: 'Date of Birth', controller: _dobController, hint: 'DD/MM/YYYY'),
                 const SizedBox(height: AppSpacing.sm),
-                AppButton(label: 'Add Nominee', variant: AppButtonVariant.outline, icon: Icons.add, onPressed: _addNominee),
+                AppButton(label: 'Add Witness', variant: AppButtonVariant.outline, icon: Icons.add, onPressed: _addWitness),
               ],
             ),
           ),
@@ -703,7 +788,7 @@ class _ReviewStep extends StatelessWidget {
                 _ReviewRow(label: 'Customer', value: draft.customerName),
                 _ReviewRow(label: 'Occupation', value: draft.occupation),
                 _ReviewRow(label: 'Monthly Income', value: '₹${draft.monthlyIncome}'),
-                _ReviewRow(label: 'Nominees Added', value: '${draft.nominees.length}'),
+                _ReviewRow(label: 'Witnesses Added', value: '${draft.witnesses.length}'),
                 _ReviewRow(label: 'Documents Captured', value: '${draft.documents.length}'),
                 _ReviewRow(label: 'Site Photo', value: draft.geoPhoto != null ? 'Captured' : 'Missing'),
                 _ReviewRow(label: 'Signatures', value: draft.customerSignaturePath != null ? 'Captured' : 'Missing'),

@@ -51,13 +51,14 @@ class PdfGenerator {
           _kv('Monthly Income', record.monthlyIncome),
           _kv('Remarks', record.remarks),
           pw.SizedBox(height: 16),
-          _sectionTitle('Nominee Details'),
-          if (record.nominees.isEmpty) pw.Text('No nominees added', style: const pw.TextStyle(fontSize: 10)),
-          ...record.nominees.map(
-            (n) => pw.Padding(
+          _sectionTitle('Witness Details'),
+          if (record.witnesses.isEmpty) pw.Text('No witnesses added', style: const pw.TextStyle(fontSize: 10)),
+          ...record.witnesses.map(
+            (w) => pw.Padding(
               padding: const pw.EdgeInsets.only(bottom: 6),
               child: pw.Text(
-                '${n.name}  ·  ${n.relation}  ·  ${n.phone}  ·  DOB ${n.dob}',
+                '${w.name}  ·  ${w.relation}  ·  ${w.phone}  ·  DOB ${w.dob}'
+                '${w.documentPath != null ? '  ·  ID document captured' : ''}',
                 style: const pw.TextStyle(fontSize: 10),
               ),
             ),

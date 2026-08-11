@@ -64,8 +64,13 @@ class _MyLoansScreenState extends State<MyLoansScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    final next = _load();
+    setState(() => _future = next);
+    try {
+      await next;
+    } catch (_) {
+      // Already reflected in _future's error state.
+    }
   }
 
   Future<void> _requestTopUp(LoanApplication loan) async {

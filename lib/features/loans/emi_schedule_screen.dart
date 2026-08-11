@@ -48,8 +48,18 @@ class _EmiScheduleScreenState extends State<EmiScheduleScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    final next = _load();
+    setState(() => _future = next);
+    // The FutureBuilder below is what actually surfaces a failure (via
+    // its error state) — awaiting here is only so callers like
+    // RefreshIndicator know when the refresh finished, so a rejection
+    // must be swallowed rather than left to propagate as an unhandled
+    // exception on every retry tap.
+    try {
+      await next;
+    } catch (_) {
+      // Already reflected in _future's error state; nothing more to do.
+    }
   }
 
   Future<void> _payNow(EmiInstallment installment) async {

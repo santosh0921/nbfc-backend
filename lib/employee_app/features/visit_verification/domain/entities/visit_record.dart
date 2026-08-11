@@ -1,24 +1,34 @@
 import 'package:equatable/equatable.dart';
 
-class NomineeInfo extends Equatable {
-  const NomineeInfo({required this.name, required this.relation, required this.phone, required this.dob});
+class WitnessInfo extends Equatable {
+  const WitnessInfo({required this.name, required this.relation, required this.phone, required this.dob, this.documentPath});
 
   final String name;
   final String relation;
   final String phone;
   final String dob;
 
-  Map<String, dynamic> toMap() => {'name': name, 'relation': relation, 'phone': phone, 'dob': dob};
+  /// Local file path of the witness's captured ID document photo, if any
+  /// — also uploaded to the backend (POST /employee/loans/:id/documents,
+  /// docType "witness_<n>_id") so it's visible in the admin panel, same
+  /// as every other verification document.
+  final String? documentPath;
 
-  factory NomineeInfo.fromMap(Map map) => NomineeInfo(
+  Map<String, dynamic> toMap() => {'name': name, 'relation': relation, 'phone': phone, 'dob': dob, 'documentPath': documentPath};
+
+  factory WitnessInfo.fromMap(Map map) => WitnessInfo(
         name: map['name'] as String? ?? '',
         relation: map['relation'] as String? ?? '',
         phone: map['phone'] as String? ?? '',
         dob: map['dob'] as String? ?? '',
+        documentPath: map['documentPath'] as String?,
       );
 
+  WitnessInfo copyWith({String? documentPath}) =>
+      WitnessInfo(name: name, relation: relation, phone: phone, dob: dob, documentPath: documentPath ?? this.documentPath);
+
   @override
-  List<Object?> get props => [name, relation, phone, dob];
+  List<Object?> get props => [name, relation, phone, dob, documentPath];
 }
 
 class CapturedDocument extends Equatable {
@@ -63,7 +73,7 @@ class GeoPhoto extends Equatable {
 }
 
 /// A completed field-verification visit — the durable record of everything
-/// captured during a customer visit (details, nominees, documents, the
+/// captured during a customer visit (details, witnesses, documents, the
 /// geotagged site photo and both signatures). Persisted to Hive so it
 /// survives app restarts; the Go backend sync point once it exists.
 class VisitRecord extends Equatable {
@@ -76,7 +86,7 @@ class VisitRecord extends Equatable {
     required this.occupation,
     required this.monthlyIncome,
     required this.remarks,
-    required this.nominees,
+    required this.witnesses,
     required this.documents,
     required this.geoPhoto,
     required this.customerSignaturePath,
@@ -93,7 +103,7 @@ class VisitRecord extends Equatable {
   final String occupation;
   final String monthlyIncome;
   final String remarks;
-  final List<NomineeInfo> nominees;
+  final List<WitnessInfo> witnesses;
   final List<CapturedDocument> documents;
   final GeoPhoto? geoPhoto;
   final String? customerSignaturePath;
@@ -110,7 +120,7 @@ class VisitRecord extends Equatable {
         'occupation': occupation,
         'monthlyIncome': monthlyIncome,
         'remarks': remarks,
-        'nominees': nominees.map((n) => n.toMap()).toList(),
+        'witnesses': witnesses.map((w) => w.toMap()).toList(),
         'documents': documents.map((d) => d.toMap()).toList(),
         'geoPhoto': geoPhoto?.toMap(),
         'customerSignaturePath': customerSignaturePath,
@@ -128,7 +138,12 @@ class VisitRecord extends Equatable {
         occupation: map['occupation'] as String? ?? '',
         monthlyIncome: map['monthlyIncome'] as String? ?? '',
         remarks: map['remarks'] as String? ?? '',
-        nominees: ((map['nominees'] as List?) ?? []).map((e) => NomineeInfo.fromMap(e as Map)).toList(),
+        // Reads the old "nominees" key too, so a VisitRecord persisted to
+        // Hive before this rename still loads correctly on devices that
+        // already have local history.
+        witnesses: ((map['witnesses'] as List?) ?? (map['nominees'] as List?) ?? [])
+            .map((e) => WitnessInfo.fromMap(e as Map))
+            .toList(),
         documents: ((map['documents'] as List?) ?? []).map((e) => CapturedDocument.fromMap(e as Map)).toList(),
         geoPhoto: map['geoPhoto'] != null ? GeoPhoto.fromMap(map['geoPhoto'] as Map) : null,
         customerSignaturePath: map['customerSignaturePath'] as String?,
@@ -146,7 +161,7 @@ class VisitRecord extends Equatable {
         occupation: occupation,
         monthlyIncome: monthlyIncome,
         remarks: remarks,
-        nominees: nominees,
+        witnesses: witnesses,
         documents: documents,
         geoPhoto: geoPhoto,
         customerSignaturePath: customerSignaturePath,
@@ -165,7 +180,7 @@ class VisitRecord extends Equatable {
         occupation,
         monthlyIncome,
         remarks,
-        nominees,
+        witnesses,
         documents,
         geoPhoto,
         customerSignaturePath,

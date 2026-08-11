@@ -37,8 +37,13 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    final next = _load();
+    setState(() => _future = next);
+    try {
+      await next;
+    } catch (_) {
+      // Already reflected in _future's error state.
+    }
   }
 
   Future<void> _shareStatement(List<AppTransaction> filtered) async {

@@ -165,6 +165,8 @@ Future<void> _callAndConfirm(BuildContext context, CaseEntity caseItem) async {
           customerName: caseItem.customerName,
           loanType: caseItem.loanType.label,
           documentChecklist: caseItem.loanType.documentChecklist,
+          customerPhone: caseItem.customerPhone,
+          timingPreference: caseItem.timingPreference,
         ),
       ),
     ),
