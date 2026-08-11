@@ -83,10 +83,21 @@ class _SignaturePadState extends State<SignaturePad> {
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: RepaintBoundary(
           key: widget.controller.repaintKey,
-          child: GestureDetector(
-            onPanStart: (d) => widget.controller.startStroke(d.localPosition),
-            onPanUpdate: (d) => widget.controller.extendStroke(d.localPosition),
-            onPanEnd: (_) => widget.controller.endStroke(),
+          // Every screen that hosts this pad puts it inside a scrollable
+          // (ListView/SingleChildScrollView) alongside other content —
+          // GestureDetector's onPan* callbacks enter Flutter's gesture
+          // arena and compete with that ancestor's vertical drag
+          // recognizer, so a stroke with any vertical motion could lose
+          // the arena and scroll the whole screen mid-signature instead
+          // of drawing. Listener's raw pointer events bypass the arena
+          // entirely and are captured exclusively by whichever widget's
+          // hit-test bounds the pointer went down in, which is what
+          // dedicated signature-capture packages do for the same reason.
+          child: Listener(
+            onPointerDown: (d) => widget.controller.startStroke(d.localPosition),
+            onPointerMove: (d) => widget.controller.extendStroke(d.localPosition),
+            onPointerUp: (_) => widget.controller.endStroke(),
+            onPointerCancel: (_) => widget.controller.endStroke(),
             child: SizedBox(
               height: 180,
               width: double.infinity,
