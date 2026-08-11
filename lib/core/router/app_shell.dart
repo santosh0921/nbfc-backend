@@ -5,6 +5,7 @@ import '../../mock/mock_data.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_radius.dart';
 import '../widgets/dashboard_tour.dart';
+import '../widgets/incoming_call_listener.dart';
 
 /// Bottom-nav app shell hosting the 4 primary tabs (Home, Loans,
 /// Marketplace, Profile) plus a floating Quick Apply FAB, per the
@@ -55,54 +56,56 @@ class _AppShellState extends State<AppShell> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final navigationShell = widget.navigationShell;
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        _handleBack();
-      },
-      child: Scaffold(
-      extendBody: true,
-      body: navigationShell,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: FloatingActionButton(
-        key: DashboardTourKeys.fab,
-        onPressed: () {
-          final matches = MockData.loanProducts.where((p) => p.id == 'instant_loan');
-          context.push('/quick-apply', extra: matches.isEmpty ? null : matches.first);
+    return IncomingCallListener(
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          _handleBack();
         },
-        shape: const CircleBorder(),
-        child: const Icon(Icons.bolt_rounded),
-      ),
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8,
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-        elevation: 0,
-        padding: EdgeInsets.zero,
-        child: SizedBox(
-          height: 64,
-          child: Row(
-            children: [
-              for (int i = 0; i < _tabs.length; i++) ...[
-                if (i == 2) const SizedBox(width: 40),
-                Expanded(
-                  child: _NavItem(
-                    key: i == 3 ? DashboardTourKeys.navProfile : null,
-                    icon: navigationShell.currentIndex == i ? _tabs[i].icon : _tabs[i].outlinedIcon,
-                    label: _tabs[i].label,
-                    selected: navigationShell.currentIndex == i,
-                    onTap: () => navigationShell.goBranch(
-                      i,
-                      initialLocation: i == navigationShell.currentIndex,
+        child: Scaffold(
+          extendBody: true,
+          body: navigationShell,
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+          floatingActionButton: FloatingActionButton(
+            key: DashboardTourKeys.fab,
+            onPressed: () {
+              final matches = MockData.loanProducts.where((p) => p.id == 'instant_loan');
+              context.push('/quick-apply', extra: matches.isEmpty ? null : matches.first);
+            },
+            shape: const CircleBorder(),
+            child: const Icon(Icons.bolt_rounded),
+          ),
+          bottomNavigationBar: BottomAppBar(
+            shape: const CircularNotchedRectangle(),
+            notchMargin: 8,
+            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            elevation: 0,
+            padding: EdgeInsets.zero,
+            child: SizedBox(
+              height: 64,
+              child: Row(
+                children: [
+                  for (int i = 0; i < _tabs.length; i++) ...[
+                    if (i == 2) const SizedBox(width: 40),
+                    Expanded(
+                      child: _NavItem(
+                        key: i == 3 ? DashboardTourKeys.navProfile : null,
+                        icon: navigationShell.currentIndex == i ? _tabs[i].icon : _tabs[i].outlinedIcon,
+                        label: _tabs[i].label,
+                        selected: navigationShell.currentIndex == i,
+                        onTap: () => navigationShell.goBranch(
+                          i,
+                          initialLocation: i == navigationShell.currentIndex,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ],
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
-      ),
       ),
     );
   }

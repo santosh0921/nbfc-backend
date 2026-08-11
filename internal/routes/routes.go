@@ -16,6 +16,7 @@ import (
 	"github.com/santosh0921/nbfc-backend/internal/otp"
 	"github.com/santosh0921/nbfc-backend/internal/profile"
 	"github.com/santosh0921/nbfc-backend/internal/recovery"
+	"github.com/santosh0921/nbfc-backend/internal/signaling"
 	"github.com/santosh0921/nbfc-backend/internal/support"
 )
 
@@ -128,5 +129,9 @@ func RegisterRoutes(router *gin.Engine) {
 	// Notifications: accepts either a customer JWT or an employee JWT,
 	// inferring the recipient (role + id) from whichever token validates.
 	router.GET("/notifications", middleware.CustomerOrEmployeeAuthMiddleware(), notifications.ListHandler)
+	// WebRTC signaling relay for employee<->customer video calls — see
+	// internal/signaling/handler.go's doc comment for what this endpoint
+	// does and doesn't do.
+	router.GET("/ws/call/:loanId", middleware.CustomerOrEmployeeAuthMiddleware(), signaling.CallSignalHandler)
 	router.POST("/notifications/:id/read", middleware.CustomerOrEmployeeAuthMiddleware(), notifications.MarkReadHandler)
 }

@@ -5,12 +5,18 @@ import '../../../../core/components/app_card.dart';
 import '../../../../core/components/gradient_header.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
+import '../../../../core/di/service_locator.dart';
+import '../../../../core/config/app_config.dart';
+import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/utils/demo_call.dart';
 import '../../../../core/widgets/app_badge.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../auth/presentation/providers/auth_provider.dart' as employee_auth;
 import '../../../visit_verification/presentation/pages/verification_flow_page.dart';
 import '../../domain/entities/case_entity.dart';
 import '../../domain/repositories/cases_repository.dart';
+import '../../../../../core/services/call_service.dart';
+import '../../../../../core/widgets/call_screen.dart';
 
 class CaseDetailPage extends StatelessWidget {
   const CaseDetailPage({super.key, required this.caseId});
@@ -144,6 +150,13 @@ class _CustomerDetailsCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: AppSpacing.sm),
+          AppButton(
+            label: 'Start Video Call',
+            icon: Icons.videocam_outlined,
+            variant: AppButtonVariant.outline,
+            onPressed: () => _startVideoCall(context, caseItem),
+          ),
         ],
       ),
     );
@@ -168,6 +181,44 @@ Future<void> _callAndConfirm(BuildContext context, CaseEntity caseItem) async {
           customerPhone: caseItem.customerPhone,
           timingPreference: caseItem.timingPreference,
         ),
+      ),
+    ),
+  );
+}
+
+/// Documents the officer captures as screenshots DURING/after the video
+/// call itself — distinct from the generic loan-category document
+/// checklist ("Aadhaar Card", "Salary Slip", ...) captured earlier in the
+/// visit flow.
+const _postCallScreenshotChecklist = ['Customer Photo', 'Aadhaar Card SS', 'PAN Card SS', 'Customer Signature SS'];
+
+Future<void> _startVideoCall(BuildContext context, CaseEntity caseItem) async {
+  final employeeName = context.read<employee_auth.AuthProvider>().employee?.name ?? 'Field Officer';
+  final token = await ServiceLocator.instance.get<SecureStorageService>().read('auth_token');
+  if (token == null || !context.mounted) return;
+  final callService = CallService(wsBaseUrl: AppConfig.current.apiBaseUrl);
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => CallScreen(
+        callService: callService,
+        token: token,
+        loanId: caseItem.id,
+        isCaller: true,
+        localDisplayName: employeeName,
+        peerLabel: caseItem.customerName,
+      ),
+    ),
+  );
+  if (!context.mounted || !callService.wasEverActive) return;
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => VerificationFlowPage(
+        caseId: caseItem.id,
+        customerName: caseItem.customerName,
+        loanType: caseItem.loanType.label,
+        documentChecklist: _postCallScreenshotChecklist,
+        customerPhone: caseItem.customerPhone,
+        timingPreference: caseItem.timingPreference,
       ),
     ),
   );
