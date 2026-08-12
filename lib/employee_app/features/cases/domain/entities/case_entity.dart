@@ -73,6 +73,7 @@ class CaseEntity extends Equatable {
     this.timingPreference,
     this.visitDate,
     this.visitTimeSlot,
+    required this.category,
   });
 
   /// Backend `LoanApplication.ID` (see internal/models/loan.go), as a
@@ -89,6 +90,14 @@ class CaseEntity extends Equatable {
   final DateTime assignedDate;
   final DateTime dueDate;
 
+  /// The backend's raw category string (e.g. "Instant Loan"), kept
+  /// separately from [loanType] — that enum is a lossy many-to-one
+  /// mapping (built for document-checklist purposes) where both "Instant
+  /// Loan" and "Personal Loan" collapse to the same LoanType.personal
+  /// value, so it can't reliably answer "is this specifically an Instant
+  /// or Personal Loan" the way gating the video-call button needs to.
+  final String category;
+
   /// Customer's CIBIL score (internal/loans/reference.go —
   /// `getOrCreateCibilScore`, 550-850), null if the backend omitted it.
   final int? cibilScore;
@@ -99,8 +108,9 @@ class CaseEntity extends Equatable {
 
   /// The customer's preferred call/visit window from the apply flow's
   /// "Verification Scheduling" step (internal/models/loan.go
-  /// `TimingPreference`/`VisitDate`/`VisitTimeSlot`) — null for loans that
-  /// skip that step (e.g. auto-approved Instant/Personal Loans).
+  /// `TimingPreference`/`VisitDate`/`VisitTimeSlot`) — every category now
+  /// goes through this step, so this is only null if the customer somehow
+  /// never reached it.
   final String? timingPreference;
   final DateTime? visitDate;
   final String? visitTimeSlot;
@@ -123,6 +133,7 @@ class CaseEntity extends Equatable {
         dueDate,
         cibilScore,
         references,
+        category,
       ];
 }
 

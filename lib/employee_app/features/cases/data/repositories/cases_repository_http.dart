@@ -115,6 +115,7 @@ class CasesRepositoryHttp implements CasesRepository {
       timingPreference: json['timingPreference'] as String?,
       visitDate: DateTime.tryParse(json['visitDate'] as String? ?? ''),
       visitTimeSlot: json['visitTimeSlot'] as String?,
+      category: json['category'] as String? ?? '',
     );
   }
 

@@ -50,11 +50,11 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
   final PageController _pageController = PageController();
   int _step = 0;
 
-  /// Instant Loan is meant to be, well, instant — no video KYC call
-  /// scheduling step for it, unlike every other product. It gets a
-  /// dedicated consent step (with the 35-day repayment notice) instead,
-  /// at the same position, so the step count stays uniform either way.
-  bool get _skipVideoKyc => widget.product?.category == LoanCategory.instantLoan;
+  /// Instant Loan used to skip video KYC scheduling entirely (it
+  /// auto-approved server-side with no employee involvement at all) — now
+  /// every category, Instant Loan included, goes through real employee
+  /// verification and gets the same Verification Scheduling step.
+  bool get _skipVideoKyc => false;
 
   bool get _isBusinessLoan => widget.product?.category == LoanCategory.business;
   bool get _showsProcessingNotice =>
@@ -1519,7 +1519,7 @@ class _TermsStepState extends State<_TermsStep> {
                     const Divider(height: 20),
                     _KfsRow(label: 'Processing Fee', value: widget.processingFee),
                     const Divider(height: 20),
-                    _KfsRow(label: 'Overdue Charges', value: '2% p.m. on overdue amount'),
+                    const _KfsRow(label: 'Overdue Charges', value: '2% p.m. on overdue amount'),
                     const Divider(height: 20),
                     _KfsRow(label: 'Estimated Monthly EMI', value: currency.format(widget.emi)),
                   ],

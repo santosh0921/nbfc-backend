@@ -407,7 +407,7 @@ class _StageTile extends StatelessWidget {
                     builder: (context, value, _) => Container(
                       width: 2,
                       margin: const EdgeInsets.symmetric(vertical: 2),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: AppColors.borderLight,
                       ),
                       child: FractionallySizedBox(

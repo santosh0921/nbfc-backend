@@ -349,7 +349,7 @@ class _VerificationChecklistCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Row(
                   children: [
-                    Icon(Icons.radio_button_unchecked, size: 20, color: AppColors.primary),
+                    const Icon(Icons.radio_button_unchecked, size: 20, color: AppColors.primary),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(child: Text(step, style: Theme.of(context).textTheme.bodyMedium)),
                   ],

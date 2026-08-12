@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../network/api_client.dart';
 import '../network/loan_api_service.dart';
@@ -24,14 +27,37 @@ class IncomingCallListener extends StatefulWidget {
   State<IncomingCallListener> createState() => _IncomingCallListenerState();
 }
 
-class _IncomingCallListenerState extends State<IncomingCallListener> {
+class _IncomingCallListenerState extends State<IncomingCallListener> with WidgetsBindingObserver {
   CallService? _callService;
   bool _showingCall = false;
+  int _reconnectAttempt = 0;
+  Timer? _reconnectTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _startListening());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The signaling socket can die silently while the app is backgrounded
+    // (mobile OSes routinely suspend/kill sockets to save battery) with
+    // neither an error nor a close event ever firing — so coming back to
+    // the foreground is exactly when a stale connection needs to be
+    // actively checked, not just assumed to still be good.
+    if (state == AppLifecycleState.resumed) _ensureConnected();
+  }
+
+  void _ensureConnected() {
+    if (_showingCall) return; // an active call is already using this connection
+    final phase = _callService?.phase;
+    if (_callService == null || phase == CallPhase.failed || phase == CallPhase.ended) {
+      _reconnectTimer?.cancel();
+      _reconnectAttempt = 0;
+      _startListening();
+    }
   }
 
   Future<void> _startListening() async {
@@ -42,6 +68,7 @@ class _IncomingCallListenerState extends State<IncomingCallListener> {
     try {
       loans = await LoanApiService.mine(token);
     } catch (_) {
+      _scheduleReconnect();
       return;
     }
     if (loans.isEmpty) return;
@@ -61,10 +88,30 @@ class _IncomingCallListenerState extends State<IncomingCallListener> {
     await service.connect(token: token, loanId: loanId, isCaller: false);
   }
 
+  /// Reconnects with a capped exponential backoff (2s, 4s, 8s, ... up to
+  /// 30s) rather than either hammering the server in a tight loop or
+  /// giving up outright — a real network blip should recover in a few
+  /// seconds, while a genuine outage shouldn't be retried every second
+  /// for the rest of the session.
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    final delaySeconds = math.min(30, 2 << _reconnectAttempt);
+    _reconnectAttempt++;
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
+      if (!mounted || _showingCall) return;
+      _callService?.removeListener(_onCallServiceChange);
+      _callService?.dispose();
+      _callService = null;
+      _startListening();
+    });
+  }
+
   void _onCallServiceChange() {
     final service = _callService;
     if (service == null || _showingCall) return;
+
     if (service.phase == CallPhase.ringingIncoming) {
+      _reconnectAttempt = 0;
       _showingCall = true;
       final token = AuthProvider.instance.token;
       if (token == null) return;
@@ -96,11 +143,20 @@ class _IncomingCallListenerState extends State<IncomingCallListener> {
         _showingCall = false;
         _startListening();
       });
+    } else if (service.phase == CallPhase.failed) {
+      // The signaling connection itself died (network drop, server
+      // restart, ...) — without this, a customer who never happens to
+      // relaunch the app would simply never be reachable again for the
+      // rest of this session, no matter how many times an employee tries
+      // to call.
+      _scheduleReconnect();
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _reconnectTimer?.cancel();
     _callService?.removeListener(_onCallServiceChange);
     _callService?.dispose();
     super.dispose();

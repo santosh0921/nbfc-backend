@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:vibration/vibration.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -60,6 +62,11 @@ class CallService extends ChangeNotifier {
   bool _frontCamera = true;
   bool get isFrontCamera => _frontCamera;
 
+  /// Whether the local camera/mic stream has actually been granted yet —
+  /// UI uses this to show a placeholder instead of an empty black box
+  /// while the permission prompt/getUserMedia call is still in flight.
+  bool get hasLocalPreview => _localStream != null;
+
   final RTCVideoRenderer localRenderer = RTCVideoRenderer();
   final RTCVideoRenderer remoteRenderer = RTCVideoRenderer();
 
@@ -68,7 +75,10 @@ class CallService extends ChangeNotifier {
   MediaStream? _localStream;
   bool _isCaller = false;
   bool _renderersInitialized = false;
+  final _ringtonePlayer = FlutterRingtonePlayer();
+  bool _ringing = false;
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
+  Timer? _keepAliveTimer;
 
   // Public STUN only (no TURN relay configured) — this is a genuine
   // peer-to-peer call as requested: STUN merely helps each device
@@ -105,6 +115,17 @@ class CallService extends ChangeNotifier {
           if (phase != CallPhase.ended && phase != CallPhase.failed) _fail('Connection lost.');
         },
       );
+      // A connection that only ever *listens* (the customer's background
+      // incoming-call socket never sends anything while idle) can go
+      // silently dead — NAT/firewall/mobile-carrier timeouts close idle
+      // sockets without either side seeing an error or close event, so
+      // the app would sit there looking "connected" forever and simply
+      // never receive a future call-request. Sending a small ping
+      // periodically both keeps the path alive through those timeout
+      // windows and, if the socket really is dead, makes that failure
+      // surface immediately (via onError above) instead of silently.
+      _keepAliveTimer?.cancel();
+      _keepAliveTimer = Timer.periodic(const Duration(seconds: 20), (_) => _send({'type': 'ping'}));
     } catch (_) {
       _fail('Could not reach the call server.');
     }
@@ -133,6 +154,7 @@ class CallService extends ChangeNotifier {
         remoteDisplayName = data['name'] as String?;
         phase = CallPhase.ringingIncoming;
         notifyListeners();
+        _startRinging();
         break;
       case 'call-accept':
         if (_isCaller) {
@@ -174,18 +196,21 @@ class CallService extends ChangeNotifier {
   /// Callee-side: accept an incoming call — grabs local media and waits
   /// for the caller's offer.
   Future<void> accept() async {
+    _stopRinging();
     phase = CallPhase.connecting;
     notifyListeners();
     _send({'type': 'call-accept'});
-    await _ensureLocalStream();
+    await ensureLocalStream();
   }
 
   void reject() {
+    _stopRinging();
     _send({'type': 'call-reject'});
     _end(null);
   }
 
   void sendBusy() {
+    _stopRinging();
     _send({'type': 'busy'});
     _end(null);
   }
@@ -196,7 +221,7 @@ class CallService extends ChangeNotifier {
   }
 
   Future<void> _startAsCaller() async {
-    await _ensureLocalStream();
+    await ensureLocalStream();
     await _ensurePeerConnection();
     final offer = await _pc!.createOffer({'offerToReceiveAudio': 1, 'offerToReceiveVideo': 1});
     await _pc!.setLocalDescription(offer);
@@ -215,7 +240,13 @@ class CallService extends ChangeNotifier {
     _send({'type': 'answer', 'sdp': answer.sdp});
   }
 
-  Future<void> _ensureLocalStream() async {
+  /// Public so CallScreen can request the camera/mic as soon as the call
+  /// UI opens — previously local media was only grabbed once a call was
+  /// actually accepted/placed, so there was no self-view (and no working
+  /// camera-switch button, since there was no video track to switch yet)
+  /// during the entire ringing/connecting phase, which is most of what a
+  /// user actually sees before a call connects.
+  Future<void> ensureLocalStream() async {
     if (_localStream != null) return;
     _localStream = await navigator.mediaDevices.getUserMedia({
       'audio': true,
@@ -227,7 +258,7 @@ class CallService extends ChangeNotifier {
 
   Future<void> _ensurePeerConnection() async {
     if (_pc != null) return;
-    await _ensureLocalStream();
+    await ensureLocalStream();
     _pc = await createPeerConnection({'iceServers': _iceServers});
     for (final track in _localStream!.getTracks()) {
       await _pc!.addTrack(track, _localStream!);
@@ -280,7 +311,17 @@ class CallService extends ChangeNotifier {
   }
 
   void _send(Map<String, dynamic> message) {
-    _channel?.sink.add(jsonEncode(message));
+    // Writing to an already-broken sink (most likely from the periodic
+    // keepalive ping firing after the socket died) can throw
+    // synchronously — that would otherwise be an uncaught exception
+    // inside a Timer callback. The stream's own onError/onDone (set up
+    // in connect()) is what actually drives the failure/reconnect path;
+    // this just needs to not crash on the way there.
+    try {
+      _channel?.sink.add(jsonEncode(message));
+    } catch (_) {
+      _fail('Connection lost.');
+    }
   }
 
   void _end(String? message) {
@@ -298,11 +339,37 @@ class CallService extends ChangeNotifier {
   }
 
   void _teardownMedia() {
+    _stopRinging();
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
     _pc?.close();
     _pc = null;
     _localStream?.getTracks().forEach((t) => t.stop());
     _localStream?.dispose();
     _localStream = null;
+  }
+
+  /// Starts the incoming-call alert: the platform's default ringtone
+  /// (looping) plus a repeating vibration pattern. Neither existed at
+  /// all before — the incoming-call screen was purely visual, so a
+  /// customer not actively looking at their phone at that exact moment
+  /// had no way to notice a call was happening.
+  void _startRinging() {
+    if (_ringing) return;
+    _ringing = true;
+    _ringtonePlayer.playRingtone(looping: true, volume: 1.0);
+    Vibration.hasVibrator().then((has) {
+      if (has == true && _ringing) {
+        Vibration.vibrate(pattern: [0, 800, 400, 800, 400, 800], repeat: 0);
+      }
+    });
+  }
+
+  void _stopRinging() {
+    if (!_ringing) return;
+    _ringing = false;
+    _ringtonePlayer.stop();
+    Vibration.cancel();
   }
 
   @override

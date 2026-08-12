@@ -61,9 +61,9 @@ class ComplianceScreen extends StatelessWidget {
             const SizedBox(height: 24),
             Text('Standard Charges', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
-            PremiumCard(
+            const PremiumCard(
               child: Column(
-                children: const [
+                children: [
                   _ChargeRow(label: 'GST', value: '18% on processing fee & applicable charges'),
                   Divider(height: 24),
                   _ChargeRow(label: 'Overdue Charges', value: '2% per month on overdue amount (not compounded)'),
@@ -124,10 +124,10 @@ class ComplianceScreen extends StatelessWidget {
             const SizedBox(height: 24),
             Text('Legal Documents', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
-            PremiumCard(
+            const PremiumCard(
               padding: EdgeInsets.zero,
               child: Column(
-                children: const [
+                children: [
                   _DocumentTile(label: 'Terms of Service'),
                   Divider(height: 1, indent: 16),
                   _DocumentTile(label: 'Privacy Policy'),

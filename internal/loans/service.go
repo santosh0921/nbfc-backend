@@ -7,10 +7,13 @@ import (
 	"github.com/santosh0921/nbfc-backend/internal/models"
 )
 
-var autoApproveCategories = map[string]bool{
-	"Instant Loan":  true,
-	"Personal Loan": true,
-}
+// Every loan category now goes through employee verification (video KYC
+// included) — Instant/Personal Loan used to auto-approve with no employee
+// involvement at all, which made a video-KYC call for those categories
+// impossible (there was never an employee assigned to place one). Kept as
+// an empty, still-checked map rather than deleting the mechanism outright,
+// in case a genuinely-instant product is reintroduced later.
+var autoApproveCategories = map[string]bool{}
 
 // findVerificationEmployee: exact case-insensitive city match against
 // employees.branch_city; if none found, falls back to least-loaded (fewest

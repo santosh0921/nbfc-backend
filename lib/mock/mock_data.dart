@@ -29,7 +29,7 @@ class MockData {
   static const double preApprovedAmount = 800000;
 
   static final List<LoanProduct> loanProducts = [
-    LoanProduct(
+    const LoanProduct(
       id: 'housing',
       category: LoanCategory.housing,
       name: 'Housing Loan',
@@ -41,31 +41,31 @@ class MockData {
       tenureRange: 'Up to 30 years',
       maxAmount: '₹5 Cr',
       processingFee: 'Up to 1% + GST',
-      benefits: const [
+      benefits: [
         'Balance transfer with top-up available',
         'Doorstep document pickup',
         'Special rates for women applicants',
         'Minimal prepayment charges',
       ],
-      eligibility: const [
+      eligibility: [
         'Age 23–65 years',
         'Minimum net monthly income ₹35,000',
         'CIBIL score 700+',
         'Salaried or self-employed',
       ],
-      documents: const [
+      documents: [
         'PAN Card',
         'Aadhaar Card',
         '6-month bank statement',
         'Latest 3 salary slips / ITR',
         'Property documents',
       ],
-      faqs: const [
+      faqs: [
         {'q': 'Can I prepay my housing loan?', 'a': 'Yes, part-prepayment is allowed after 6 EMIs with nominal charges on fixed-rate loans; nil charges on floating-rate loans.'},
         {'q': 'Is a co-applicant mandatory?', 'a': 'Not mandatory, but adding a co-applicant can improve eligibility and loan amount.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'instant_loan',
       category: LoanCategory.instantLoan,
       name: 'Instant Loan',
@@ -77,26 +77,26 @@ class MockData {
       tenureRange: '3–12 months',
       maxAmount: '₹50,000',
       processingFee: 'Flat ₹99 + GST',
-      benefits: const [
+      benefits: [
         'Designed for daily-wage and gig earners',
         'Minimal documentation, no collateral',
         'Disbursal in as fast as 15 minutes',
         'Flexible daily / weekly repayment options',
       ],
-      eligibility: const [
+      eligibility: [
         'Age 18–60 years',
         'Minimum daily/weekly income ₹300',
         'Valid Aadhaar and active bank account',
         'No formal salary slip required',
       ],
-      documents: const ['Aadhaar Card', 'PAN Card / Voter ID', 'Bank account details'],
-      faqs: const [
+      documents: ['Aadhaar Card', 'PAN Card / Voter ID', 'Bank account details'],
+      faqs: [
         {'q': 'Who is this loan for?', 'a': 'Daily-wage workers, street vendors, gig workers, and small earners who need quick, small-ticket funds without heavy paperwork.'},
         {'q': 'How much can I borrow?', 'a': 'Between ₹1,000 and ₹50,000 based on your income and repayment history.'},
         {'q': 'How fast is disbursal?', 'a': 'Funds can be disbursed in as fast as 15 minutes after document verification.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'personal',
       category: LoanCategory.personal,
       name: 'Personal Loan',
@@ -108,23 +108,23 @@ class MockData {
       tenureRange: '12–60 months',
       maxAmount: '₹40 Lakh',
       processingFee: 'Up to 2.5% + GST',
-      benefits: const [
+      benefits: [
         'Disbursal in as fast as 10 minutes',
         'No collateral required',
         'Flexible EMI options',
         '100% digital process',
       ],
-      eligibility: const [
+      eligibility: [
         'Age 21–58 years',
         'Minimum net monthly income ₹25,000',
         'CIBIL score 685+',
       ],
-      documents: const ['PAN Card', 'Aadhaar Card', '3-month bank statement', 'Latest salary slip'],
-      faqs: const [
+      documents: ['PAN Card', 'Aadhaar Card', '3-month bank statement', 'Latest salary slip'],
+      faqs: [
         {'q': 'How fast is disbursal?', 'a': 'Pre-approved customers can receive funds in as fast as 10 minutes after e-sign.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'business',
       category: LoanCategory.business,
       name: 'Business Loan',
@@ -136,14 +136,14 @@ class MockData {
       tenureRange: '12–48 months',
       maxAmount: '₹75 Lakh',
       processingFee: 'Up to 2% + GST',
-      benefits: const ['Collateral-free options', 'Overdraft facility', 'GST-based quick approval'],
-      eligibility: const ['Business vintage 2+ years', 'Annual turnover ₹40 Lakh+', 'CIBIL score 700+'],
-      documents: const ['PAN Card', 'GST returns', 'Bank statements (12 months)', 'ITR (2 years)'],
-      faqs: const [
+      benefits: ['Collateral-free options', 'Overdraft facility', 'GST-based quick approval'],
+      eligibility: ['Business vintage 2+ years', 'Annual turnover ₹40 Lakh+', 'CIBIL score 700+'],
+      documents: ['PAN Card', 'GST returns', 'Bank statements (12 months)', 'ITR (2 years)'],
+      faqs: [
         {'q': 'Is collateral required?', 'a': 'Unsecured business loans up to ₹75 Lakh are available for eligible businesses.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'gold',
       category: LoanCategory.gold,
       name: 'Gold Loan',
@@ -155,14 +155,14 @@ class MockData {
       tenureRange: '3–24 months',
       maxAmount: '₹50 Lakh',
       processingFee: 'Flat ₹499 + GST',
-      benefits: const ['Disbursal in 30 minutes', 'High-security vault storage', 'Insured jewellery'],
-      eligibility: const ['Age 18+', 'Valid gold ornaments 18–24 karat'],
-      documents: const ['PAN / Aadhaar', 'Gold ornaments for appraisal'],
-      faqs: const [
+      benefits: ['Disbursal in 30 minutes', 'High-security vault storage', 'Insured jewellery'],
+      eligibility: ['Age 18+', 'Valid gold ornaments 18–24 karat'],
+      documents: ['PAN / Aadhaar', 'Gold ornaments for appraisal'],
+      faqs: [
         {'q': 'Is my gold insured?', 'a': 'Yes, all pledged gold is fully insured while in NBFC custody.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'education',
       category: LoanCategory.education,
       name: 'Education Loan',
@@ -174,14 +174,14 @@ class MockData {
       tenureRange: 'Up to 15 years',
       maxAmount: '₹1.5 Cr',
       processingFee: 'Up to 1.5% + GST',
-      benefits: const ['Moratorium during course', 'Covers tuition + living costs', 'Tax benefits u/s 80E'],
-      eligibility: const ['Admission confirmation letter', 'Co-applicant required', 'Age 16–35 years'],
-      documents: const ['Admission letter', 'Fee structure', 'Co-applicant income proof'],
-      faqs: const [
+      benefits: ['Moratorium during course', 'Covers tuition + living costs', 'Tax benefits u/s 80E'],
+      eligibility: ['Admission confirmation letter', 'Co-applicant required', 'Age 16–35 years'],
+      documents: ['Admission letter', 'Fee structure', 'Co-applicant income proof'],
+      faqs: [
         {'q': 'When does repayment start?', 'a': 'Typically 6–12 months after course completion or securing a job, whichever is earlier.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'msme',
       category: LoanCategory.msme,
       name: 'MSME Loan',
@@ -193,14 +193,14 @@ class MockData {
       tenureRange: '12–60 months',
       maxAmount: '₹2 Cr',
       processingFee: 'Up to 2% + GST',
-      benefits: const ['Udyam registration benefits', 'Flexible collateral options', 'Quick disbursal'],
-      eligibility: const ['Udyam registered business', 'Vintage 1+ years'],
-      documents: const ['Udyam certificate', 'GST returns', 'Bank statements'],
-      faqs: const [
+      benefits: ['Udyam registration benefits', 'Flexible collateral options', 'Quick disbursal'],
+      eligibility: ['Udyam registered business', 'Vintage 1+ years'],
+      documents: ['Udyam certificate', 'GST returns', 'Bank statements'],
+      faqs: [
         {'q': 'Do I need Udyam registration?', 'a': 'Yes, Udyam registration helps unlock preferential MSME interest rates.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'rural',
       category: LoanCategory.rural,
       name: 'Rural Loan',
@@ -212,14 +212,14 @@ class MockData {
       tenureRange: '6–36 months',
       maxAmount: '₹10 Lakh',
       processingFee: 'Up to 1.5% + GST',
-      benefits: const ['Local branch support', 'Simplified documentation'],
-      eligibility: const ['Resident of serviceable rural pin code', 'Age 21+'],
-      documents: const ['Aadhaar', 'Land / income proof'],
-      faqs: const [
+      benefits: ['Local branch support', 'Simplified documentation'],
+      eligibility: ['Resident of serviceable rural pin code', 'Age 21+'],
+      documents: ['Aadhaar', 'Land / income proof'],
+      faqs: [
         {'q': 'Which areas are covered?', 'a': 'Over 12,000 rural pin codes across India are currently serviceable.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'farmer',
       category: LoanCategory.farmer,
       name: 'Farmer Loan',
@@ -231,14 +231,14 @@ class MockData {
       tenureRange: '6–60 months',
       maxAmount: '₹25 Lakh',
       processingFee: 'Up to 1% + GST',
-      benefits: const ['Seasonal repayment schedules', 'Kisan Credit Card linkage'],
-      eligibility: const ['Land ownership / lease proof', 'Age 18+'],
-      documents: const ['Land records', 'Aadhaar', 'Bank passbook'],
-      faqs: const [
+      benefits: ['Seasonal repayment schedules', 'Kisan Credit Card linkage'],
+      eligibility: ['Land ownership / lease proof', 'Age 18+'],
+      documents: ['Land records', 'Aadhaar', 'Bank passbook'],
+      faqs: [
         {'q': 'Can repayment align with harvest?', 'a': 'Yes, seasonal / bullet repayment options are available for crop cycles.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'tractor',
       category: LoanCategory.tractor,
       name: 'Tractor Loan',
@@ -250,14 +250,14 @@ class MockData {
       tenureRange: '12–60 months',
       maxAmount: '₹20 Lakh',
       processingFee: 'Up to 1.5% + GST',
-      benefits: const ['Up to 90% on-road funding', 'Free insurance assistance'],
-      eligibility: const ['Land ownership proof', 'Age 21–65 years'],
-      documents: const ['Land records', 'Quotation', 'Aadhaar / PAN'],
-      faqs: const [
+      benefits: ['Up to 90% on-road funding', 'Free insurance assistance'],
+      eligibility: ['Land ownership proof', 'Age 21–65 years'],
+      documents: ['Land records', 'Quotation', 'Aadhaar / PAN'],
+      faqs: [
         {'q': 'Is a down payment required?', 'a': 'A minimum 10% margin is typically required depending on the tractor model.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'vehicle',
       category: LoanCategory.vehicle,
       name: 'Vehicle Loan',
@@ -269,14 +269,14 @@ class MockData {
       tenureRange: '12–84 months',
       maxAmount: '₹1 Cr',
       processingFee: 'Up to 1% + GST',
-      benefits: const ['New & used car financing', 'Up to 100% on-road funding'],
-      eligibility: const ['Age 21–65 years', 'Minimum income ₹30,000/month'],
-      documents: const ['PAN / Aadhaar', 'Income proof', 'Vehicle quotation'],
-      faqs: const [
+      benefits: ['New & used car financing', 'Up to 100% on-road funding'],
+      eligibility: ['Age 21–65 years', 'Minimum income ₹30,000/month'],
+      documents: ['PAN / Aadhaar', 'Income proof', 'Vehicle quotation'],
+      faqs: [
         {'q': 'Are used cars financed?', 'a': 'Yes, cars up to 8 years old are eligible for refinancing.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'commercial_vehicle',
       category: LoanCategory.commercialVehicle,
       name: 'Commercial Vehicle Loan',
@@ -288,14 +288,14 @@ class MockData {
       tenureRange: '12–72 months',
       maxAmount: '₹3 Cr',
       processingFee: 'Up to 1.5% + GST',
-      benefits: const ['New & pre-owned CVs', 'Fleet financing available'],
-      eligibility: const ['Commercial driving / transport license', 'Business vintage 1+ years'],
-      documents: const ['RC / quotation', 'PAN / GST', 'Bank statements'],
-      faqs: const [
+      benefits: ['New & pre-owned CVs', 'Fleet financing available'],
+      eligibility: ['Commercial driving / transport license', 'Business vintage 1+ years'],
+      documents: ['RC / quotation', 'PAN / GST', 'Bank statements'],
+      faqs: [
         {'q': 'Is fleet financing available?', 'a': 'Yes, bulk fleet financing with customized repayment is offered for transporters.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'warehouse',
       category: LoanCategory.warehouseFinance,
       name: 'Warehouse Receipt Finance',
@@ -307,14 +307,14 @@ class MockData {
       tenureRange: '3–12 months',
       maxAmount: '₹5 Cr',
       processingFee: 'Up to 1% + GST',
-      benefits: const ['Funding against NWR/WR', 'Quick disbursal within 48 hours'],
-      eligibility: const ['Valid negotiable warehouse receipt', 'Registered warehouse'],
-      documents: const ['Warehouse receipt', 'PAN / GST', 'KYC documents'],
-      faqs: const [
+      benefits: ['Funding against NWR/WR', 'Quick disbursal within 48 hours'],
+      eligibility: ['Valid negotiable warehouse receipt', 'Registered warehouse'],
+      documents: ['Warehouse receipt', 'PAN / GST', 'KYC documents'],
+      faqs: [
         {'q': 'What is an NWR?', 'a': 'A Negotiable Warehouse Receipt represents stored commodities and can be pledged for finance.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'lap',
       category: LoanCategory.loanAgainstProperty,
       name: 'Loan Against Property',
@@ -326,14 +326,14 @@ class MockData {
       tenureRange: 'Up to 20 years',
       maxAmount: '₹10 Cr',
       processingFee: 'Up to 1% + GST',
-      benefits: const ['High loan-to-value ratio', 'Both residential & commercial property'],
-      eligibility: const ['Clear property title', 'Age 25–65 years'],
-      documents: const ['Property documents', 'Income proof', 'PAN / Aadhaar'],
-      faqs: const [
+      benefits: ['High loan-to-value ratio', 'Both residential & commercial property'],
+      eligibility: ['Clear property title', 'Age 25–65 years'],
+      documents: ['Property documents', 'Income proof', 'PAN / Aadhaar'],
+      faqs: [
         {'q': 'Can I use commercial property?', 'a': 'Yes, both residential and commercial properties are accepted as collateral.'},
       ],
     ),
-    LoanProduct(
+    const LoanProduct(
       id: 'two_wheeler',
       category: LoanCategory.twoWheeler,
       name: 'Two Wheeler Loan',
@@ -345,10 +345,10 @@ class MockData {
       tenureRange: '6–48 months',
       maxAmount: '₹3 Lakh',
       processingFee: 'Flat ₹999 + GST',
-      benefits: const ['Up to 95% on-road funding', 'Instant approval at dealership'],
-      eligibility: const ['Age 18+', 'Minimum income ₹15,000/month'],
-      documents: const ['PAN / Aadhaar', 'Income proof'],
-      faqs: const [
+      benefits: ['Up to 95% on-road funding', 'Instant approval at dealership'],
+      eligibility: ['Age 18+', 'Minimum income ₹15,000/month'],
+      documents: ['PAN / Aadhaar', 'Income proof'],
+      faqs: [
         {'q': 'Is a guarantor required?', 'a': 'Not required for salaried applicants meeting the minimum income criteria.'},
       ],
     ),
@@ -425,7 +425,7 @@ class MockData {
       ];
 
   static final List<OfferBanner> heroBanners = [
-    OfferBanner(
+    const OfferBanner(
       id: 'instant_loan',
       title: 'Instant Loan for daily earners',
       subtitle: '₹1,000 to ₹50,000 · disbursal in 15 minutes',
@@ -434,7 +434,7 @@ class MockData {
       icon: Icons.currency_rupee_rounded,
       badge: 'MOST POPULAR',
     ),
-    OfferBanner(
+    const OfferBanner(
       id: 'home_loan',
       title: 'Home loans from 8.35%*',
       subtitle: 'Move into your dream home this festive season',
@@ -442,7 +442,7 @@ class MockData {
       gradient: AppColors.gradientNavy,
       icon: Icons.villa_rounded,
     ),
-    OfferBanner(
+    const OfferBanner(
       id: 'preapproved',
       title: 'Pre-approved offer: ₹8,00,000',
       subtitle: 'Just for you, Rajesh — zero paperwork',
@@ -450,7 +450,7 @@ class MockData {
       gradient: AppColors.gradientBluePrimary,
       icon: Icons.workspace_premium_rounded,
     ),
-    OfferBanner(
+    const OfferBanner(
       id: 'gold_loan',
       title: 'Gold loan in 30 minutes',
       subtitle: 'Best-in-class rates starting 9.24%*',
@@ -458,7 +458,7 @@ class MockData {
       gradient: AppColors.gradientGold,
       icon: Icons.diamond_rounded,
     ),
-    OfferBanner(
+    const OfferBanner(
       id: 'festival',
       title: 'Festive Bonanza is here',
       subtitle: 'Flat 50% off on processing fees, limited period',
@@ -466,7 +466,7 @@ class MockData {
       gradient: AppColors.gradientSunset,
       icon: Icons.celebration_rounded,
     ),
-    OfferBanner(
+    const OfferBanner(
       id: 'insurance',
       title: 'Protect what matters most',
       subtitle: 'Health & life cover starting ₹399/month',
@@ -477,42 +477,42 @@ class MockData {
   ];
 
   static final List<MarketplaceItem> marketplaceItems = [
-    MarketplaceItem(
+    const MarketplaceItem(
       id: 'property_search',
       title: 'Property Search',
       subtitle: 'Find verified homes',
       icon: Icons.search_rounded,
       gradient: AppColors.gradientBluePrimary,
     ),
-    MarketplaceItem(
+    const MarketplaceItem(
       id: 'property_worth',
       title: 'Property Worth',
       subtitle: 'Instant valuation',
       icon: Icons.trending_up_rounded,
       gradient: AppColors.gradientEmerald,
     ),
-    MarketplaceItem(
+    const MarketplaceItem(
       id: 'two_wheeler_bazaar',
       title: 'Two Wheeler Bazaar',
       subtitle: 'Buy & sell easily',
       icon: Icons.two_wheeler_rounded,
       gradient: AppColors.gradientSunset,
     ),
-    MarketplaceItem(
+    const MarketplaceItem(
       id: 'auction_portal',
       title: 'Auction Portal',
       subtitle: 'Bank-seized assets',
       icon: Icons.gavel_rounded,
       gradient: AppColors.gradientNavy,
     ),
-    MarketplaceItem(
+    const MarketplaceItem(
       id: 'insurance',
       title: 'Insurance',
       subtitle: 'Life, health & motor',
       icon: Icons.shield_rounded,
       gradient: AppColors.gradientPlum,
     ),
-    MarketplaceItem(
+    const MarketplaceItem(
       id: 'investments',
       title: 'Investments',
       subtitle: 'Mutual funds & FDs',
@@ -557,21 +557,21 @@ class MockData {
   ];
 
   static final List<FinancialTip> financialTips = [
-    FinancialTip(
+    const FinancialTip(
       id: 't1',
       title: '5 ways to improve your CIBIL score',
       summary: 'Simple habits that boost your creditworthiness over time.',
       readTime: '4 min read',
       gradient: AppColors.gradientBluePrimary,
     ),
-    FinancialTip(
+    const FinancialTip(
       id: 't2',
       title: 'Should you prepay or invest?',
       summary: 'A practical framework to decide what makes sense for you.',
       readTime: '6 min read',
       gradient: AppColors.gradientEmerald,
     ),
-    FinancialTip(
+    const FinancialTip(
       id: 't3',
       title: 'Understanding APR vs interest rate',
       summary: 'What lenders don’t always explain clearly, decoded.',

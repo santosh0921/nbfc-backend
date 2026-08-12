@@ -40,6 +40,14 @@ class _CallScreenState extends State<CallScreen> {
   void initState() {
     super.initState();
     widget.callService.addListener(_onChange);
+    // Grab the camera/mic as soon as this screen opens — for both the
+    // caller and the callee — rather than only once a call is actually
+    // accepted. Without this there was no self-view (and the
+    // camera-switch button had nothing to switch) for the entire
+    // ringing/connecting phase, which is most of what a user sees before
+    // a call connects; requesting it here also means accept() doesn't
+    // have to wait on a fresh getUserMedia/permission round-trip.
+    widget.callService.ensureLocalStream();
     // A CallService handed in already past `idle` (e.g. the customer
     // app's incoming-call listener, which stays connected in the
     // background so it can catch a call-request at all) is already
@@ -84,7 +92,7 @@ class _CallScreenState extends State<CallScreen> {
           child: switch (call.phase) {
             CallPhase.idle || CallPhase.ringingOutgoing => _RingingView(call: call, outgoing: true, label: widget.peerLabel),
             CallPhase.ringingIncoming => _RingingView(call: call, outgoing: false, label: widget.peerLabel),
-            CallPhase.connecting => const _ConnectingView(),
+            CallPhase.connecting => _ConnectingView(call: call),
             CallPhase.active => _ActiveCallView(
                 call: call,
                 speakerOn: _speakerOn,
@@ -101,6 +109,64 @@ class _CallScreenState extends State<CallScreen> {
   }
 }
 
+/// The local camera preview, shown as a small floating box in the same
+/// position across every phase (ringing, connecting, active) so it never
+/// jumps around as the call progresses. Previously this only existed
+/// during an active call — for the entire ringing/connecting phase there
+/// was no self-view at all, and the "front/back camera" switch button
+/// only appeared once the call was already connected, by which point
+/// most of the "is my camera even working" uncertainty had already
+/// happened. Rebuilds on every [CallService] change (via the parent's
+/// `_onChange` -> setState), which is how it picks up the local stream
+/// the moment `ensureLocalStream()` resolves and how the mirror flips
+/// immediately after a camera switch.
+class _SelfPreview extends StatelessWidget {
+  const _SelfPreview({required this.call});
+
+  final CallService call;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 16,
+      right: 16,
+      width: 100,
+      height: 136,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 100,
+              height: 136,
+              color: Colors.black54,
+              child: call.hasLocalPreview
+                  ? RTCVideoView(call.localRenderer, mirror: call.isFrontCamera, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
+                  : const Center(child: Icon(Icons.person_outline, color: Colors.white38, size: 36)),
+            ),
+          ),
+          Positioned(
+            right: 4,
+            bottom: 4,
+            child: Material(
+              color: Colors.black45,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: call.switchCamera,
+                child: const Padding(
+                  padding: EdgeInsets.all(6),
+                  child: Icon(Icons.cameraswitch, color: Colors.white, size: 18),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RingingView extends StatelessWidget {
   const _RingingView({required this.call, required this.outgoing, required this.label});
 
@@ -111,58 +177,74 @@ class _RingingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = call.remoteDisplayName ?? label;
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Stack(
       children: [
-        CircleAvatar(
-          radius: 56,
-          backgroundColor: Colors.white12,
-          child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontSize: 40)),
-        ),
-        const SizedBox(height: 20),
-        Text(name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        Text(
-          outgoing ? 'Calling…' : 'Incoming video call',
-          style: const TextStyle(color: Colors.white70, fontSize: 15),
-        ),
-        const SizedBox(height: 48),
-        if (outgoing)
-          _CallButton(icon: Icons.call_end, color: Colors.red, onPressed: call.hangUp, label: 'Cancel')
-        else
-          Column(
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _CallButton(icon: Icons.call_end, color: Colors.red, onPressed: call.reject, label: 'Decline'),
-                  const SizedBox(width: 48),
-                  _CallButton(icon: Icons.videocam, color: Colors.green, onPressed: call.accept, label: 'Accept'),
-                ],
+              CircleAvatar(
+                radius: 56,
+                backgroundColor: Colors.white12,
+                child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontSize: 40)),
               ),
-              const SizedBox(height: 24),
-              TextButton(
-                onPressed: call.sendBusy,
-                child: const Text("I'm busy, call you later", style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 20),
+              Text(name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text(
+                outgoing ? 'Calling…' : 'Incoming video call',
+                style: const TextStyle(color: Colors.white70, fontSize: 15),
               ),
+              const SizedBox(height: 48),
+              if (outgoing)
+                _CallButton(icon: Icons.call_end, color: Colors.red, onPressed: call.hangUp, label: 'Cancel')
+              else
+                Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _CallButton(icon: Icons.call_end, color: Colors.red, onPressed: call.reject, label: 'Decline'),
+                        const SizedBox(width: 48),
+                        _CallButton(icon: Icons.videocam, color: Colors.green, onPressed: call.accept, label: 'Accept'),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    TextButton(
+                      onPressed: call.sendBusy,
+                      child: const Text("I'm busy, call you later", style: TextStyle(color: Colors.white70)),
+                    ),
+                  ],
+                ),
             ],
           ),
+        ),
+        _SelfPreview(call: call),
       ],
     );
   }
 }
 
 class _ConnectingView extends StatelessWidget {
-  const _ConnectingView();
+  const _ConnectingView({required this.call});
+
+  final CallService call;
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Stack(
       children: [
-        CircularProgressIndicator(color: Colors.white),
-        SizedBox(height: 16),
-        Text('Connecting…', style: TextStyle(color: Colors.white70)),
+        const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text('Connecting…', style: TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+        _SelfPreview(call: call),
       ],
     );
   }
@@ -181,44 +263,35 @@ class _ActiveCallView extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         RTCVideoView(call.remoteRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
+        _SelfPreview(call: call),
         Positioned(
-          top: 16,
+          left: 16,
           right: 16,
-          width: 110,
-          height: 150,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              color: Colors.black54,
-              child: RTCVideoView(call.localRenderer, mirror: call.isFrontCamera, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
           bottom: 24,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // Wrap (not Row) guarantees the control bar never overflows —
+          // on a narrow phone 5 circular buttons plus their gaps could
+          // exceed the available width and overflow off-screen (visually
+          // this showed up as buttons clipped or shoved past the screen
+          // edge). Wrap simply drops onto a second line instead.
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 14,
+            runSpacing: 12,
             children: [
               _CallButton(icon: call.micMuted ? Icons.mic_off : Icons.mic, color: Colors.white24, onPressed: call.toggleMic, small: true),
-              const SizedBox(width: 14),
               _CallButton(
                 icon: call.cameraOff ? Icons.videocam_off : Icons.videocam,
                 color: Colors.white24,
                 onPressed: call.toggleCamera,
                 small: true,
               ),
-              const SizedBox(width: 14),
               _CallButton(icon: Icons.cameraswitch, color: Colors.white24, onPressed: call.switchCamera, small: true),
-              const SizedBox(width: 14),
               _CallButton(
                 icon: speakerOn ? Icons.volume_up : Icons.hearing,
                 color: Colors.white24,
                 onPressed: onToggleSpeaker,
                 small: true,
               ),
-              const SizedBox(width: 14),
               _CallButton(icon: Icons.call_end, color: Colors.red, onPressed: call.hangUp, small: true),
             ],
           ),

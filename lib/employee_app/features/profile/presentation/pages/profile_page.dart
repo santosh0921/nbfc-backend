@@ -56,10 +56,10 @@ class ProfilePage extends StatelessWidget {
             padding: const EdgeInsets.all(AppSpacing.md),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                Row(
+                const Row(
                   children: [
                     Expanded(child: _StatCard(label: 'Attendance', value: '96%', icon: Icons.event_available_outlined)),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Expanded(child: _StatCard(label: 'Performance', value: '4.6/5', icon: Icons.trending_up_outlined)),
                   ],
                 ),
@@ -78,23 +78,23 @@ class ProfilePage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                AppCard(
+                const AppCard(
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
-                      const ListTile(
+                      ListTile(
                         leading: Icon(Icons.notifications_outlined, color: AppColors.primary),
                         title: Text('Notification Preferences'),
                         trailing: Icon(Icons.chevron_right),
                       ),
-                      const Divider(height: 1),
-                      const ListTile(
+                      Divider(height: 1),
+                      ListTile(
                         leading: Icon(Icons.lock_outline, color: AppColors.primary),
                         title: Text('Change Password'),
                         trailing: Icon(Icons.chevron_right),
                       ),
-                      const Divider(height: 1),
-                      const ListTile(
+                      Divider(height: 1),
+                      ListTile(
                         leading: Icon(Icons.help_outline, color: AppColors.primary),
                         title: Text('Help & Support'),
                         trailing: Icon(Icons.chevron_right),
