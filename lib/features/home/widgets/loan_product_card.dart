@@ -35,13 +35,6 @@ class LoanProductCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(product.name, style: theme.textTheme.titleSmall, maxLines: 2, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Text(
-                  'from ${product.interestRateFrom}%*',
-                  style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
               ],
             ),
             if (isPopular)
