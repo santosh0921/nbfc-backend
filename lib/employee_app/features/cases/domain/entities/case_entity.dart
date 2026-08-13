@@ -167,7 +167,12 @@ class LoanReference extends Equatable {
 LoanType loanTypeFromBackendCategory(String category) {
   final normalized = category.toLowerCase();
   if (normalized.contains('gold')) return LoanType.gold;
-  if (normalized.contains('home')) return LoanType.home;
+  // The backend's actual category string is "Housing Loan" (see the loan
+  // product catalog), not "Home Loan" — "housing" doesn't contain "home"
+  // as a substring, so this case fell through to the LoanType.personal
+  // default below, showing every housing loan as "Personal Loan" in the
+  // employee app.
+  if (normalized.contains('home') || normalized.contains('housing')) return LoanType.home;
   if (normalized.contains('business')) return LoanType.business;
   if (normalized.contains('vehicle') || normalized.contains('auto')) return LoanType.vehicle;
   if (normalized.contains('education')) return LoanType.education;
