@@ -37,6 +37,8 @@ func SubmitLoanHandler(c *gin.Context) {
 	var body struct {
 		Category         string  `json:"category" binding:"required"`
 		AmountRequested  float64 `json:"amountRequested" binding:"required"`
+		TenureMonths     int     `json:"tenureMonths" binding:"required"`
+		MonthlyIncome    float64 `json:"monthlyIncome" binding:"required"`
 		Purpose          string  `json:"purpose"`
 		ApplicantName    string  `json:"applicantName" binding:"required"`
 		ApplicantPhone   string  `json:"applicantPhone"`
@@ -51,18 +53,31 @@ func SubmitLoanHandler(c *gin.Context) {
 		return
 	}
 
+	cibil := getOrCreateCibilScore(user)
+	eligibility := evaluateEligibility(body.AmountRequested, body.TenureMonths, body.MonthlyIncome, cibil)
+	if !eligibility.Eligible {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"message":           eligibility.Message,
+			"maxEligibleAmount": eligibility.MaxEligibleAmount,
+		})
+		return
+	}
+
 	loan := models.LoanApplication{
-		CustomerID:       user.ID,
-		Category:         body.Category,
-		AmountRequested:  body.AmountRequested,
-		Purpose:          body.Purpose,
-		ApplicantName:    body.ApplicantName,
-		ApplicantPhone:   body.ApplicantPhone,
-		AddressLine:      body.AddressLine,
-		City:             body.City,
-		CibilScore:       getOrCreateCibilScore(user),
-		TimingPreference: body.TimingPreference,
-		VisitTimeSlot:    body.VisitTimeSlot,
+		CustomerID:                   user.ID,
+		Category:                     body.Category,
+		AmountRequested:              body.AmountRequested,
+		Purpose:                      body.Purpose,
+		ApplicantName:                body.ApplicantName,
+		ApplicantPhone:               body.ApplicantPhone,
+		AddressLine:                  body.AddressLine,
+		City:                         body.City,
+		CibilScore:                   cibil,
+		TimingPreference:             body.TimingPreference,
+		VisitTimeSlot:                body.VisitTimeSlot,
+		RequestedTenureMonths:        &body.TenureMonths,
+		EstimatedInterestRatePercent: &eligibility.RatePercent,
+		EstimatedMonthlyEmi:          &eligibility.MonthlyEmi,
 	}
 	if body.VisitDate != "" {
 		if parsed, err := time.Parse("2006-01-02", body.VisitDate); err == nil {
@@ -123,26 +138,51 @@ func TopUpLoanHandler(c *gin.Context) {
 	}
 
 	var body struct {
-		Amount  float64 `json:"amount" binding:"required"`
-		Purpose string  `json:"purpose"`
+		Amount       float64 `json:"amount" binding:"required"`
+		TenureMonths int     `json:"tenureMonths" binding:"required"`
+		Purpose      string  `json:"purpose"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
+	// A top-up has no income field of its own in the UI (unlike a fresh
+	// application) — it reuses the income already on file from the
+	// customer's original application/KYC, since that's the same person's
+	// same income and re-asking for it would just invite an inconsistent
+	// second answer.
+	var employment models.CustomerEmployment
+	monthlyIncome := 0.0
+	if err := database.DB.Where("user_id = ?", user.ID).First(&employment).Error; err == nil {
+		monthlyIncome = employment.MonthlyIncome
+	}
+
+	cibil := getOrCreateCibilScore(user)
+	eligibility := evaluateEligibility(body.Amount, body.TenureMonths, monthlyIncome, cibil)
+	if !eligibility.Eligible {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"message":           eligibility.Message,
+			"maxEligibleAmount": eligibility.MaxEligibleAmount,
+		})
+		return
+	}
+
 	parentID := parent.ID
 	loan := models.LoanApplication{
-		CustomerID:      user.ID,
-		Category:        parent.Category,
-		AmountRequested: body.Amount,
-		Purpose:         "Top-up on Loan #" + itoa(parent.ID) + ": " + body.Purpose,
-		ApplicantName:   parent.ApplicantName,
-		ApplicantPhone:  parent.ApplicantPhone,
-		AddressLine:     parent.AddressLine,
-		City:            parent.City,
-		ParentLoanID:    &parentID,
-		CibilScore:      getOrCreateCibilScore(user),
+		CustomerID:                   user.ID,
+		Category:                     parent.Category,
+		AmountRequested:              body.Amount,
+		Purpose:                      "Top-up on Loan #" + itoa(parent.ID) + ": " + body.Purpose,
+		ApplicantName:                parent.ApplicantName,
+		ApplicantPhone:               parent.ApplicantPhone,
+		AddressLine:                  parent.AddressLine,
+		City:                         parent.City,
+		ParentLoanID:                 &parentID,
+		CibilScore:                   cibil,
+		RequestedTenureMonths:        &body.TenureMonths,
+		EstimatedInterestRatePercent: &eligibility.RatePercent,
+		EstimatedMonthlyEmi:          &eligibility.MonthlyEmi,
 	}
 
 	loan = submitLoanApplication(loan)

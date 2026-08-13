@@ -46,6 +46,15 @@ type LoanApplication struct {
 	ParentLoanID               *uint      `json:"parentLoanId,omitempty"`
 	CibilScore                 int        `json:"cibilScore,omitempty"`
 
+	// What the customer actually asked for and was quoted at apply time
+	// (internal/loans/eligibility.go) — kept separate from TenureMonths/
+	// InterestRatePercent above, which stay reserved for whatever the
+	// admin actually sets at sanction (may differ from the applicant's
+	// request). Mainly for the admin panel to show what was requested.
+	RequestedTenureMonths        *int     `json:"requestedTenureMonths,omitempty"`
+	EstimatedInterestRatePercent *float64 `json:"estimatedInterestRatePercent,omitempty"`
+	EstimatedMonthlyEmi          *float64 `json:"estimatedMonthlyEmi,omitempty"`
+
 	// Collected on the customer's "Verification Scheduling" apply step —
 	// previously only ever shown back to the customer on their own review
 	// screen and never sent to the backend at all, so the employee who

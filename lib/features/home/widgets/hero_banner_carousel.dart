@@ -54,7 +54,7 @@ class _HeroBannerCarouselState extends State<HeroBannerCarousel> {
         context.push('/credit-score');
         break;
       case 'insurance':
-        context.go('/marketplace');
+        context.go('/emi-payments');
         break;
       case 'festival':
         context.go('/loans');

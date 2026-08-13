@@ -86,7 +86,7 @@ class DashboardTourKeys {
           targetKey: quickActions,
           icon: Icons.bolt_rounded,
           title: 'Quick Actions',
-          description: 'Jump straight to My Loans, Pay EMI, the EMI Calculator, Marketplace, or Support.',
+          description: 'Jump straight to My Loans, Pay EMI, the EMI Calculator, EMI Payments, or Support.',
           gradient: AppColors.gradientBluePrimary,
         ),
         CoachStep(
@@ -392,8 +392,8 @@ class _TourTooltip extends StatelessWidget {
               ),
               GestureDetector(
                 onTap: onSkip,
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
                   child: Icon(Icons.close_rounded, size: 18, color: AppColors.textSecondaryLight),
                 ),
               ),

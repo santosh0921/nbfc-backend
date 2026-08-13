@@ -8,10 +8,10 @@ import '../widgets/dashboard_tour.dart';
 import '../widgets/incoming_call_listener.dart';
 
 /// Bottom-nav app shell hosting the 4 primary tabs (Home, Loans,
-/// Marketplace, Profile) plus a floating Quick Apply FAB, per the
+/// EMI Payments, Profile) plus a floating Quick Apply FAB, per the
 /// StatefulShellRoute branch navigator passed in by [navigationShell].
 ///
-/// Back-button behavior: on every bottom-nav tab (Home, Loans, Market,
+/// Back-button behavior: on every bottom-nav tab (Home, Loans, EMI,
 /// Profile), back requires a second press within 2s to actually exit the
 /// app — first press just shows a confirmation snackbar.
 class AppShell extends StatefulWidget {
@@ -27,7 +27,7 @@ class _AppShellState extends State<AppShell> {
   static const _tabs = [
     (icon: Icons.home_rounded, outlinedIcon: Icons.home_outlined, label: 'Home'),
     (icon: Icons.account_balance_rounded, outlinedIcon: Icons.account_balance_outlined, label: 'Loans'),
-    (icon: Icons.storefront_rounded, outlinedIcon: Icons.storefront_outlined, label: 'Market'),
+    (icon: Icons.event_repeat_rounded, outlinedIcon: Icons.event_repeat_outlined, label: 'EMI'),
     (icon: Icons.person_rounded, outlinedIcon: Icons.person_outline_rounded, label: 'Profile'),
   ];
 

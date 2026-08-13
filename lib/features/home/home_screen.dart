@@ -20,7 +20,6 @@ import 'widgets/emi_reminder_card.dart';
 import 'widgets/financial_tip_card.dart';
 import 'widgets/hero_banner_carousel.dart';
 import 'widgets/loan_product_card.dart';
-import 'widgets/marketplace_card.dart';
 import 'widgets/preapproved_card.dart';
 import 'widgets/quick_actions_grid.dart';
 
@@ -356,40 +355,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         QuickAction(label: 'My Loans', icon: Icons.account_balance_rounded, onTap: () => context.push('/my-loans')),
                         QuickAction(label: 'Pay EMI', icon: Icons.payments_rounded, onTap: () => context.push('/payments')),
                         QuickAction(label: 'EMI Calculator', icon: Icons.calculate_rounded, onTap: () => context.push('/emi-calculator')),
-                        QuickAction(label: 'Marketplace', icon: Icons.storefront_rounded, onTap: () => context.go('/marketplace')),
+                        QuickAction(label: 'EMI Payments', icon: Icons.event_repeat_rounded, onTap: () => context.go('/emi-payments')),
                         QuickAction(label: 'Support', icon: Icons.support_agent_rounded, onTap: () => context.push('/support')),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 0, 0),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(right: 20),
-                      child: SectionHeader(
-                        title: 'Financial Marketplace',
-                        actionLabel: 'View all',
-                        onAction: () => context.go('/marketplace'),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 150,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: MockData.marketplaceItems.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 12),
-                        itemBuilder: (context, i) {
-                          final item = MockData.marketplaceItems[i];
-                          return MarketplaceCard(item: item, onTap: () => context.go('/marketplace'));
-                        },
-                      ),
                     ),
                   ],
                 ),

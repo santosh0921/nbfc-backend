@@ -14,10 +14,8 @@ import '../../features/credit_score/credit_score_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/loans/explore_loans_screen.dart';
 import '../../features/loans/loan_detail_screen.dart';
-import '../../features/marketplace/marketplace_category_screen.dart';
-import '../../features/marketplace/marketplace_screen.dart';
+import '../../features/loans/emi_payments_screen.dart';
 import '../../models/loan_product.dart';
-import '../../models/offer_banner.dart';
 import '../../features/menu/menu_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
@@ -142,7 +140,7 @@ class AppRouter {
             GoRoute(path: '/loans', builder: (context, state) => const ExploreLoansScreen()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/marketplace', builder: (context, state) => const MarketplaceScreen()),
+            GoRoute(path: '/emi-payments', builder: (context, state) => const EmiPaymentsScreen()),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
@@ -194,11 +192,6 @@ class AppRouter {
         path: '/compliance',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const ComplianceScreen(),
-      ),
-      GoRoute(
-        path: '/marketplace-item',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => MarketplaceCategoryScreen(item: state.extra as MarketplaceItem),
       ),
       GoRoute(
         path: '/credit-score',

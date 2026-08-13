@@ -9,6 +9,7 @@ import '../../core/network/loan_api_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/premium_card.dart';
+import '../../core/widgets/slider_input_field.dart';
 import '../../models/loan_application.dart';
 import '../../models/uploaded_document.dart';
 import 'widgets/loan_letter_actions.dart';
@@ -582,6 +583,7 @@ class _TopUpSheetState extends State<_TopUpSheet> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _purposeController = TextEditingController();
+  int _tenureMonths = 36;
   bool _submitting = false;
   String? _error;
 
@@ -606,6 +608,7 @@ class _TopUpSheetState extends State<_TopUpSheet> {
         token,
         widget.loan.id,
         amount: double.parse(_amountController.text.trim()),
+        tenureMonths: _tenureMonths,
         purpose: _purposeController.text.trim(),
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -672,6 +675,16 @@ class _TopUpSheetState extends State<_TopUpSheet> {
                     if (parsed == null || parsed <= 0) return 'Enter a valid amount';
                     return null;
                   },
+                ),
+                const SizedBox(height: 16),
+                SliderInputField(
+                  label: 'Tenure',
+                  value: _tenureMonths.toDouble(),
+                  min: 12,
+                  max: 60,
+                  divisions: 48,
+                  suffix: ' mo',
+                  onChanged: (v) => setState(() => _tenureMonths = v.round()),
                 ),
                 const SizedBox(height: 16),
                 Text('Purpose', style: theme.textTheme.titleSmall),

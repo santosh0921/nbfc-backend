@@ -324,6 +324,8 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
       token,
       category: _productName,
       amountRequested: _loanAmount,
+      tenureMonths: _tenureMonths.round(),
+      monthlyIncome: double.tryParse(_monthlyIncomeController.text.trim()) ?? 0,
       purpose: widget.product?.shortDescription ?? 'General purpose',
       applicantName: _nameController.text.trim(),
       applicantPhone: AuthProvider.instance.pendingPhoneNumber ?? '',
@@ -345,8 +347,15 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
+      // A 422 here is the eligibility engine (internal/loans/eligibility.go)
+      // rejecting the amount/tenure/income combination — e.message is
+      // already the specific, actionable reason ("reduce the amount to
+      // about ₹X…"), so it's shown as-is rather than wrapped in the
+      // generic "Could not save your KYC details" framing that fits
+      // every earlier step but not this one.
+      final message = e.statusCode == 422 ? e.message : 'Could not save your details: ${e.message}';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save your KYC details: ${e.message}')),
+        SnackBar(content: Text(message)),
       );
       return;
     }
@@ -478,6 +487,7 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
                     onLoanAmountChanged: (v) => setState(() => _loanAmount = v),
                     tenureMonths: _tenureMonths,
                     onTenureChanged: (v) => setState(() => _tenureMonths = v),
+                    interestRate: _interestRate,
                   ),
                   _AddressStep(
                     formKey: _addressFormKey,
@@ -597,6 +607,7 @@ class _DetailsStep extends StatelessWidget {
     required this.onLoanAmountChanged,
     required this.tenureMonths,
     required this.onTenureChanged,
+    required this.interestRate,
   });
 
   final GlobalKey<FormState> formKey;
@@ -613,6 +624,7 @@ class _DetailsStep extends StatelessWidget {
   final ValueChanged<double> onLoanAmountChanged;
   final double tenureMonths;
   final ValueChanged<double> onTenureChanged;
+  final double interestRate;
 
   String _label(_EmploymentType type) => switch (type) {
         _EmploymentType.salaried => 'Salaried',
@@ -656,7 +668,66 @@ class _DetailsStep extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: monthlyIncomeController,
+            builder: (context, incomeValue, _) {
+              final income = double.tryParse(incomeValue.text.trim()) ?? 0;
+              if (income <= 0) return const SizedBox.shrink();
+
+              // Mirrors the backend's eligibility engine
+              // (internal/loans/eligibility.go) for a live estimate —
+              // the server has the final say (real CIBIL-based rate,
+              // enforced at submit), this is just an early, honest
+              // heads-up instead of letting the customer fill out the
+              // entire rest of the form before finding out the amount
+              // won't be approved.
+              final r = interestRate / 12 / 100;
+              final n = tenureMonths;
+              double compounded = 1;
+              for (int i = 0; i < n; i++) {
+                compounded *= 1 + r;
+              }
+              final emi = loanAmount * r * compounded / (compounded - 1);
+              final foirPercent = (emi / income) * 100;
+              final overLimit = foirPercent > 50;
+
+              return Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: (overLimit ? AppColors.error : AppColors.success).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    border: Border.all(color: (overLimit ? AppColors.error : AppColors.success).withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        overLimit ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                        size: 18,
+                        color: overLimit ? AppColors.error : AppColors.success,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          overLimit
+                              ? 'Estimated EMI ₹${emi.toStringAsFixed(0)}/mo is ${foirPercent.toStringAsFixed(0)}% of your income — reduce the amount or increase the tenure to stay under 50%.'
+                              : 'Estimated EMI ₹${emi.toStringAsFixed(0)}/mo (${foirPercent.toStringAsFixed(0)}% of income) — within the usual eligibility range.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: overLimit ? AppColors.error : AppColors.success,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
           ApplyFormField(
             label: 'Full Name',
             controller: nameController,

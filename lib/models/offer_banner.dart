@@ -20,22 +20,6 @@ class OfferBanner {
   });
 }
 
-class MarketplaceItem {
-  final String id;
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final List<Color> gradient;
-
-  const MarketplaceItem({
-    required this.id,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.gradient,
-  });
-}
-
 class AppNotification {
   final String id;
   final String title;

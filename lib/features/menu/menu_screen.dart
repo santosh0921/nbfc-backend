@@ -48,7 +48,7 @@ class MenuScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final user = MockData.currentUser;
+    const user = MockData.currentUser;
 
     return Scaffold(
       appBar: AppBar(
@@ -106,9 +106,9 @@ class MenuScreen extends StatelessWidget {
               onTap: () => context.push('/track-application'),
             ),
             _MenuRow(
-              icon: Icons.shield_rounded,
-              label: 'Services',
-              onTap: () => context.go('/marketplace'),
+              icon: Icons.event_repeat_rounded,
+              label: 'EMI Payments',
+              onTap: () => context.go('/emi-payments'),
             ),
             _MenuRow(
               icon: Icons.payments_rounded,

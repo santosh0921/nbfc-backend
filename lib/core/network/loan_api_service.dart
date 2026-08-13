@@ -16,6 +16,8 @@ class LoanApiService {
     String token, {
     required String category,
     required double amountRequested,
+    required int tenureMonths,
+    required double monthlyIncome,
     required String purpose,
     required String applicantName,
     required String applicantPhone,
@@ -25,9 +27,16 @@ class LoanApiService {
     DateTime? visitDate,
     String? visitTimeSlot,
   }) async {
+    // A non-2xx response here throws ApiException with the backend's
+    // eligibility-engine message (internal/loans/eligibility.go) already
+    // in .message — e.g. "This EMI would be more than 50% of your
+    // declared monthly income..." — callers show that directly rather
+    // than a generic failure.
     final res = await ApiClient.post('/auth/loans/apply', {
       'category': category,
       'amountRequested': amountRequested,
+      'tenureMonths': tenureMonths,
+      'monthlyIncome': monthlyIncome,
       'purpose': purpose,
       'applicantName': applicantName,
       'applicantPhone': applicantPhone,
@@ -59,10 +68,12 @@ class LoanApiService {
     String token,
     int loanId, {
     required double amount,
+    required int tenureMonths,
     required String purpose,
   }) async {
     final res = await ApiClient.post('/auth/loans/$loanId/topup', {
       'amount': amount,
+      'tenureMonths': tenureMonths,
       'purpose': purpose,
     }, token: token);
     return LoanApplication.fromJson(res);

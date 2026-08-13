@@ -476,51 +476,6 @@ class MockData {
     ),
   ];
 
-  static final List<MarketplaceItem> marketplaceItems = [
-    const MarketplaceItem(
-      id: 'property_search',
-      title: 'Property Search',
-      subtitle: 'Find verified homes',
-      icon: Icons.search_rounded,
-      gradient: AppColors.gradientBluePrimary,
-    ),
-    const MarketplaceItem(
-      id: 'property_worth',
-      title: 'Property Worth',
-      subtitle: 'Instant valuation',
-      icon: Icons.trending_up_rounded,
-      gradient: AppColors.gradientEmerald,
-    ),
-    const MarketplaceItem(
-      id: 'two_wheeler_bazaar',
-      title: 'Two Wheeler Bazaar',
-      subtitle: 'Buy & sell easily',
-      icon: Icons.two_wheeler_rounded,
-      gradient: AppColors.gradientSunset,
-    ),
-    const MarketplaceItem(
-      id: 'auction_portal',
-      title: 'Auction Portal',
-      subtitle: 'Bank-seized assets',
-      icon: Icons.gavel_rounded,
-      gradient: AppColors.gradientNavy,
-    ),
-    const MarketplaceItem(
-      id: 'insurance',
-      title: 'Insurance',
-      subtitle: 'Life, health & motor',
-      icon: Icons.shield_rounded,
-      gradient: AppColors.gradientPlum,
-    ),
-    const MarketplaceItem(
-      id: 'investments',
-      title: 'Investments',
-      subtitle: 'Mutual funds & FDs',
-      icon: Icons.pie_chart_rounded,
-      gradient: AppColors.gradientGold,
-    ),
-  ];
-
   static final List<AppNotification> notifications = [
     AppNotification(
       id: 'n1',
