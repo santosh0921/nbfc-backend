@@ -11,7 +11,14 @@ class ApiClient {
       : dio = Dio(BaseOptions(
           baseUrl: AppConfig.current.apiBaseUrl,
           connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 15),
+          // The backend runs on Render's free tier, which spins the
+          // service down after inactivity and can take 30-50s to cold-
+          // start on the next request — a request landing during that
+          // window with the old 15s receiveTimeout would time out before
+          // the backend ever got a chance to respond, surfacing as a
+          // generic connection failure with nothing pointing at the real
+          // cause.
+          receiveTimeout: const Duration(seconds: 45),
         )) {
     dio.interceptors.addAll([
       InterceptorsWrapper(
