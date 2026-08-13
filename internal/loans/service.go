@@ -1,6 +1,7 @@
 package loans
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/santosh0921/nbfc-backend/internal/database"
@@ -30,7 +31,15 @@ func findVerificationEmployee(city string) *models.Employee {
 		return &emp
 	}
 	var emps []models.Employee
-	database.DB.Where("role = ? AND active = ? AND approved = ?", "verification", true, true).Find(&emps)
+	if err := database.DB.Where("role = ? AND active = ? AND approved = ?", "verification", true, true).Find(&emps).Error; err != nil {
+		// Previously silently swallowed — a transient DB error here (e.g.
+		// during a deploy/restart) looked identical to "genuinely no
+		// employees available", leaving a loan permanently unassigned
+		// with zero trace of why. Logging at least makes that
+		// diagnosable instead of a mystery.
+		log.Println("findVerificationEmployee: fallback employee query failed:", err)
+		return nil
+	}
 	if len(emps) == 0 {
 		return nil
 	}
