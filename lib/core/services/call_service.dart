@@ -172,6 +172,13 @@ class CallService extends ChangeNotifier {
       case 'call-end':
         _end('Call ended.');
         break;
+      case 'peer-offline':
+        // Server-side signal that no one else is connected to this loan's
+        // call room at all — without this the caller was left on
+        // "Calling…" indefinitely with no way to know the customer's app
+        // was never listening (not logged in, killed, no signal, etc).
+        _end('Customer is not reachable right now. Please try again shortly.');
+        break;
       case 'offer':
         await _handleOffer(data);
         break;

@@ -9,7 +9,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:signature/signature.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/components/app_card.dart';
 import '../../../../core/components/app_snackbar.dart';
@@ -17,6 +16,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../../../core/widgets/signature_pad.dart';
 import '../../../cases/domain/repositories/cases_repository.dart';
 import '../../domain/entities/visit_record.dart';
 import '../providers/verification_draft_provider.dart';
@@ -302,15 +302,45 @@ class _WitnessesStepState extends State<_WitnessesStep> {
     setState(() {});
   }
 
-  Future<void> _captureWitnessDocument(int index) async {
+  Future<void> _captureWitnessAadhaar(int index) async {
     setState(() => _capturingDocFor = true);
     try {
       final photo = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 70);
       if (photo != null && mounted) {
-        await context.read<VerificationDraftProvider>().addWitnessDocument(index, photo.path);
+        await context.read<VerificationDraftProvider>().addWitnessAadhaar(index, photo.path);
       }
     } catch (_) {
-      if (mounted) AppSnackbar.danger(context, 'Could not capture witness document');
+      if (mounted) AppSnackbar.danger(context, 'Could not capture Aadhaar card');
+    } finally {
+      if (mounted) setState(() => _capturingDocFor = false);
+    }
+  }
+
+  Future<void> _captureWitnessPan(int index) async {
+    setState(() => _capturingDocFor = true);
+    try {
+      final photo = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 70);
+      if (photo != null && mounted) {
+        await context.read<VerificationDraftProvider>().addWitnessPan(index, photo.path);
+      }
+    } catch (_) {
+      if (mounted) AppSnackbar.danger(context, 'Could not capture PAN card');
+    } finally {
+      if (mounted) setState(() => _capturingDocFor = false);
+    }
+  }
+
+  Future<void> _captureWitnessSignature(int index) async {
+    final bytes = await SignaturePad.captureFullscreen(context);
+    if (bytes == null || !mounted) return;
+    setState(() => _capturingDocFor = true);
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/witness_${index}_sig_${const Uuid().v4()}.png');
+      await file.writeAsBytes(bytes);
+      if (mounted) await context.read<VerificationDraftProvider>().addWitnessSignature(index, file.path);
+    } catch (_) {
+      if (mounted) AppSnackbar.danger(context, 'Could not save witness signature');
     } finally {
       if (mounted) setState(() => _capturingDocFor = false);
     }
@@ -340,35 +370,39 @@ class _WitnessesStepState extends State<_WitnessesStep> {
                         onPressed: () => context.read<VerificationDraftProvider>().removeWitness(entry.key),
                       ),
                     ),
-                    if (entry.value.documentPath != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: AppSpacing.sm, bottom: AppSpacing.xs),
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                              child: Image.file(File(entry.value.documentPath!), width: 36, height: 36, fit: BoxFit.cover),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            const Icon(Icons.check_circle, color: AppColors.success, size: 18),
-                            const SizedBox(width: 4),
-                            Text('ID document captured', style: Theme.of(context).textTheme.bodySmall),
-                          ],
-                        ),
-                      )
-                    else
-                      Padding(
-                        padding: const EdgeInsets.only(left: AppSpacing.sm, bottom: AppSpacing.xs),
-                        child: AppButton(
-                          label: 'Capture Witness ID',
-                          size: AppButtonSize.small,
-                          expanded: false,
-                          variant: AppButtonVariant.outline,
-                          icon: Icons.camera_alt_outlined,
-                          isLoading: _capturingDocFor,
-                          onPressed: () => _captureWitnessDocument(entry.key),
-                        ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: AppSpacing.sm, bottom: AppSpacing.xs),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _WitnessCaptureChip(
+                            label: 'Aadhaar',
+                            done: entry.value.aadhaarPath != null,
+                            filePath: entry.value.aadhaarPath,
+                            icon: Icons.badge_outlined,
+                            isBusy: _capturingDocFor,
+                            onTap: () => _captureWitnessAadhaar(entry.key),
+                          ),
+                          _WitnessCaptureChip(
+                            label: 'PAN',
+                            done: entry.value.panPath != null,
+                            filePath: entry.value.panPath,
+                            icon: Icons.credit_card_outlined,
+                            isBusy: _capturingDocFor,
+                            onTap: () => _captureWitnessPan(entry.key),
+                          ),
+                          _WitnessCaptureChip(
+                            label: 'Signature',
+                            done: entry.value.signaturePath != null,
+                            filePath: entry.value.signaturePath,
+                            icon: Icons.draw_outlined,
+                            isBusy: _capturingDocFor,
+                            onTap: () => _captureWitnessSignature(entry.key),
+                          ),
+                        ],
                       ),
+                    ),
                   ],
                 ),
               )),
@@ -392,6 +426,69 @@ class _WitnessesStepState extends State<_WitnessesStep> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One capture action for a single witness's Aadhaar/PAN/signature —
+/// shows a captured thumbnail (or a signature icon, since a signature PNG
+/// makes a poor thumbnail) and a green check once done, or an outlined
+/// "capture" chip beforehand.
+class _WitnessCaptureChip extends StatelessWidget {
+  const _WitnessCaptureChip({
+    required this.label,
+    required this.done,
+    required this.filePath,
+    required this.icon,
+    required this.isBusy,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool done;
+  final String? filePath;
+  final IconData icon;
+  final bool isBusy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!done) {
+      return AppButton(
+        label: 'Capture $label',
+        size: AppButtonSize.small,
+        expanded: false,
+        variant: AppButtonVariant.outline,
+        icon: icon,
+        isLoading: isBusy,
+        onPressed: onTap,
+      );
+    }
+    return InkWell(
+      onTap: isBusy ? null : onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.success.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (label != 'Signature' && filePath != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: Image.file(File(filePath!), width: 22, height: 22, fit: BoxFit.cover),
+              )
+            else
+              const Icon(Icons.check_circle, color: AppColors.success, size: 16),
+            const SizedBox(width: 6),
+            Text('$label ✓', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600)),
+          ],
+        ),
       ),
     );
   }
@@ -673,8 +770,8 @@ class _SignOffStep extends StatefulWidget {
 }
 
 class _SignOffStepState extends State<_SignOffStep> {
-  final _customerSignature = SignatureController(penStrokeWidth: 3, penColor: AppColors.secondary);
-  final _employeeSignature = SignatureController(penStrokeWidth: 3, penColor: AppColors.secondary);
+  final _customerSignature = SignaturePadController();
+  final _employeeSignature = SignaturePadController();
 
   @override
   void dispose() {
@@ -683,9 +780,9 @@ class _SignOffStepState extends State<_SignOffStep> {
     super.dispose();
   }
 
-  Future<String?> _saveSignature(SignatureController controller, String name) async {
+  Future<String?> _saveSignature(SignaturePadController controller, String name) async {
     if (controller.isEmpty) return null;
-    final bytes = await controller.toPngBytes();
+    final bytes = await controller.capture();
     if (bytes == null) return null;
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/${name}_${const Uuid().v4()}.png');
@@ -731,21 +828,11 @@ class _SignOffStepState extends State<_SignOffStep> {
 class _SignaturePad extends StatelessWidget {
   const _SignaturePad({required this.controller});
 
-  final SignatureController controller;
+  final SignaturePadController controller;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Container(
-          height: 160,
-          decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
-          child: Signature(controller: controller, backgroundColor: Colors.white),
-        ),
-        TextButton(onPressed: controller.clear, child: const Text('Clear')),
-      ],
-    );
+    return SignaturePad(controller: controller);
   }
 }
 

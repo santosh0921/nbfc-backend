@@ -89,6 +89,7 @@ func RegisterRoutes(router *gin.Engine) {
 
 	adminGroup.GET("/employees", employee.AdminListHandler)
 	adminGroup.POST("/employees", employee.AdminCreateHandler)
+	adminGroup.POST("/employees/:id/approve", employee.AdminApproveHandler)
 	adminGroup.DELETE("/employees/:id", employee.AdminDeleteHandler)
 
 	adminGroup.GET("/audit-log", audit.AdminListHandler)
@@ -116,6 +117,7 @@ func RegisterRoutes(router *gin.Engine) {
 
 	// Employee routes (new employee JWT middleware)
 	router.POST("/employee/login", authRateLimit, employee.LoginHandler)
+	router.POST("/employee/register", authRateLimit, employee.RegisterHandler)
 
 	employeeGroup := router.Group("/employee")
 	employeeGroup.Use(middleware.EmployeeAuthMiddleware())

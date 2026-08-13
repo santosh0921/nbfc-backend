@@ -58,6 +58,34 @@ class AuthRemoteDataSource {
     }
   }
 
+  /// POST /employee/register — genuine self-service sign-up. Returns
+  /// nothing to log in with: the account is created pending admin
+  /// approval (Approved=false server-side), so there's no session to
+  /// start yet. Throws [ConflictFailure]/[BadRequestFailure]-style errors
+  /// via the same DioException mapping the rest of this datasource uses.
+  Future<void> register({
+    required String name,
+    required String password,
+    required String role,
+    required String branchCity,
+  }) async {
+    if (AppConfig.current.useMockData) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      return;
+    }
+    try {
+      await _apiClient.dio.post('/employee/register', data: {
+        'name': name.trim(),
+        'password': password,
+        'role': role,
+        'branchCity': branchCity.trim(),
+      });
+    } on DioException catch (e) {
+      final message = (e.response?.data is Map) ? (e.response!.data['message'] as String?) : null;
+      throw ValidationFailure(message ?? 'Could not create account.');
+    }
+  }
+
   Future<void> forgotPassword(String identifier) async {
     // No backend endpoint exists for this yet; kept as a local no-op so the
     // existing "forgot password" UI flow doesn't need to change.

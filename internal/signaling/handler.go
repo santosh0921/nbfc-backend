@@ -10,12 +10,19 @@
 package signaling
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+)
+
+const (
+	pongWait   = 60 * time.Second
+	pingPeriod = 25 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -149,6 +156,13 @@ func CallSignalHandler(c *gin.Context) {
 
 func writePump(cl *client, done <-chan struct{}) {
 	defer cl.conn.Close()
+	// Server-side ping on top of the WS control frame layer (distinct from
+	// the app-level {"type":"ping"} JSON keepalive the Flutter client also
+	// sends) — this is what lets pongWait/SetReadDeadline below actually
+	// detect a half-open TCP connection that neither side's app code would
+	// otherwise notice for a long time.
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
 	for {
 		select {
 		case msg, ok := <-cl.send:
@@ -158,10 +172,18 @@ func writePump(cl *client, done <-chan struct{}) {
 			if err := cl.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 				return
 			}
+		case <-ticker.C:
+			if err := cl.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		case <-done:
 			return
 		}
 	}
+}
+
+type signalEnvelope struct {
+	Type string `json:"type"`
 }
 
 func readPump(cl *client, loanID string, r *room, done chan<- struct{}) {
@@ -172,11 +194,48 @@ func readPump(cl *client, loanID string, r *room, done chan<- struct{}) {
 		close(done)
 	}()
 
+	cl.conn.SetReadDeadline(time.Now().Add(pongWait))
+	cl.conn.SetPongHandler(func(string) error {
+		cl.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
 	for {
 		_, message, err := cl.conn.ReadMessage()
 		if err != nil {
 			return
 		}
+
+		var env signalEnvelope
+		if err := json.Unmarshal(message, &env); err == nil {
+			switch env.Type {
+			case "ping":
+				// App-level keepalive — proves this socket is alive, but has
+				// no meaning to the other party, so it's swallowed here
+				// rather than forwarded (previously it was relayed verbatim,
+				// showing up as an unhandled message on the peer's side
+				// every 20s during an active call for no functional reason).
+				continue
+			case "call-request":
+				r.mu.Lock()
+				othersPresent := len(r.clients) > 1
+				r.mu.Unlock()
+				if !othersPresent {
+					// Nobody else is in the room to receive this — without
+					// this, the caller was left "ringing" forever with no
+					// signal that the other party was never connected
+					// (e.g. customer app not running / not listening),
+					// which is what made calls look like they silently
+					// vanished into nothing.
+					select {
+					case cl.send <- []byte(`{"type":"peer-offline"}`):
+					default:
+					}
+					continue
+				}
+			}
+		}
+
 		r.broadcastExcept(cl, message)
 	}
 }

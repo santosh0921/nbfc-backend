@@ -199,6 +199,13 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   AppButton(label: 'Sign In', isLoading: isLoading, onPressed: _submit),
+                  const SizedBox(height: AppSpacing.sm),
+                  Center(
+                    child: TextButton(
+                      onPressed: isLoading ? null : () => context.pushNamed(RouteNames.register),
+                      child: const Text('New employee? Create an account'),
+                    ),
+                  ),
                   if (_biometricAvailable) ...[
                     const SizedBox(height: AppSpacing.md),
                     Row(

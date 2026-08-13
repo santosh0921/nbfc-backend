@@ -109,6 +109,86 @@ class _CallScreenState extends State<CallScreen> {
   }
 }
 
+/// Dark backdrop gradient used behind every pre-connect phase (ringing,
+/// connecting) — WhatsApp/typical dialer apps never show a flat black
+/// screen for these states, a subtle top-to-bottom gradient reads as much
+/// more "designed" than plain black.
+class _CallBackdrop extends StatelessWidget {
+  const _CallBackdrop({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF1F2A44), Color(0xFF0B0F1A)],
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// A slow pulsing ring behind the avatar while ringing — the one visual
+/// cue that's genuinely missing from a static avatar+text screen and is
+/// present in essentially every phone/video-call UI (WhatsApp included)
+/// to communicate "this is actively happening right now", not a frozen
+/// screen.
+class _PulsingRing extends StatefulWidget {
+  const _PulsingRing({required this.child, required this.color});
+
+  final Widget child;
+  final Color color;
+
+  @override
+  State<_PulsingRing> createState() => _PulsingRingState();
+}
+
+class _PulsingRingState extends State<_PulsingRing> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            for (final delay in [0.0, 0.5])
+              Builder(builder: (context) {
+                final t = (_controller.value + delay) % 1.0;
+                return Opacity(
+                  opacity: (1 - t) * 0.35,
+                  child: Transform.scale(
+                    scale: 1 + t * 0.6,
+                    child: Container(
+                      width: 128,
+                      height: 128,
+                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: widget.color, width: 2)),
+                    ),
+                  ),
+                );
+              }),
+            widget.child,
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// The local camera preview, shown as a small floating box in the same
 /// position across every phase (ringing, connecting, active) so it never
 /// jumps around as the call progresses. Previously this only existed
@@ -135,11 +215,12 @@ class _SelfPreview extends StatelessWidget {
       child: Stack(
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             child: Container(
               width: 100,
               height: 136,
               color: Colors.black54,
+              decoration: BoxDecoration(border: Border.all(color: Colors.white24, width: 1)),
               child: call.hasLocalPreview
                   ? RTCVideoView(call.localRenderer, mirror: call.isFrontCamera, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
                   : const Center(child: Icon(Icons.person_outline, color: Colors.white38, size: 36)),
@@ -177,50 +258,64 @@ class _RingingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = call.remoteDisplayName ?? label;
-    return Stack(
-      children: [
-        Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    return _CallBackdrop(
+      child: Stack(
+        children: [
+          Column(
             children: [
-              CircleAvatar(
-                radius: 56,
-                backgroundColor: Colors.white12,
-                child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontSize: 40)),
+              const Spacer(flex: 2),
+              _PulsingRing(
+                color: outgoing ? Colors.white38 : Colors.greenAccent,
+                child: CircleAvatar(
+                  radius: 56,
+                  backgroundColor: Colors.white12,
+                  child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontSize: 40)),
+                ),
               ),
-              const SizedBox(height: 20),
-              Text(name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 22),
+              Text(name, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
-                outgoing ? 'Calling…' : 'Incoming video call',
-                style: const TextStyle(color: Colors.white70, fontSize: 15),
+                outgoing ? 'Video calling…' : 'Incoming video call',
+                style: const TextStyle(color: Colors.white60, fontSize: 15),
               ),
-              const SizedBox(height: 48),
+              const Spacer(flex: 3),
               if (outgoing)
-                _CallButton(icon: Icons.call_end, color: Colors.red, onPressed: call.hangUp, label: 'Cancel')
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 48),
+                  child: _CallButton(icon: Icons.call_end, color: Colors.red, onPressed: call.hangUp, label: 'Cancel'),
+                )
               else
-                Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _CallButton(icon: Icons.call_end, color: Colors.red, onPressed: call.reject, label: 'Decline'),
-                        const SizedBox(width: 48),
-                        _CallButton(icon: Icons.videocam, color: Colors.green, onPressed: call.accept, label: 'Accept'),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    TextButton(
-                      onPressed: call.sendBusy,
-                      child: const Text("I'm busy, call you later", style: TextStyle(color: Colors.white70)),
-                    ),
-                  ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
+                  child: Column(
+                    children: [
+                      // Spread wide (spaceBetween, not centered together)
+                      // so decline/accept read as clearly opposite actions
+                      // at a glance — the pattern every mobile dialer
+                      // (WhatsApp included) uses for incoming calls,
+                      // rather than two adjacent buttons that are easy to
+                      // mis-tap under the other.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _CallButton(icon: Icons.call_end, color: Colors.red, onPressed: call.reject, label: 'Decline'),
+                          _CallButton(icon: Icons.videocam, color: Colors.green, onPressed: call.accept, label: 'Accept'),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      TextButton(
+                        onPressed: call.sendBusy,
+                        child: const Text("I'm busy, call you later", style: TextStyle(color: Colors.white60)),
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),
-        ),
-        _SelfPreview(call: call),
-      ],
+          _SelfPreview(call: call),
+        ],
+      ),
     );
   }
 }
@@ -232,20 +327,22 @@ class _ConnectingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(height: 16),
-              Text('Connecting…', style: TextStyle(color: Colors.white70)),
-            ],
+    return _CallBackdrop(
+      child: Stack(
+        children: [
+          const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: Colors.white),
+                SizedBox(height: 16),
+                Text('Connecting…', style: TextStyle(color: Colors.white70)),
+              ],
+            ),
           ),
-        ),
-        _SelfPreview(call: call),
-      ],
+          _SelfPreview(call: call),
+        ],
+      ),
     );
   }
 }
@@ -264,10 +361,30 @@ class _ActiveCallView extends StatelessWidget {
       children: [
         RTCVideoView(call.remoteRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
         _SelfPreview(call: call),
+        // A subtle bottom gradient behind the control tray keeps the
+        // buttons legible over a bright remote video frame, instead of
+        // floating raw translucent circles directly on top of it.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 160,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black.withValues(alpha: 0.55), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+        ),
         Positioned(
           left: 16,
           right: 16,
-          bottom: 24,
+          bottom: 28,
           // Wrap (not Row) guarantees the control bar never overflows —
           // on a narrow phone 5 circular buttons plus their gaps could
           // exceed the available width and overflow off-screen (visually
@@ -275,8 +392,8 @@ class _ActiveCallView extends StatelessWidget {
           // edge). Wrap simply drops onto a second line instead.
           child: Wrap(
             alignment: WrapAlignment.center,
-            spacing: 14,
-            runSpacing: 12,
+            spacing: 16,
+            runSpacing: 14,
             children: [
               _CallButton(icon: call.micMuted ? Icons.mic_off : Icons.mic, color: Colors.white24, onPressed: call.toggleMic, small: true),
               _CallButton(
@@ -308,22 +425,29 @@ class _EndedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(Icons.call_end, color: Colors.white38, size: 48),
-        const SizedBox(height: 16),
-        Text(
-          call.errorMessage ?? 'Call ended',
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white70, fontSize: 16),
+    return _CallBackdrop(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.call_end, color: Colors.white38, size: 48),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                call.errorMessage ?? 'Call ended',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+            ),
+            const SizedBox(height: 24),
+            TextButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: const Text('Close', style: TextStyle(color: Colors.white)),
+            ),
+          ],
         ),
-        const SizedBox(height: 24),
-        TextButton(
-          onPressed: () => Navigator.of(context).maybePop(),
-          child: const Text('Close', style: TextStyle(color: Colors.white)),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -346,6 +470,7 @@ class _CallButton extends StatelessWidget {
         Material(
           color: color,
           shape: const CircleBorder(),
+          elevation: 3,
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onPressed,

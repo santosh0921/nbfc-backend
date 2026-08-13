@@ -28,6 +28,21 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  @override
+  Future<Result<void>> register({
+    required String name,
+    required String password,
+    required String role,
+    required String branchCity,
+  }) async {
+    try {
+      await _remoteDataSource.register(name: name, password: password, role: role, branchCity: branchCity);
+      return const Success(null);
+    } catch (e) {
+      return ResultFailure(ErrorMapper.map(e));
+    }
+  }
+
   /// There is no biometric-specific backend endpoint — biometric unlock
   /// simply re-admits the employee whose password-authenticated session
   /// (including its still-valid JWT, good for 12h) is already persisted on

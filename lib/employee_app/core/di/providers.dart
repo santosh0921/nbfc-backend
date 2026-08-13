@@ -5,6 +5,7 @@ import '../constants/employee_app_module.dart';
 import '../providers/agency_provider.dart';
 import '../providers/connectivity_provider.dart';
 import '../providers/theme_provider.dart';
+import '../network/api_client.dart';
 import '../storage/local_storage_service.dart';
 import '../storage/mpin_service.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
@@ -39,16 +40,24 @@ List<SingleChildWidget> appProviders({EmployeeAppModule module = EmployeeAppModu
     ChangeNotifierProvider<AgencyProvider>(create: (_) => AgencyProvider(sl.get<LocalStorageService>())),
     ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider(sl.get<Connectivity>())),
     ChangeNotifierProvider<AuthProvider>(
-      create: (_) => AuthProvider(
-        loginUseCase: sl.get<LoginUseCase>(),
-        biometricLoginUseCase: sl.get<BiometricLoginUseCase>(),
-        logoutUseCase: sl.get<LogoutUseCase>(),
-        forgotPasswordUseCase: sl.get<ForgotPasswordUseCase>(),
-        authRepository: sl.get<AuthRepository>(),
-        localStorage: sl.get<LocalStorageService>(),
-        mpinService: sl.get<MpinService>(),
-        module: module,
-      ),
+      create: (_) {
+        final auth = AuthProvider(
+          loginUseCase: sl.get<LoginUseCase>(),
+          registerUseCase: sl.get<RegisterUseCase>(),
+          biometricLoginUseCase: sl.get<BiometricLoginUseCase>(),
+          logoutUseCase: sl.get<LogoutUseCase>(),
+          forgotPasswordUseCase: sl.get<ForgotPasswordUseCase>(),
+          authRepository: sl.get<AuthRepository>(),
+          localStorage: sl.get<LocalStorageService>(),
+          mpinService: sl.get<MpinService>(),
+          module: module,
+        );
+        // See ApiClient.onUnauthorized's doc comment — this is what turns
+        // a dead/expired restored session into an actual logout instead
+        // of a dashboard full of silently-failing 401s.
+        sl.get<ApiClient>().onUnauthorized = () => auth.logout();
+        return auth;
+      },
     ),
     ChangeNotifierProvider<DashboardProvider>(
       create: (_) => DashboardProvider(sl.get<DashboardRepositoryHttp>()),

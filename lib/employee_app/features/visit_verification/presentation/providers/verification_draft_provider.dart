@@ -99,6 +99,57 @@ class VerificationDraftProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _addWitnessFile(
+    int index, {
+    required String filePath,
+    required String docType,
+    required String mimeType,
+    required WitnessInfo Function(WitnessInfo current) apply,
+  }) async {
+    if (index < 0 || index >= witnesses.length) return;
+    final updated = [...witnesses];
+    updated[index] = apply(updated[index]);
+    witnesses = updated;
+    notifyListeners();
+
+    try {
+      final bytes = await File(filePath).readAsBytes();
+      await _casesRepository.uploadLoanDocument(
+        caseId,
+        docType: docType,
+        fileName: filePath.split(Platform.pathSeparator).last,
+        mimeType: mimeType,
+        dataBase64: base64Encode(bytes),
+      );
+    } catch (_) {
+      // Non-fatal — the local copy still exists and still goes into the PDF.
+    }
+  }
+
+  Future<void> addWitnessAadhaar(int index, String filePath) => _addWitnessFile(
+        index,
+        filePath: filePath,
+        docType: 'witness_${index + 1}_aadhaar',
+        mimeType: 'image/jpeg',
+        apply: (w) => w.copyWith(aadhaarPath: filePath),
+      );
+
+  Future<void> addWitnessPan(int index, String filePath) => _addWitnessFile(
+        index,
+        filePath: filePath,
+        docType: 'witness_${index + 1}_pan',
+        mimeType: 'image/jpeg',
+        apply: (w) => w.copyWith(panPath: filePath),
+      );
+
+  Future<void> addWitnessSignature(int index, String filePath) => _addWitnessFile(
+        index,
+        filePath: filePath,
+        docType: 'witness_${index + 1}_signature',
+        mimeType: 'image/png',
+        apply: (w) => w.copyWith(signaturePath: filePath),
+      );
+
   void addDocument(CapturedDocument document) {
     documents = [...documents.where((d) => d.type != document.type), document];
     notifyListeners();

@@ -43,6 +43,7 @@ class ServiceLocator {
     _instances[AuthRemoteDataSource] = AuthRemoteDataSource(get<ApiClient>());
     _instances[AuthRepository] = AuthRepositoryImpl(get<AuthRemoteDataSource>(), get<SecureStorageService>());
     _instances[LoginUseCase] = LoginUseCase(get<AuthRepository>());
+    _instances[RegisterUseCase] = RegisterUseCase(get<AuthRepository>());
     _instances[BiometricLoginUseCase] = BiometricLoginUseCase(get<AuthRepository>());
     _instances[LogoutUseCase] = LogoutUseCase(get<AuthRepository>());
     _instances[ForgotPasswordUseCase] = ForgotPasswordUseCase(get<AuthRepository>());

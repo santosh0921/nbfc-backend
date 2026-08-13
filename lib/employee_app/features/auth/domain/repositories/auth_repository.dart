@@ -6,6 +6,8 @@ abstract class AuthRepository {
 
   Future<Result<EmployeeEntity>> loginWithBiometrics();
 
+  Future<Result<void>> register({required String name, required String password, required String role, required String branchCity});
+
   Future<Result<void>> forgotPassword({required String identifier});
 
   Future<Result<void>> logout();

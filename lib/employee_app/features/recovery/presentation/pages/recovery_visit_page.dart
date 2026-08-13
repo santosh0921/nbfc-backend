@@ -7,7 +7,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:signature/signature.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/components/app_card.dart';
 import '../../../../core/components/app_snackbar.dart';
@@ -15,6 +14,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../../../core/widgets/signature_pad.dart';
 import '../../domain/entities/recovery_case_entity.dart';
 import '../providers/recovery_cases_provider.dart';
 import '../providers/recovery_visit_provider.dart';
@@ -509,7 +509,7 @@ class _SignOffStep extends StatefulWidget {
 }
 
 class _SignOffStepState extends State<_SignOffStep> {
-  final _signature = SignatureController(penStrokeWidth: 3, penColor: AppColors.secondary);
+  final _signature = SignaturePadController();
 
   @override
   void dispose() {
@@ -528,7 +528,7 @@ class _SignOffStepState extends State<_SignOffStep> {
       AppSnackbar.danger(context, 'Case details not loaded');
       return;
     }
-    final bytes = await _signature.toPngBytes();
+    final bytes = await _signature.capture();
     if (bytes == null) return;
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/recovery_sig_${const Uuid().v4()}.png');
@@ -569,17 +569,7 @@ class _SignOffStepState extends State<_SignOffStep> {
         children: [
           Text('Customer / Officer Signature', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: AppSpacing.sm),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                height: 160,
-                decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
-                child: Signature(controller: _signature, backgroundColor: Colors.white),
-              ),
-              TextButton(onPressed: _signature.clear, child: const Text('Clear')),
-            ],
-          ),
+          SignaturePad(controller: _signature),
         ],
       ),
     );

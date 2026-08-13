@@ -6,6 +6,7 @@ import '../../features/auth/presentation/pages/mpin_setup_page.dart';
 import '../../features/auth/presentation/pages/mpin_unlock_page.dart';
 import '../../features/auth/presentation/pages/otp_verify_page.dart';
 import '../../features/auth/presentation/pages/profile_setup_page.dart';
+import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/dashboard/presentation/pages/dashboard_home_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_shell.dart';
@@ -27,7 +28,7 @@ import 'route_names.dart';
 class AppRouter {
   AppRouter._();
 
-  static const _publicPaths = [RouteNames.loginPath, RouteNames.forgotPasswordPath];
+  static const _publicPaths = [RouteNames.loginPath, RouteNames.registerPath, RouteNames.forgotPasswordPath];
 
   static bool _isPublicPath(String path) => _publicPaths.any((p) => path.startsWith(p));
 
@@ -85,6 +86,12 @@ class AppRouter {
           name: RouteNames.login,
           pageBuilder: (context, state) =>
               buildPageWithTransition(context: context, state: state, child: const LoginPage()),
+        ),
+        GoRoute(
+          path: RouteNames.registerPath,
+          name: RouteNames.register,
+          pageBuilder: (context, state) =>
+              buildPageWithTransition(context: context, state: state, child: const RegisterPage()),
         ),
         GoRoute(
           path: RouteNames.forgotPasswordPath,

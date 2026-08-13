@@ -15,6 +15,7 @@ enum AuthStatus { initial, authenticating, authenticated, unauthenticated, error
 class AuthProvider extends ChangeNotifier {
   AuthProvider({
     required LoginUseCase loginUseCase,
+    required RegisterUseCase registerUseCase,
     required BiometricLoginUseCase biometricLoginUseCase,
     required LogoutUseCase logoutUseCase,
     required ForgotPasswordUseCase forgotPasswordUseCase,
@@ -23,6 +24,7 @@ class AuthProvider extends ChangeNotifier {
     required MpinService mpinService,
     this.module = EmployeeAppModule.verification,
   })  : _loginUseCase = loginUseCase,
+        _registerUseCase = registerUseCase,
         _biometricLoginUseCase = biometricLoginUseCase,
         _logoutUseCase = logoutUseCase,
         _forgotPasswordUseCase = forgotPasswordUseCase,
@@ -33,6 +35,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   final LoginUseCase _loginUseCase;
+  final RegisterUseCase _registerUseCase;
   final BiometricLoginUseCase _biometricLoginUseCase;
   final LogoutUseCase _logoutUseCase;
   final ForgotPasswordUseCase _forgotPasswordUseCase;
@@ -276,6 +279,35 @@ class AuthProvider extends ChangeNotifier {
       await _refreshOnboardingFlag();
     }
     notifyListeners();
+  }
+
+  /// True right after a successful registration submit — the UI uses this
+  /// to show a "pending admin approval" confirmation instead of trying to
+  /// treat it like a login (there is no session to start: the account
+  /// isn't approved yet).
+  bool justRegistered = false;
+
+  Future<bool> register({required String name, required String password, required String role, required String branchCity}) async {
+    status = AuthStatus.authenticating;
+    errorMessage = null;
+    justRegistered = false;
+    notifyListeners();
+
+    final result = await _registerUseCase(RegisterParams(name: name, password: password, role: role, branchCity: branchCity));
+    return result.when(
+      success: (_) {
+        status = AuthStatus.unauthenticated;
+        justRegistered = true;
+        notifyListeners();
+        return true;
+      },
+      failure: (f) {
+        status = AuthStatus.error;
+        errorMessage = f.message;
+        notifyListeners();
+        return false;
+      },
+    );
   }
 
   Future<Failure?> forgotPassword(String identifier) async {

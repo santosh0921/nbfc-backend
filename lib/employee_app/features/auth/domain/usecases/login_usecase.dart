@@ -8,9 +8,9 @@ class LoginParams {
   final String name;
   final String password;
 
-  /// "verification" | "recovery". Employee accounts are admin-provisioned
-  /// only (no self-registration) — the backend no longer consults this on
-  /// login, it's kept purely for wire-format compatibility.
+  /// "verification" | "recovery" — the backend no longer consults this on
+  /// login (an employee's actual role is stored server-side), it's kept
+  /// purely for wire-format compatibility.
   final String module;
 }
 
@@ -29,6 +29,25 @@ class BiometricLoginUseCase implements UseCase<EmployeeEntity, NoParams> {
 
   @override
   Future<Result<EmployeeEntity>> call(NoParams params) => _repository.loginWithBiometrics();
+}
+
+class RegisterParams {
+  const RegisterParams({required this.name, required this.password, required this.role, required this.branchCity});
+  final String name;
+  final String password;
+
+  /// "verification" | "recovery" | "supervisor".
+  final String role;
+  final String branchCity;
+}
+
+class RegisterUseCase implements UseCase<void, RegisterParams> {
+  RegisterUseCase(this._repository);
+  final AuthRepository _repository;
+
+  @override
+  Future<Result<void>> call(RegisterParams params) =>
+      _repository.register(name: params.name, password: params.password, role: params.role, branchCity: params.branchCity);
 }
 
 class LogoutUseCase implements UseCase<void, NoParams> {

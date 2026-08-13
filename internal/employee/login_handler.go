@@ -54,6 +54,10 @@ func LoginHandler(c *gin.Context) {
 		return
 	}
 
+	if !emp.Approved {
+		c.JSON(http.StatusForbidden, gin.H{"message": "Your account is pending admin approval. You'll be able to log in once an admin approves it."})
+		return
+	}
 	if !emp.Active {
 		c.JSON(http.StatusForbidden, gin.H{"message": "Account deactivated"})
 		return

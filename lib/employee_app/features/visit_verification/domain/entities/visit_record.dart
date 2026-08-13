@@ -1,20 +1,46 @@
 import 'package:equatable/equatable.dart';
 
 class WitnessInfo extends Equatable {
-  const WitnessInfo({required this.name, required this.relation, required this.phone, required this.dob, this.documentPath});
+  const WitnessInfo({
+    required this.name,
+    required this.relation,
+    required this.phone,
+    required this.dob,
+    this.documentPath,
+    this.aadhaarPath,
+    this.panPath,
+    this.signaturePath,
+  });
 
   final String name;
   final String relation;
   final String phone;
   final String dob;
 
-  /// Local file path of the witness's captured ID document photo, if any
-  /// — also uploaded to the backend (POST /employee/loans/:id/documents,
-  /// docType "witness_<n>_id") so it's visible in the admin panel, same
-  /// as every other verification document.
+  /// Local file path of the witness's captured generic ID document photo,
+  /// if any — kept for backward compatibility with visit records saved
+  /// before Aadhaar/PAN became distinct fields.
   final String? documentPath;
 
-  Map<String, dynamic> toMap() => {'name': name, 'relation': relation, 'phone': phone, 'dob': dob, 'documentPath': documentPath};
+  /// Local file paths of the witness's Aadhaar card, PAN card, and
+  /// signature — each also uploaded to the backend (POST
+  /// /employee/loans/:id/documents, docType "witness_<n>_aadhaar" /
+  /// "_pan" / "_signature") so they're visible in the admin panel, same
+  /// as every other verification document.
+  final String? aadhaarPath;
+  final String? panPath;
+  final String? signaturePath;
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'relation': relation,
+        'phone': phone,
+        'dob': dob,
+        'documentPath': documentPath,
+        'aadhaarPath': aadhaarPath,
+        'panPath': panPath,
+        'signaturePath': signaturePath,
+      };
 
   factory WitnessInfo.fromMap(Map map) => WitnessInfo(
         name: map['name'] as String? ?? '',
@@ -22,13 +48,28 @@ class WitnessInfo extends Equatable {
         phone: map['phone'] as String? ?? '',
         dob: map['dob'] as String? ?? '',
         documentPath: map['documentPath'] as String?,
+        aadhaarPath: map['aadhaarPath'] as String?,
+        panPath: map['panPath'] as String?,
+        signaturePath: map['signaturePath'] as String?,
       );
 
-  WitnessInfo copyWith({String? documentPath}) =>
-      WitnessInfo(name: name, relation: relation, phone: phone, dob: dob, documentPath: documentPath ?? this.documentPath);
+  WitnessInfo copyWith({String? documentPath, String? aadhaarPath, String? panPath, String? signaturePath}) => WitnessInfo(
+        name: name,
+        relation: relation,
+        phone: phone,
+        dob: dob,
+        documentPath: documentPath ?? this.documentPath,
+        aadhaarPath: aadhaarPath ?? this.aadhaarPath,
+        panPath: panPath ?? this.panPath,
+        signaturePath: signaturePath ?? this.signaturePath,
+      );
+
+  /// True once every required witness capture (Aadhaar, PAN, signature)
+  /// is present — used to gate moving past the witnesses step.
+  bool get isComplete => aadhaarPath != null && panPath != null && signaturePath != null;
 
   @override
-  List<Object?> get props => [name, relation, phone, dob, documentPath];
+  List<Object?> get props => [name, relation, phone, dob, documentPath, aadhaarPath, panPath, signaturePath];
 }
 
 class CapturedDocument extends Equatable {
