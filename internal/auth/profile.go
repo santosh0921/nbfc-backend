@@ -63,6 +63,8 @@ func GetProfile(c *gin.Context) {
 			"first_name":         customerProfile.FirstName,
 			"middle_name":        customerProfile.MiddleName,
 			"last_name":          customerProfile.LastName,
+			"email":              customerProfile.Email,
+			"kyc_completed":      customerProfile.ProfileCompleted,
 		},
 	})
 }

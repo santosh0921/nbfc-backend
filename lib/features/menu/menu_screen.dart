@@ -1,18 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/network/auth_api_service.dart';
 import '../../core/network/emi_api_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/widgets/premium_card.dart';
-import '../../mock/mock_data.dart';
 
 /// Full-screen menu opened from the hamburger icon on Home: greeting
 /// card, a stack of navigation rows, and a row of 4 quick-icon shortcut
 /// buttons — mirrors the structure of established NBFC-style app menus.
-class MenuScreen extends StatelessWidget {
+class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
+
+  @override
+  State<MenuScreen> createState() => _MenuScreenState();
+}
+
+class _MenuScreenState extends State<MenuScreen> {
+  String _firstName = '';
+  String _avatarInitials = '?';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadName();
+  }
+
+  /// Best-effort, same pattern as home_screen.dart's greeting — a failure
+  /// just leaves the generic "Hello there" greeting instead of blocking
+  /// the menu.
+  Future<void> _loadName() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return;
+    try {
+      final res = await AuthApiService.getProfile(token);
+      final user = res['user'] as Map<String, dynamic>?;
+      final first = (user?['first_name'] as String?)?.trim() ?? '';
+      final last = (user?['last_name'] as String?)?.trim() ?? '';
+      if (first.isEmpty && last.isEmpty) return;
+      final initials = [first, last].where((s) => s.isNotEmpty).map((s) => s[0].toUpperCase()).join();
+      if (!mounted) return;
+      setState(() {
+        _firstName = first.isNotEmpty ? first : last;
+        _avatarInitials = initials.isEmpty ? '?' : initials;
+      });
+    } on ApiException {
+      // Non-fatal.
+    } catch (_) {
+      // Non-fatal.
+    }
+  }
 
   /// The EMI Schedule route needs a specific loanId (see
   /// emi_schedule_screen.dart) — unlike every other Menu row, this entry
@@ -48,7 +87,6 @@ class MenuScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const user = MockData.currentUser;
 
     return Scaffold(
       appBar: AppBar(
@@ -74,7 +112,7 @@ class MenuScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'Hello ${user.fullName.split(' ').first}',
+                      _firstName.isEmpty ? 'Hello there' : 'Hello $_firstName',
                       style: theme.textTheme.titleLarge,
                     ),
                   ),
@@ -82,7 +120,7 @@ class MenuScreen extends StatelessWidget {
                     radius: 24,
                     backgroundColor: AppColors.primary.withValues(alpha: 0.14),
                     child: Text(
-                      user.avatarInitials,
+                      _avatarInitials,
                       style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800),
                     ),
                   ),

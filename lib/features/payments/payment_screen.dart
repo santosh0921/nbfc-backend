@@ -6,6 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import '../../core/network/api_exception.dart';
+import '../../core/providers/auth_provider.dart';
+import '../../core/services/active_loan_loader.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
@@ -13,7 +16,6 @@ import '../../core/utils/statement_pdf_generator.dart';
 import '../../core/widgets/gradient_container.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../core/widgets/success_celebration.dart';
-import '../../mock/mock_data.dart';
 import '../../models/active_loan.dart';
 import '../apply/widgets/apply_form_field.dart';
 import 'widgets/net_banking_auth_screen.dart';
@@ -60,6 +62,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
   String? _selectedBank;
   String? _scannedUpiName;
 
+  late Future<ActiveLoan?> _loanFuture;
+  ActiveLoan? _cachedLoan;
+
+  @override
+  void initState() {
+    super.initState();
+    _loanFuture = _loadActiveLoan();
+  }
+
+  /// This used to always show MockData's fake "Personal Loan" with a
+  /// fake ₹12,450 due date regardless of what the customer actually
+  /// owed. Returns null if there's no upcoming EMI to pay.
+  Future<ActiveLoan?> _loadActiveLoan() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return null;
+    return ActiveLoanLoader.load(token);
+  }
+
   @override
   void dispose() {
     _upiController.dispose();
@@ -91,7 +111,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         return;
       }
       final currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
-      final loan = MockData.activeLoans.isNotEmpty ? MockData.activeLoans.first : null;
+      final loan = _cachedLoan;
       final authorized = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => NetBankingAuthScreen(
@@ -152,7 +172,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       _isProcessing = false;
       _isPaid = true;
     });
-    final loan = MockData.activeLoans.isNotEmpty ? MockData.activeLoans.first : null;
+    final loan = _cachedLoan;
     NotificationService.instance.show(
       title: 'Payment Successful',
       body: loan != null ? 'Your EMI payment for ${loan.productName} was received successfully.' : 'Your payment was received successfully.',
@@ -161,10 +181,29 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<ActiveLoan?>(
+      future: _loanFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError) {
+          final message = snapshot.error is ApiException ? (snapshot.error as ApiException).message : 'Could not load your EMI details.';
+          return Scaffold(
+            appBar: AppBar(title: const Text('Payments')),
+            body: Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(message, textAlign: TextAlign.center))),
+          );
+        }
+        _cachedLoan = snapshot.data;
+        return _buildContent(context, snapshot.data);
+      },
+    );
+  }
+
+  Widget _buildContent(BuildContext context, ActiveLoan? loan) {
     final theme = Theme.of(context);
     final currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
-    final hasActiveLoan = MockData.activeLoans.isNotEmpty;
-    final loan = hasActiveLoan ? MockData.activeLoans.first : null;
+    final hasActiveLoan = loan != null;
 
     if (!hasActiveLoan) {
       return Scaffold(
@@ -175,7 +214,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     if (_isPaid) {
       return _PaymentSuccessView(
-        loan: loan!,
+        loan: loan,
         referenceNumber: _referenceNumber,
         methodSummary: _methodSummary(),
       );
@@ -213,7 +252,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                 borderRadius: BorderRadius.circular(AppRadius.pill),
                               ),
                               child: Text(
-                                'Due ${DateFormat('d MMM').format(loan!.nextEmiDate)}',
+                                'Due ${DateFormat('d MMM').format(loan.nextEmiDate)}',
                                 style: theme.textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
                               ),
                             ),
@@ -590,6 +629,7 @@ class _CardForm extends StatelessWidget {
           ApplyFormField(
             label: 'Name on Card',
             controller: nameController,
+            hint: 'As printed on your card',
             validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the name on your card' : null,
             onChanged: (_) => onChanged(),
           ),

@@ -252,7 +252,7 @@ class _DetailsStepState extends State<_DetailsStep> {
             ),
           ],
           const SizedBox(height: AppSpacing.lg),
-          AppTextField(label: 'Occupation', controller: _occupationController, prefixIcon: Icons.work_outline),
+          AppTextField(label: 'Occupation', hint: 'Enter occupation', controller: _occupationController, prefixIcon: Icons.work_outline),
           const SizedBox(height: AppSpacing.md),
           AppTextField(
             label: 'Monthly Income (₹)',
@@ -261,7 +261,7 @@ class _DetailsStepState extends State<_DetailsStep> {
             keyboardType: TextInputType.number,
           ),
           const SizedBox(height: AppSpacing.md),
-          AppTextField(label: 'Field Remarks', controller: _remarksController, prefixIcon: Icons.notes_outlined),
+          AppTextField(label: 'Field Remarks', hint: 'Enter field remarks', controller: _remarksController, prefixIcon: Icons.notes_outlined),
         ],
       ),
     );
@@ -413,11 +413,11 @@ class _WitnessesStepState extends State<_WitnessesStep> {
               children: [
                 Text('Add Witness', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.sm),
-                AppTextField(label: 'Full Name', controller: _nameController),
+                AppTextField(label: 'Full Name', hint: 'Enter witness full name', controller: _nameController),
                 const SizedBox(height: AppSpacing.sm),
-                AppTextField(label: 'Relation', controller: _relationController),
+                AppTextField(label: 'Relation', hint: 'e.g. Neighbour, Colleague', controller: _relationController),
                 const SizedBox(height: AppSpacing.sm),
-                AppTextField(label: 'Phone', controller: _phoneController, keyboardType: TextInputType.phone),
+                AppTextField(label: 'Phone', hint: 'Enter phone number', controller: _phoneController, keyboardType: TextInputType.phone),
                 const SizedBox(height: AppSpacing.sm),
                 AppTextField(label: 'Date of Birth', controller: _dobController, hint: 'DD/MM/YYYY'),
                 const SizedBox(height: AppSpacing.sm),

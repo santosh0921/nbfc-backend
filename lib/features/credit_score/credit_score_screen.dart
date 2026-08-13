@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../core/network/api_exception.dart';
+import '../../core/network/credit_score_api_service.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
-import '../../core/widgets/premium_card.dart';
 import '../../core/widgets/slider_input_field.dart';
-import '../../mock/mock_data.dart';
 import 'widgets/credit_score_gauge.dart';
 
 String _bandFor(int score) {
@@ -14,18 +15,15 @@ String _bandFor(int score) {
   return 'Very Poor';
 }
 
-class _ScoreFactor {
-  final String label;
-  final String rating;
-  final IconData icon;
-  final Color color;
-
-  const _ScoreFactor({required this.label, required this.rating, required this.icon, required this.color});
-}
-
-/// Clean, minimal credit-health screen — big gauge up top, a simple
-/// icon-list of contributing factors, and a compact score-history strip.
-/// No busy progress bars or dense cards; generous spacing throughout.
+/// Clean, minimal credit-health screen — big gauge up top, plus an
+/// optional what-if calculator. The score/band shown is the customer's
+/// real one (GET /auth/credit-score — the same score actually used for
+/// loan eligibility/sanction), not a hardcoded number. There is no real
+/// credit-bureau integration behind this app, so — unlike the earlier
+/// version — this screen no longer fabricates a month-by-month score
+/// history or a breakdown of "contributing factors" neither of which
+/// any real data backs; presenting invented bureau-style data as if
+/// real would be actively misleading for a lending app.
 class CreditScoreScreen extends StatefulWidget {
   const CreditScoreScreen({super.key});
 
@@ -39,10 +37,24 @@ class _CreditScoreScreenState extends State<CreditScoreScreen> with SingleTicker
     duration: const Duration(milliseconds: 1000),
   )..repeat(reverse: true);
 
+  late Future<CreditScoreResult?> _scoreFuture;
   int? _calculatedScore;
 
-  int get _displayScore => _calculatedScore ?? MockData.creditScore;
-  String get _displayBand => _calculatedScore != null ? _bandFor(_calculatedScore!) : MockData.creditScoreBand;
+  @override
+  void initState() {
+    super.initState();
+    _scoreFuture = _loadScore();
+  }
+
+  Future<CreditScoreResult?> _loadScore() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return null;
+    try {
+      return await CreditScoreApiService.get(token);
+    } on ApiException {
+      return null;
+    }
+  }
 
   Future<void> _openCalculator() async {
     final result = await showModalBottomSheet<int>(
@@ -53,23 +65,6 @@ class _CreditScoreScreenState extends State<CreditScoreScreen> with SingleTicker
     );
     if (result != null) setState(() => _calculatedScore = result);
   }
-
-  static const _factors = [
-    _ScoreFactor(label: 'Payment History', rating: 'Excellent', icon: Icons.event_available_rounded, color: AppColors.success),
-    _ScoreFactor(label: 'Credit Utilization', rating: 'Good', icon: Icons.pie_chart_rounded, color: AppColors.success),
-    _ScoreFactor(label: 'Credit Age', rating: 'Excellent', icon: Icons.history_rounded, color: AppColors.success),
-    _ScoreFactor(label: 'Credit Mix', rating: 'Fair', icon: Icons.category_rounded, color: AppColors.warning),
-    _ScoreFactor(label: 'Recent Inquiries', rating: 'Good', icon: Icons.search_rounded, color: AppColors.success),
-  ];
-
-  static const _history = [
-    ('Feb', 742),
-    ('Mar', 751),
-    ('Apr', 760),
-    ('May', 768),
-    ('Jun', 775),
-    ('Jul', 785),
-  ];
 
   @override
   void dispose() {
@@ -86,191 +81,114 @@ class _CreditScoreScreenState extends State<CreditScoreScreen> with SingleTicker
       backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(title: const Text('Credit Health')),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-          children: [
-            Center(
-              child: Column(
-                children: [
-                  CreditScoreGauge(score: _displayScore, width: 260, height: 150, strokeWidth: 20, showLabels: true, live: true),
-                  const SizedBox(height: 8),
-                  Text(
-                    '$_displayScore',
-                    style: theme.textTheme.displayLarge?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  Text('CIBIL Score · out of 900', style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: AppColors.success.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.check_circle_rounded, size: 15, color: AppColors.success),
-                        const SizedBox(width: 6),
-                        Text(
-                          _displayBand,
-                          style: theme.textTheme.labelLarge?.copyWith(color: AppColors.success, fontWeight: FontWeight.w700),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_calculatedScore != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'Simulated score — not your actual CIBIL report.',
-                      style: theme.textTheme.labelSmall?.copyWith(color: AppColors.warning),
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+        child: FutureBuilder<CreditScoreResult?>(
+          future: _scoreFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final real = snapshot.data;
+            final displayScore = _calculatedScore ?? real?.score;
+            final displayBand = _calculatedScore != null ? _bandFor(_calculatedScore!) : real?.band;
+
+            if (displayScore == null) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text('Could not load your credit score right now.', style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
+                ),
+              );
+            }
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+              children: [
+                Center(
+                  child: Column(
                     children: [
-                      AnimatedBuilder(
-                        animation: _liveDotController,
-                        builder: (context, _) => Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withValues(alpha: 0.4 + _liveDotController.value * 0.6),
-                            shape: BoxShape.circle,
-                          ),
+                      CreditScoreGauge(score: displayScore, width: 260, height: 150, strokeWidth: 20, showLabels: true, live: true),
+                      const SizedBox(height: 8),
+                      Text(
+                        '$displayScore',
+                        style: theme.textTheme.displayLarge?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      Text('CIBIL Score · out of 900', style: theme.textTheme.bodyMedium),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.check_circle_rounded, size: 15, color: AppColors.success),
+                            const SizedBox(width: 6),
+                            Text(
+                              displayBand ?? _bandFor(displayScore),
+                              style: theme.textTheme.labelLarge?.copyWith(color: AppColors.success, fontWeight: FontWeight.w700),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Live monitoring active · updated today',
-                        style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryLight),
+                      if (_calculatedScore != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Simulated score — not your actual CIBIL report.',
+                          style: theme.textTheme.labelSmall?.copyWith(color: AppColors.warning),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedBuilder(
+                            animation: _liveDotController,
+                            builder: (context, _) => Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: AppColors.success.withValues(alpha: 0.4 + _liveDotController.value * 0.6),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Live monitoring active · updated today',
+                            style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryLight),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: _openCalculator,
-              icon: const Icon(Icons.calculate_rounded, size: 18),
-              label: const Text('Calculate My CIBIL Score'),
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-            ),
-            const SizedBox(height: 36),
-            Text('Score History', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 64,
-              child: Row(
-                children: [
-                  for (final entry in _history) ...[
-                    Expanded(child: _HistoryChip(month: entry.$1, score: entry.$2, isLatest: entry == _history.last)),
+                ),
+                const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  onPressed: _openCalculator,
+                  icon: const Icon(Icons.calculate_rounded, size: 18),
+                  label: const Text('Calculate My CIBIL Score'),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.lightbulb_rounded, color: AppColors.warning, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Keep credit utilization below 30% and avoid multiple loan inquiries in a short period to improve your score further.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
                   ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 36),
-            Text('What\'s Affecting Your Score', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text('Based on your credit report factors.', style: theme.textTheme.bodySmall),
-            const SizedBox(height: 12),
-            PremiumCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  for (int i = 0; i < _factors.length; i++) ...[
-                    _FactorRow(factor: _factors[i]),
-                    if (i != _factors.length - 1) const Divider(height: 1, indent: 60),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.lightbulb_rounded, color: AppColors.warning, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Keep credit utilization below 30% and avoid multiple loan inquiries in a short period to improve your score further.',
-                    style: theme.textTheme.bodySmall,
-                  ),
                 ),
               ],
-            ),
-          ],
+            );
+          },
         ),
-      ),
-    );
-  }
-}
-
-class _HistoryChip extends StatelessWidget {
-  const _HistoryChip({required this.month, required this.score, required this.isLatest});
-
-  final String month;
-  final int score;
-  final bool isLatest;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Text(
-          '$score',
-          style: theme.textTheme.labelSmall?.copyWith(
-            fontWeight: isLatest ? FontWeight.w800 : FontWeight.w500,
-            color: isLatest ? AppColors.primary : AppColors.textSecondaryLight,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: isLatest ? AppColors.primary : AppColors.borderLight,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(month, style: theme.textTheme.labelSmall),
-      ],
-    );
-  }
-}
-
-class _FactorRow extends StatelessWidget {
-  const _FactorRow({required this.factor});
-
-  final _ScoreFactor factor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: factor.color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(factor.icon, size: 18, color: factor.color),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Text(factor.label, style: theme.textTheme.bodyMedium)),
-          Text(
-            factor.rating,
-            style: theme.textTheme.labelLarge?.copyWith(color: factor.color, fontWeight: FontWeight.w700),
-          ),
-        ],
       ),
     );
   }

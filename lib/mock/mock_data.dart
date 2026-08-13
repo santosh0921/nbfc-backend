@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
-import '../models/active_loan.dart';
 import '../models/loan_product.dart';
 import '../models/offer_banner.dart';
-import '../models/transaction.dart';
 import '../models/user_profile.dart';
 
 /// Centralized realistic Indian mock data. In a real app this would be
@@ -22,11 +20,6 @@ class MockData {
     kycVerified: true,
     customerSince: 'Mar 2021',
   );
-
-  static const int creditScore = 785;
-  static const String creditScoreBand = 'Excellent';
-
-  static const double preApprovedAmount = 800000;
 
   static final List<LoanProduct> loanProducts = [
     const LoanProduct(
@@ -354,76 +347,6 @@ class MockData {
     ),
   ];
 
-  static final List<ActiveLoan> activeLoans = [
-    ActiveLoan(
-      loanId: 'PL-9284710',
-      productName: 'Personal Loan',
-      principal: 500000,
-      outstanding: 312500,
-      nextEmiAmount: 12450,
-      nextEmiDate: DateTime.now().add(const Duration(days: 1)),
-      tenureMonths: 48,
-      monthsPaid: 18,
-      interestRate: 10.5,
-      status: LoanStatus.active,
-    ),
-    ActiveLoan(
-      loanId: 'HL-1147203',
-      productName: 'Housing Loan',
-      principal: 4500000,
-      outstanding: 3890000,
-      nextEmiAmount: 38200,
-      nextEmiDate: DateTime.now().add(const Duration(days: 12)),
-      tenureMonths: 240,
-      monthsPaid: 22,
-      interestRate: 8.35,
-      status: LoanStatus.active,
-    ),
-  ];
-
-  static List<AppTransaction> get recentTransactions => [
-        AppTransaction(
-          id: 'TXN10293',
-          type: TransactionType.emiPayment,
-          status: TransactionStatus.success,
-          amount: 12450,
-          date: DateTime.now().subtract(const Duration(days: 3)),
-          description: 'EMI Payment · Personal Loan',
-          loanId: 'PL-9284710',
-          referenceNumber: 'REF7734829102',
-        ),
-        AppTransaction(
-          id: 'TXN10281',
-          type: TransactionType.emiPayment,
-          status: TransactionStatus.success,
-          amount: 38200,
-          date: DateTime.now().subtract(const Duration(days: 12)),
-          description: 'EMI Payment · Housing Loan',
-          loanId: 'HL-1147203',
-          referenceNumber: 'REF7734827541',
-        ),
-        AppTransaction(
-          id: 'TXN10190',
-          type: TransactionType.partPayment,
-          status: TransactionStatus.success,
-          amount: 50000,
-          date: DateTime.now().subtract(const Duration(days: 40)),
-          description: 'Part Payment · Personal Loan',
-          loanId: 'PL-9284710',
-          referenceNumber: 'REF7734801234',
-        ),
-        AppTransaction(
-          id: 'TXN10105',
-          type: TransactionType.fee,
-          status: TransactionStatus.success,
-          amount: 2500,
-          date: DateTime.now().subtract(const Duration(days: 58)),
-          description: 'Processing Fee · Housing Loan',
-          loanId: 'HL-1147203',
-          referenceNumber: 'REF7734790021',
-        ),
-      ];
-
   static final List<OfferBanner> heroBanners = [
     const OfferBanner(
       id: 'instant_loan',
@@ -444,9 +367,9 @@ class MockData {
     ),
     const OfferBanner(
       id: 'preapproved',
-      title: 'Pre-approved offer: ₹8,00,000',
-      subtitle: 'Just for you, Rajesh — zero paperwork',
-      ctaLabel: 'Claim Offer',
+      title: 'Check your pre-approved offer',
+      subtitle: 'Personalized to your credit profile — zero paperwork',
+      ctaLabel: 'Check Now',
       gradient: AppColors.gradientBluePrimary,
       icon: Icons.workspace_premium_rounded,
     ),

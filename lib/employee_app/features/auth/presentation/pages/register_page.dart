@@ -133,6 +133,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   const SizedBox(height: AppSpacing.md),
                   AppTextField(
                     label: 'Password',
+                    hint: 'At least 6 characters',
                     controller: _passwordController,
                     prefixIcon: Icons.lock_outline,
                     obscureText: true,
@@ -142,6 +143,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   const SizedBox(height: AppSpacing.md),
                   AppTextField(
                     label: 'Confirm Password',
+                    hint: 'Re-enter your password',
                     controller: _confirmController,
                     prefixIcon: Icons.lock_outline,
                     obscureText: true,

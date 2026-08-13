@@ -51,6 +51,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             const SizedBox(height: AppSpacing.lg),
             AppTextField(
               label: 'Employee ID / Email',
+              hint: 'Enter your employee ID or email',
               controller: _identifierController,
               prefixIcon: Icons.badge_outlined,
               validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,

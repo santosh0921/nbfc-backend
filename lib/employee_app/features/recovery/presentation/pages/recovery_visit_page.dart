@@ -334,7 +334,7 @@ class _CustomerPresenceStepState extends State<_CustomerPresenceStep> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          AppTextField(label: 'Visit Notes', controller: _notesController, prefixIcon: Icons.notes_outlined),
+          AppTextField(label: 'Visit Notes', hint: 'Enter visit notes', controller: _notesController, prefixIcon: Icons.notes_outlined),
         ],
       ),
     );

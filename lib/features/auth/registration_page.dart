@@ -107,12 +107,14 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 ApplyFormField(
                   label: 'Full Name',
                   controller: _nameController,
+                  hint: 'Enter your full name',
                   validator: _validateName,
                 ),
                 ApplyFormField(
                   label: 'Email Address',
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  hint: 'you@example.com',
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Enter your email';
                     if (!v.contains('@') || !v.contains('.')) return 'Enter a valid email';

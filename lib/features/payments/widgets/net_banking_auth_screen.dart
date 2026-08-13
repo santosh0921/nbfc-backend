@@ -107,7 +107,7 @@ class _NetBankingAuthScreenState extends State<NetBankingAuthScreen> {
                 if (_stage == _Stage.login || _stage == _Stage.authenticating) ...[
                   Text('Log in to authorize your payment of ${widget.amountLabel}', style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
                   const SizedBox(height: 24),
-                  ApplyFormField(label: 'User ID', controller: _userIdController, onChanged: (_) => setState(() {})),
+                  ApplyFormField(label: 'User ID', controller: _userIdController, hint: 'Enter your net banking user ID', onChanged: (_) => setState(() {})),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -122,6 +122,7 @@ class _NetBankingAuthScreenState extends State<NetBankingAuthScreen> {
                   ApplyFormField(
                     label: '',
                     controller: _passwordController,
+                    hint: 'Enter your password',
                     obscureText: _obscure,
                     onChanged: (_) => setState(() {}),
                   ),

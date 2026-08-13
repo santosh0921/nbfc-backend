@@ -113,9 +113,9 @@ void _showGoldAppraisalForm(BuildContext context) {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AppTextField(label: 'Weight (grams)', controller: weightController, keyboardType: TextInputType.number),
+        AppTextField(label: 'Weight (grams)', hint: 'Enter weight in grams', controller: weightController, keyboardType: TextInputType.number),
         const SizedBox(height: AppSpacing.sm),
-        AppTextField(label: 'Purity (Karat)', controller: purityController, keyboardType: TextInputType.number),
+        AppTextField(label: 'Purity (Karat)', hint: 'e.g. 22', controller: purityController, keyboardType: TextInputType.number),
         const SizedBox(height: AppSpacing.md),
         AppButton(
           label: 'Save Appraisal',
@@ -138,9 +138,9 @@ void _showPropertyForm(BuildContext context) {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AppTextField(label: 'Property Condition', controller: conditionController),
+        AppTextField(label: 'Property Condition', hint: 'e.g. Good, Needs repair', controller: conditionController),
         const SizedBox(height: AppSpacing.sm),
-        AppTextField(label: 'Estimated Value (₹)', controller: valueController, keyboardType: TextInputType.number),
+        AppTextField(label: 'Estimated Value (₹)', hint: 'Enter estimated value', controller: valueController, keyboardType: TextInputType.number),
         const SizedBox(height: AppSpacing.md),
         AppButton(
           label: 'Save Details',

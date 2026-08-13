@@ -154,7 +154,7 @@ class _RecoveryReportPageState extends State<RecoveryReportPage> {
                 children: [
                   Text('Remarks', style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: AppSpacing.sm),
-                  AppTextField(label: 'Remarks', controller: _remarksController, prefixIcon: Icons.notes_outlined),
+                  AppTextField(label: 'Remarks', hint: 'Enter your remarks', controller: _remarksController, prefixIcon: Icons.notes_outlined),
                 ],
               ),
             ),
@@ -205,7 +205,7 @@ class _RecoveryReportPageState extends State<RecoveryReportPage> {
                 children: [
                   Text('Recommendation', style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: AppSpacing.sm),
-                  AppTextField(label: 'Recommendation', controller: _recommendationController, prefixIcon: Icons.lightbulb_outline),
+                  AppTextField(label: 'Recommendation', hint: 'Enter your recommendation', controller: _recommendationController, prefixIcon: Icons.lightbulb_outline),
                   const SizedBox(height: AppSpacing.md),
                   ListTile(
                     contentPadding: EdgeInsets.zero,

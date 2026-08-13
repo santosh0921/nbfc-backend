@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/network/auth_api_service.dart';
 import '../../core/network/kyc_api_service.dart';
 import '../../core/network/loan_api_service.dart';
 import '../../core/providers/auth_provider.dart';
@@ -17,7 +18,6 @@ import '../../core/widgets/slider_input_field.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/widgets/success_celebration.dart';
 import '../../mock/india_locations.dart';
-import '../../mock/mock_data.dart';
 import '../../models/loan_product.dart';
 import 'widgets/apply_form_field.dart';
 import 'widgets/bank_document_upload_tile.dart';
@@ -81,14 +81,14 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
 
   // Step 0: Details
   final _detailsFormKey = GlobalKey<FormState>();
-  late final _nameController = TextEditingController(text: MockData.currentUser.fullName);
+  final _nameController = TextEditingController();
   final _dobController = TextEditingController();
   DateTime? _dobValue;
   final _panController = TextEditingController();
-  late final _emailController = TextEditingController(text: MockData.currentUser.email);
+  final _emailController = TextEditingController();
   _EmploymentType _employmentType = _EmploymentType.salaried;
   final _monthlyIncomeController = TextEditingController();
-  double _loanAmount = MockData.preApprovedAmount;
+  double _loanAmount = 500000;
   double _tenureMonths = 36;
 
   // Step 1: Address
@@ -127,7 +127,7 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
 
   // Step 3: Bank Details
   final _bankFormKey = GlobalKey<FormState>();
-  final _accountHolderController = TextEditingController(text: MockData.currentUser.fullName);
+  final _accountHolderController = TextEditingController();
   final _accountNumberController = TextEditingController();
   final _confirmAccountNumberController = TextEditingController();
   final _ifscController = TextEditingController();
@@ -161,6 +161,42 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
       compounded *= 1 + rate;
     }
     return _loanAmount * rate * compounded / (compounded - 1);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _prefillFromProfile();
+  }
+
+  /// Best-effort prefill of name/email from the customer's real saved
+  /// profile — this used to always show MockData's hardcoded "Rajesh
+  /// Verma" regardless of who was actually applying, meaning a
+  /// distracted customer could submit an application under someone
+  /// else's name if they didn't notice and edit it themselves. A failure
+  /// here (offline, profile not created yet) just leaves the fields
+  /// blank for the customer to fill in, same as before this existed.
+  Future<void> _prefillFromProfile() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return;
+    try {
+      final res = await AuthApiService.getProfile(token);
+      final user = res['user'] as Map<String, dynamic>?;
+      final first = (user?['first_name'] as String?)?.trim() ?? '';
+      final last = (user?['last_name'] as String?)?.trim() ?? '';
+      final fullName = [first, last].where((s) => s.isNotEmpty).join(' ');
+      final email = (user?['email'] as String?)?.trim() ?? '';
+      if (!mounted) return;
+      if (fullName.isNotEmpty) {
+        _nameController.text = fullName;
+        _accountHolderController.text = fullName;
+      }
+      if (email.isNotEmpty) _emailController.text = email;
+    } on ApiException {
+      // Non-fatal.
+    } catch (_) {
+      // Non-fatal.
+    }
   }
 
   @override
@@ -731,6 +767,7 @@ class _DetailsStep extends StatelessWidget {
           ApplyFormField(
             label: 'Full Name',
             controller: nameController,
+            hint: 'Enter your full name',
             validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your full name' : null,
           ),
           ApplyFormField(
@@ -757,6 +794,7 @@ class _DetailsStep extends StatelessWidget {
             label: 'Email Address',
             controller: emailController,
             keyboardType: TextInputType.emailAddress,
+            hint: 'you@example.com',
             validator: (v) {
               if (v == null || v.trim().isEmpty) return 'Enter your email';
               if (!v.contains('@') || !v.contains('.')) return 'Enter a valid email';
@@ -774,6 +812,7 @@ class _DetailsStep extends StatelessWidget {
             label: 'Monthly Net Income (₹)',
             controller: monthlyIncomeController,
             keyboardType: TextInputType.number,
+            hint: 'Enter your monthly income',
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             validator: (v) {
               if (v == null || v.trim().isEmpty) return 'Enter your monthly income';
@@ -1113,6 +1152,7 @@ class _BankDetailsStep extends StatelessWidget {
           ApplyFormField(
             label: 'Account Holder Name',
             controller: accountHolderController,
+            hint: 'As per bank records',
             validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the account holder name' : null,
           ),
           ApplyFormField(
@@ -1126,6 +1166,7 @@ class _BankDetailsStep extends StatelessWidget {
             controller: accountNumberController,
             keyboardType: TextInputType.number,
             maxLength: 18,
+            hint: 'Enter your account number',
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             validator: (v) {
               if (v == null || v.trim().isEmpty) return 'Enter your account number';
@@ -1138,6 +1179,7 @@ class _BankDetailsStep extends StatelessWidget {
             controller: confirmAccountNumberController,
             keyboardType: TextInputType.number,
             maxLength: 18,
+            hint: 'Re-enter your account number',
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             validator: (v) {
               if (v == null || v.trim().isEmpty) return 'Re-enter your account number';

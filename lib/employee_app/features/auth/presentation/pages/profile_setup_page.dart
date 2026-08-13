@@ -123,6 +123,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
               const SizedBox(height: AppSpacing.lg),
               AppTextField(
                 label: 'Full Name',
+                hint: 'Enter your full name',
                 controller: _nameController,
                 prefixIcon: Icons.badge_outlined,
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
@@ -130,6 +131,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 label: 'Mobile Number',
+                hint: 'Enter your mobile number',
                 controller: _phoneController,
                 prefixIcon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
@@ -138,18 +140,20 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 label: 'Email',
+                hint: 'you@example.com',
                 controller: _emailController,
                 prefixIcon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) => (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
               ),
               const SizedBox(height: AppSpacing.md),
-              AppTextField(label: 'Designation', controller: _designationController, prefixIcon: Icons.work_outline),
+              AppTextField(label: 'Designation', hint: 'e.g. Field Verification Officer', controller: _designationController, prefixIcon: Icons.work_outline),
               const SizedBox(height: AppSpacing.md),
-              AppTextField(label: 'Branch / Agency', controller: _branchController, prefixIcon: Icons.apartment_outlined),
+              AppTextField(label: 'Branch / Agency', hint: 'Enter your branch or agency', controller: _branchController, prefixIcon: Icons.apartment_outlined),
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 label: 'Residential Address',
+                hint: 'Enter your residential address',
                 controller: _addressController,
                 prefixIcon: Icons.home_outlined,
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
@@ -157,6 +161,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 label: 'Emergency Contact',
+                hint: 'Enter an emergency contact number',
                 controller: _emergencyContactController,
                 prefixIcon: Icons.emergency_outlined,
                 keyboardType: TextInputType.phone,

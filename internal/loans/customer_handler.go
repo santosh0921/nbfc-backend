@@ -190,6 +190,57 @@ func TopUpLoanHandler(c *gin.Context) {
 	c.JSON(http.StatusCreated, withReferences(loan))
 }
 
+// CustomerCreditScoreHandler handles GET /auth/credit-score — the
+// customer-facing credit health screen used to always show MockData's
+// hardcoded 785/"Excellent" regardless of who was logged in. Reuses the
+// exact same deterministic-per-customer CIBIL score already generated
+// for loan applications (getOrCreateCibilScore), so the number shown
+// here is identical to the one actually used for eligibility/sanction —
+// not a second, disconnected fake number.
+func CustomerCreditScoreHandler(c *gin.Context) {
+	user, ok := currentUser(c)
+	if !ok {
+		return
+	}
+	score := getOrCreateCibilScore(user)
+	c.JSON(http.StatusOK, gin.H{
+		"score":             score,
+		"band":              creditScoreBand(score),
+		"preApprovedAmount": preApprovedAmountFor(score),
+	})
+}
+
+func creditScoreBand(score int) string {
+	switch {
+	case score >= 750:
+		return "Excellent"
+	case score >= 700:
+		return "Good"
+	case score >= 650:
+		return "Fair"
+	case score >= 550:
+		return "Poor"
+	default:
+		return "Very Poor"
+	}
+}
+
+// preApprovedAmountFor is a simple, honest reflection of the same
+// CIBIL-band rules already used for real sanction decisions
+// (AdminDecisionHandler / eligibility.go) — a customer below the reject
+// threshold isn't pre-approved for anything, rather than showing a
+// cheerful fake offer no application would actually be sanctioned for.
+func preApprovedAmountFor(score int) float64 {
+	switch {
+	case score > models.CibilPrimeThreshold:
+		return 500000
+	case score >= models.CibilRejectThreshold:
+		return 200000
+	default:
+		return 0
+	}
+}
+
 // ListMyLoansHandler handles GET /loans/mine
 func ListMyLoansHandler(c *gin.Context) {
 	user, ok := currentUser(c)

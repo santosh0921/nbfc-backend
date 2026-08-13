@@ -1,20 +1,75 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../core/network/api_exception.dart';
+import '../../core/network/auth_api_service.dart';
+import '../../core/network/transaction_api_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/theme_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../core/widgets/section_header.dart';
-import '../../mock/mock_data.dart';
+import '../../models/transaction.dart';
 import '../home/widgets/transaction_tile.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String _fullName = '';
+  String _email = '';
+  String _avatarInitials = '?';
+  bool _kycCompleted = false;
+  List<AppTransaction> _transactions = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  /// Best-effort, same non-blocking pattern used across the dashboard —
+  /// a failure here (offline, profile not created yet) just leaves the
+  /// fields at their empty defaults rather than blocking the screen.
+  Future<void> _load() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return;
+    try {
+      final res = await AuthApiService.getProfile(token);
+      final user = res['user'] as Map<String, dynamic>?;
+      final first = (user?['first_name'] as String?)?.trim() ?? '';
+      final last = (user?['last_name'] as String?)?.trim() ?? '';
+      final fullName = [first, last].where((s) => s.isNotEmpty).join(' ');
+      final initials = [first, last].where((s) => s.isNotEmpty).map((s) => s[0].toUpperCase()).join();
+      if (!mounted) return;
+      setState(() {
+        _fullName = fullName;
+        _email = (user?['email'] as String?)?.trim() ?? '';
+        _avatarInitials = initials.isEmpty ? '?' : initials;
+        _kycCompleted = user?['kyc_completed'] as bool? ?? false;
+      });
+    } on ApiException {
+      // Non-fatal.
+    } catch (_) {
+      // Non-fatal.
+    }
+    try {
+      final transactions = await TransactionApiService.mine(token);
+      if (!mounted) return;
+      setState(() => _transactions = transactions);
+    } on ApiException {
+      // Non-fatal.
+    } catch (_) {
+      // Non-fatal.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final user = MockData.currentUser;
     final theme = Theme.of(context);
     final themeProvider = context.watch<ThemeProvider>();
 
@@ -30,28 +85,33 @@ class ProfileScreen extends StatelessWidget {
                   CircleAvatar(
                     radius: 30,
                     backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                    child: Text(user.avatarInitials, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 20)),
+                    child: Text(_avatarInitials, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 20)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(user.fullName, style: theme.textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(user.email, style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(
+                          _fullName.isEmpty ? 'Complete your profile' : _fullName,
+                          style: theme.textTheme.titleMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (_email.isNotEmpty) Text(_email, style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 6),
                         Row(
                           children: [
                             Icon(
-                              user.kycVerified ? Icons.verified_rounded : Icons.error_outline_rounded,
+                              _kycCompleted ? Icons.verified_rounded : Icons.error_outline_rounded,
                               size: 14,
-                              color: user.kycVerified ? AppColors.success : AppColors.warning,
+                              color: _kycCompleted ? AppColors.success : AppColors.warning,
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              user.kycVerified ? 'KYC Verified' : 'KYC Pending',
+                              _kycCompleted ? 'KYC Verified' : 'KYC Pending',
                               style: theme.textTheme.labelSmall?.copyWith(
-                                color: user.kycVerified ? AppColors.success : AppColors.warning,
+                                color: _kycCompleted ? AppColors.success : AppColors.warning,
                               ),
                             ),
                           ],
@@ -69,14 +129,26 @@ class ProfileScreen extends StatelessWidget {
               onAction: () => context.push('/transactions'),
             ),
             const SizedBox(height: 4),
-            PremiumCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  for (final t in MockData.recentTransactions.take(3)) TransactionTile(transaction: t),
-                ],
+            if (_transactions.isEmpty)
+              PremiumCard(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'No transactions yet.',
+                    style: theme.textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+            else
+              PremiumCard(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    for (final t in _transactions.take(3)) TransactionTile(transaction: t),
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 20),
             _SectionCard(
               title: 'Account',

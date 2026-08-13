@@ -349,7 +349,7 @@ class _RecoveryActionsCard extends StatelessWidget {
           children: [
             Text(message),
             const SizedBox(height: AppSpacing.md),
-            AppTextField(label: 'Remarks (optional)', controller: remarksController),
+            AppTextField(label: 'Remarks (optional)', hint: 'Add any remarks', controller: remarksController),
           ],
         ),
         actions: [
@@ -395,7 +395,7 @@ class _RecoveryActionsCard extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AppTextField(label: 'Promised Amount (₹)', controller: amountController, keyboardType: TextInputType.number),
+              AppTextField(label: 'Promised Amount (₹)', hint: 'Enter promised amount', controller: amountController, keyboardType: TextInputType.number),
               const SizedBox(height: AppSpacing.md),
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -428,7 +428,7 @@ class _RecoveryActionsCard extends StatelessWidget {
                 },
               ),
               const SizedBox(height: AppSpacing.sm),
-              AppTextField(label: 'Remarks', controller: remarksController),
+              AppTextField(label: 'Remarks', hint: 'Add your remarks', controller: remarksController),
               const SizedBox(height: AppSpacing.lg),
               AppButton(
                 label: 'Save Promise',
@@ -476,7 +476,7 @@ class _RecoveryActionsCard extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AppTextField(label: 'Amount (₹)', controller: amountController, keyboardType: TextInputType.number),
+              AppTextField(label: 'Amount (₹)', hint: 'Enter amount', controller: amountController, keyboardType: TextInputType.number),
               const SizedBox(height: AppSpacing.md),
               DropdownButtonFormField<PaymentMode>(
                 value: mode,
@@ -485,7 +485,7 @@ class _RecoveryActionsCard extends StatelessWidget {
                 onChanged: (value) => setSheetState(() => mode = value ?? mode),
               ),
               const SizedBox(height: AppSpacing.md),
-              AppTextField(label: 'Remarks', controller: remarksController),
+              AppTextField(label: 'Remarks', hint: 'Add your remarks', controller: remarksController),
               const SizedBox(height: AppSpacing.lg),
               AppButton(
                 label: 'Record Payment',

@@ -152,6 +152,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: AppSpacing.md),
                   AppTextField(
                     label: 'Password',
+                    hint: 'Enter your password',
                     controller: _passwordController,
                     prefixIcon: Icons.lock_outline,
                     obscureText: true,

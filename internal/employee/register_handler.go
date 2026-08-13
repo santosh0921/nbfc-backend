@@ -45,40 +45,50 @@ func RegisterHandler(c *gin.Context) {
 		return
 	}
 
+	// The success response below is deliberately identical whether this
+	// name was free or already taken — LoginHandler was specifically
+	// hardened (see its doc comment) to return the same generic 401 for
+	// both "wrong password" and "no such account" so a caller can never
+	// learn which employee names are real. Returning a distinct 409 here
+	// for "name already exists" would silently undo that: an
+	// unauthenticated caller could sweep a list of guessed names and use
+	// the 201/409 split as an oracle to build a validated username list
+	// for a credential-stuffing run against /employee/login. So a
+	// duplicate name is treated as a normal, silent no-op — nothing is
+	// created, but the response gives no way to tell.
 	var existing models.Employee
 	err := database.DB.Where("LOWER(name) = LOWER(?)", name).First(&existing).Error
-	if err == nil {
-		c.JSON(http.StatusConflict, gin.H{"message": "An account with this name already exists. Try logging in, or contact your admin."})
-		return
-	}
-	if err != gorm.ErrRecordNotFound {
+	if err != nil && err != gorm.ErrRecordNotFound {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Database error"})
 		return
 	}
+	nameTaken := err == nil
 
-	hash, err := hashPassword(req.Password)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to hash password"})
-		return
-	}
+	if !nameTaken {
+		hash, err := hashPassword(req.Password)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to hash password"})
+			return
+		}
 
-	emp := models.Employee{
-		Code:         generateEmployeeCode(name),
-		Name:         name,
-		PasswordHash: hash,
-		Role:         req.Role,
-		BranchCity:   strings.TrimSpace(req.BranchCity),
-		AgencyID:     0, // assigned by the admin at approval time
-		Active:       true,
-		Approved:     false,
-	}
-	if err := database.DB.Create(&emp).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not create account"})
-		return
+		emp := models.Employee{
+			Code:         generateEmployeeCode(name),
+			Name:         name,
+			PasswordHash: hash,
+			Role:         req.Role,
+			BranchCity:   strings.TrimSpace(req.BranchCity),
+			AgencyID:     0, // assigned by the admin at approval time
+			Active:       true,
+			Approved:     false,
+		}
+		if err := database.DB.Create(&emp).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not create account"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "Account created. An admin needs to approve it before you can log in.",
+		"message": "If this name is available, your account request has been received. An admin needs to approve it before you can log in — if you already have an account, contact your admin instead.",
 	})
 }
 

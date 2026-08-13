@@ -3,14 +3,17 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/auth_api_service.dart';
+import '../../core/network/credit_score_api_service.dart';
 import '../../core/network/emi_api_service.dart';
 import '../../core/network/notification_api_service.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/services/active_loan_loader.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/dashboard_tour.dart';
 import '../../core/widgets/section_header.dart';
 import '../../mock/mock_data.dart';
+import '../../models/active_loan.dart';
 import '../../models/emi_schedule.dart';
 import '../../models/loan_product.dart';
 import '../notifications/notifications_screen.dart';
@@ -32,6 +35,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late Future<EmiDashboardSummary?> _emiSummaryFuture;
+  late Future<ActiveLoan?> _activeLoanFuture;
+  late Future<CreditScoreResult?> _creditScoreFuture;
 
   /// True only when there's at least one unread "big" notification (a
   /// Sanction/Disbursement Letter ready to sign) — the bell only rings
@@ -70,6 +75,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _emiSummaryFuture = _loadEmiSummary();
+    _activeLoanFuture = _loadActiveLoan();
+    _creditScoreFuture = _loadCreditScore();
     // Auto-plays on every fresh launch (Home's State is only created once
     // per app session — this doesn't re-fire on tab switches).
     WidgetsBinding.instance.addPostFrameCallback((_) => _startTour());
@@ -153,13 +160,41 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
+  /// Backs the EMI reminder card — used to always show MockData's fake
+  /// "Personal Loan, ₹12,450 due" regardless of what the customer
+  /// actually owed. Same non-blocking, resolves-to-null-on-failure
+  /// pattern as [_loadEmiSummary].
+  Future<ActiveLoan?> _loadActiveLoan() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return null;
+    try {
+      return await ActiveLoanLoader.load(token);
+    } on ApiException {
+      return null;
+    }
+  }
+
+  /// Backs the pre-approved + credit score cards — used to always show
+  /// MockData's fake 785/"Excellent" and a fake pre-approved amount for
+  /// every customer regardless of their real credit profile.
+  Future<CreditScoreResult?> _loadCreditScore() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return null;
+    try {
+      return await CreditScoreApiService.get(token);
+    } on ApiException {
+      return null;
+    }
+  }
+
   void _startTour() {
     DashboardTour.start(context, DashboardTourKeys.homeTourSteps());
   }
 
-  void _showCongratulationsNotification() {
-    if (!mounted) return;
-    final amount = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(MockData.preApprovedAmount);
+  Future<void> _showCongratulationsNotification() async {
+    final result = await _creditScoreFuture;
+    if (!mounted || result == null || result.preApprovedAmount <= 0) return;
+    final amount = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(result.preApprovedAmount);
     NotificationService.instance.show(
       title: 'Congratulations!',
       body: 'You\'re pre-approved for $amount. Apply now with zero extra paperwork.',
@@ -254,33 +289,53 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
               sliver: SliverToBoxAdapter(
-                child: PreApprovedCard(
-                  key: DashboardTourKeys.preApprovedCard,
-                  amount: MockData.preApprovedAmount,
-                  onApply: () => context.push('/quick-apply'),
+                child: FutureBuilder<CreditScoreResult?>(
+                  future: _creditScoreFuture,
+                  builder: (context, snapshot) {
+                    final amount = snapshot.data?.preApprovedAmount ?? 0;
+                    if (amount <= 0) return const SizedBox.shrink();
+                    return PreApprovedCard(
+                      key: DashboardTourKeys.preApprovedCard,
+                      amount: amount,
+                      onApply: () => context.push('/quick-apply'),
+                    );
+                  },
                 ),
               ),
             ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               sliver: SliverToBoxAdapter(
-                child: CreditScoreCard(
-                  score: MockData.creditScore,
-                  band: MockData.creditScoreBand,
-                  onTap: () => context.push('/credit-score'),
+                child: FutureBuilder<CreditScoreResult?>(
+                  future: _creditScoreFuture,
+                  builder: (context, snapshot) {
+                    final result = snapshot.data;
+                    if (result == null) return const SizedBox.shrink();
+                    return CreditScoreCard(
+                      score: result.score,
+                      band: result.band,
+                      onTap: () => context.push('/credit-score'),
+                    );
+                  },
                 ),
               ),
             ),
-            if (MockData.activeLoans.isNotEmpty)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                sliver: SliverToBoxAdapter(
-                  child: EmiReminderCard(
-                    loan: MockData.activeLoans.first,
-                    onPayNow: () => context.push('/payments'),
-                  ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: FutureBuilder<ActiveLoan?>(
+                  future: _activeLoanFuture,
+                  builder: (context, snapshot) {
+                    final loan = snapshot.data;
+                    if (loan == null) return const SizedBox.shrink();
+                    return EmiReminderCard(
+                      loan: loan,
+                      onPayNow: () => context.push('/payments'),
+                    );
+                  },
                 ),
               ),
+            ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               sliver: SliverToBoxAdapter(
