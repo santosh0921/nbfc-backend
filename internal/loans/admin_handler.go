@@ -40,6 +40,55 @@ func AdminGetLoanHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, withReferences(loan))
 }
 
+// AdminReassignLoanHandler handles POST /admin/loans/:id/reassign — moves
+// a loan's verification assignment to a different (or first-time)
+// employee. Exists mainly to recover a loan that was auto-assigned (see
+// findVerificationEmployee, internal/loans/service.go) to an employee who
+// turned out to be unusable for it — most notably a self-registered
+// employee still awaiting approval, whose loans were invisible to
+// everyone since that employee couldn't log in to act on them. Only
+// allowed while the loan hasn't already moved past verification.
+func AdminReassignLoanHandler(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var body struct {
+		EmployeeID uint `json:"employeeId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	var loan models.LoanApplication
+	if err := database.DB.First(&loan, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Loan not found"})
+		return
+	}
+	if loan.Status != models.LoanStatusSubmitted && loan.Status != models.LoanStatusAssigned {
+		c.JSON(http.StatusConflict, gin.H{"message": "Loan has already moved past verification and can no longer be reassigned"})
+		return
+	}
+
+	var emp models.Employee
+	if err := database.DB.First(&emp, body.EmployeeID).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Employee not found"})
+		return
+	}
+	if !emp.Active || !emp.Approved {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "That employee is not active/approved and cannot take this assignment"})
+		return
+	}
+
+	loan.AssignedEmployeeID = &emp.ID
+	loan.Status = models.LoanStatusAssigned
+	database.DB.Save(&loan)
+	createNotification("employee", itoa(emp.ID), "New verification task",
+		"Loan application #"+itoa(loan.ID)+" ("+loan.Category+") assigned to you for verification.")
+	audit.Record(c.GetString("admin_username"), "loan.reassign", "loan", strconv.Itoa(int(loan.ID)),
+		"Reassigned loan #"+itoa(loan.ID)+" to employee "+emp.Code+" ("+emp.Name+")")
+
+	c.JSON(http.StatusOK, withReferences(loan))
+}
+
 // AdminDecisionHandler handles POST /admin/loans/:id/decision
 func AdminDecisionHandler(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))

@@ -17,15 +17,20 @@ var autoApproveCategories = map[string]bool{}
 
 // findVerificationEmployee: exact case-insensitive city match against
 // employees.branch_city; if none found, falls back to least-loaded (fewest
-// current "assigned" tasks) active verification employee.
+// current "assigned" tasks) active verification employee. Only ever
+// considers Approved employees — a self-registered employee awaiting
+// admin approval (see internal/employee/register_handler.go) is Active
+// but cannot log in yet, so assigning a loan to one would make that loan
+// invisible in the employee app to literally everyone until that specific
+// employee is approved.
 func findVerificationEmployee(city string) *models.Employee {
 	var emp models.Employee
-	err := database.DB.Where("role = ? AND active = ? AND LOWER(branch_city) = LOWER(?)", "verification", true, city).First(&emp).Error
+	err := database.DB.Where("role = ? AND active = ? AND approved = ? AND LOWER(branch_city) = LOWER(?)", "verification", true, true, city).First(&emp).Error
 	if err == nil {
 		return &emp
 	}
 	var emps []models.Employee
-	database.DB.Where("role = ? AND active = ?", "verification", true).Find(&emps)
+	database.DB.Where("role = ? AND active = ? AND approved = ?", "verification", true, true).Find(&emps)
 	if len(emps) == 0 {
 		return nil
 	}

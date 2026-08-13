@@ -75,6 +75,7 @@ func RegisterRoutes(router *gin.Engine) {
 	adminGroup.GET("/loans", loans.AdminListLoansHandler)
 	adminGroup.GET("/loans/:id", loans.AdminGetLoanHandler)
 	adminGroup.POST("/loans/:id/decision", loans.AdminDecisionHandler)
+	adminGroup.POST("/loans/:id/reassign", loans.AdminReassignLoanHandler)
 	adminGroup.POST("/loans/:id/disburse", loans.AdminDisburseHandler)
 	adminGroup.GET("/loans/:id/documents", documents.AdminListLoanDocumentsHandler)
 	adminGroup.GET("/loans/:id/emi-schedule", loans.AdminEmiScheduleHandler)
