@@ -10,14 +10,15 @@ class ApiClient {
   ApiClient(this._secureStorage)
       : dio = Dio(BaseOptions(
           baseUrl: AppConfig.current.apiBaseUrl,
-          connectTimeout: const Duration(seconds: 15),
           // The backend runs on Render's free tier, which spins the
           // service down after inactivity and can take 30-50s to cold-
-          // start on the next request — a request landing during that
-          // window with the old 15s receiveTimeout would time out before
-          // the backend ever got a chance to respond, surfacing as a
-          // generic connection failure with nothing pointing at the real
-          // cause.
+          // start on the next request. During that window Render doesn't
+          // even accept the TCP connection until the app has finished
+          // booting, so a short connectTimeout dies before the backend
+          // gets a chance to respond at all — not just a slow response,
+          // the connection attempt itself stalls. Both timeouts need to
+          // outlast the cold-start window, not just receiveTimeout.
+          connectTimeout: const Duration(seconds: 45),
           receiveTimeout: const Duration(seconds: 45),
         )) {
     dio.interceptors.addAll([

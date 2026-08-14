@@ -12,7 +12,14 @@ class ApiClient {
   ApiClient._();
 
   static const String baseUrl = 'https://nbfc-backend-gr1t.onrender.com';
-  static const Duration _timeout = Duration(seconds: 15);
+  // The backend runs on Render's free tier, which spins the service down
+  // after inactivity and can take 30-50s to cold-start on the next
+  // request — Render won't even accept the connection until the app has
+  // finished booting. A 15s timeout died well inside that window on
+  // every request that happened to hit a cold backend, surfacing as
+  // "could not reach the server" for what was really just a slow but
+  // otherwise working backend.
+  static const Duration _timeout = Duration(seconds: 45);
 
   static Map<String, String> _headers(String? token) => {
         'Content-Type': 'application/json',
