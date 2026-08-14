@@ -11,7 +11,6 @@ import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/utils/demo_call.dart';
 import '../../../../core/widgets/app_badge.dart';
 import '../../../../core/widgets/app_button.dart';
-import '../../../auth/presentation/providers/auth_provider.dart' as employee_auth;
 import '../../../visit_verification/presentation/pages/verification_flow_page.dart';
 import '../../domain/entities/case_entity.dart';
 import '../../domain/repositories/cases_repository.dart';
@@ -192,8 +191,13 @@ Future<void> _callAndConfirm(BuildContext context, CaseEntity caseItem) async {
 /// visit flow.
 const _postCallScreenshotChecklist = ['Customer Photo', 'Aadhaar Card SS', 'PAN Card SS', 'Customer Signature SS'];
 
+/// Shown to the customer as the caller's identity on every employee-
+/// initiated video call — never the individual employee's own name.
+/// Customers should recognize who's calling as "the company", not have
+/// to trust an unfamiliar personal name mid-KYC.
+const kCallerCompanyName = 'One Finance Jayashri Capital';
+
 Future<void> _startVideoCall(BuildContext context, CaseEntity caseItem) async {
-  final employeeName = context.read<employee_auth.AuthProvider>().employee?.name ?? 'Field Officer';
   final token = await ServiceLocator.instance.get<SecureStorageService>().read('auth_token');
   if (token == null || !context.mounted) return;
   final callService = CallService(wsBaseUrl: AppConfig.current.apiBaseUrl);
@@ -204,7 +208,7 @@ Future<void> _startVideoCall(BuildContext context, CaseEntity caseItem) async {
         token: token,
         loanId: caseItem.id,
         isCaller: true,
-        localDisplayName: employeeName,
+        localDisplayName: kCallerCompanyName,
         peerLabel: caseItem.customerName,
       ),
     ),
