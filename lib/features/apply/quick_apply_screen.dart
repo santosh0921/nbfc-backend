@@ -110,10 +110,17 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
   final _aadhaarNumberController = TextEditingController();
   bool _aadhaarConsent = false;
   File? _photoFile;
+  File? _aadhaarFile;
+  File? _panFile;
+  File? _electricityBillFile;
+  File? _bankStatementFile;
+  File? _rentalAgreementFile;
 
   // Business Loan only — additional required documents.
   bool _gstCertificateVerified = false;
   bool _businessPremisesVerified = false;
+  File? _gstCertificateFile;
+  File? _businessPremisesFile;
 
   // The field displays the number grouped as "1234 5678 9012" for
   // readability, so every length/validity check needs the spaces
@@ -379,6 +386,34 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
       visitTimeSlot: _visitTimeSlot,
     );
     _applicationId = 'NBFC-APP-${loan.id}';
+
+    // Persist every KYC document scan the customer picked — previously
+    // only the typed Aadhaar/PAN numbers and the selfie were saved; the
+    // Aadhaar/PAN/bill/statement/etc. images themselves never reached the
+    // backend's Document store, so they never showed up for admin review.
+    await Future.wait([
+      _uploadDocIfPresent(token, loan.id, 'aadhaar', _aadhaarFile),
+      _uploadDocIfPresent(token, loan.id, 'pan', _panFile),
+      _uploadDocIfPresent(token, loan.id, 'electricity_bill', _electricityBillFile),
+      _uploadDocIfPresent(token, loan.id, 'bank_statement', _bankStatementFile),
+      _uploadDocIfPresent(token, loan.id, 'rental_agreement', _rentalAgreementFile),
+      _uploadDocIfPresent(token, loan.id, 'gst_certificate', _gstCertificateFile),
+      _uploadDocIfPresent(token, loan.id, 'business_premises', _businessPremisesFile),
+    ]);
+  }
+
+  Future<void> _uploadDocIfPresent(String token, int loanId, String docType, File? file) async {
+    if (file == null) return;
+    final isPdf = file.path.toLowerCase().endsWith('.pdf');
+    final bytes = await file.readAsBytes();
+    await _submitOrSkipIfExists(() => KycApiService.uploadDocument(
+          token,
+          docType: docType,
+          fileName: file.uri.pathSegments.last,
+          mimeType: isPdf ? 'application/pdf' : 'image/jpeg',
+          dataBase64: base64Encode(bytes),
+          loanId: loanId,
+        ));
   }
 
   Future<void> _submit() async {
@@ -552,14 +587,21 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
                     aadhaarNumberController: _aadhaarNumberController,
                     aadhaarConsent: _aadhaarConsent,
                     onAadhaarConsentChanged: (v) => setState(() => _aadhaarConsent = v ?? false),
+                    onAadhaarFileCaptured: (f) => _aadhaarFile = f,
+                    onPanFileCaptured: (f) => _panFile = f,
                     onElectricityBillChanged: (v) => setState(() => _electricityBillVerified = v),
+                    onElectricityBillFileCaptured: (f) => _electricityBillFile = f,
                     onBankStatementChanged: (v) => setState(() => _bankStatementVerified = v),
+                    onBankStatementFileCaptured: (f) => _bankStatementFile = f,
                     isRented: _isRented,
                     onIsRentedChanged: (v) => setState(() => _isRented = v ?? false),
                     onRentalAgreementChanged: (v) => setState(() => _rentalAgreementVerified = v),
+                    onRentalAgreementFileCaptured: (f) => _rentalAgreementFile = f,
                     isBusinessLoan: _isBusinessLoan,
                     onGstCertificateChanged: (v) => setState(() => _gstCertificateVerified = v),
+                    onGstCertificateFileCaptured: (f) => _gstCertificateFile = f,
                     onBusinessPremisesChanged: (v) => setState(() => _businessPremisesVerified = v),
+                    onBusinessPremisesFileCaptured: (f) => _businessPremisesFile = f,
                   ),
                   _BankDetailsStep(
                     formKey: _bankFormKey,
@@ -966,14 +1008,21 @@ class _KycDocumentsStep extends StatelessWidget {
     required this.aadhaarNumberController,
     required this.aadhaarConsent,
     required this.onAadhaarConsentChanged,
+    required this.onAadhaarFileCaptured,
+    required this.onPanFileCaptured,
     required this.onElectricityBillChanged,
+    required this.onElectricityBillFileCaptured,
     required this.onBankStatementChanged,
+    required this.onBankStatementFileCaptured,
     required this.isRented,
     required this.onIsRentedChanged,
     required this.onRentalAgreementChanged,
+    required this.onRentalAgreementFileCaptured,
     required this.isBusinessLoan,
     required this.onGstCertificateChanged,
+    required this.onGstCertificateFileCaptured,
     required this.onBusinessPremisesChanged,
+    required this.onBusinessPremisesFileCaptured,
   });
 
   final ValueChanged<bool> onAadhaarChanged;
@@ -983,16 +1032,23 @@ class _KycDocumentsStep extends StatelessWidget {
   final TextEditingController aadhaarNumberController;
   final bool aadhaarConsent;
   final ValueChanged<bool?> onAadhaarConsentChanged;
+  final ValueChanged<File> onAadhaarFileCaptured;
+  final ValueChanged<File> onPanFileCaptured;
   final ValueChanged<bool> onElectricityBillChanged;
+  final ValueChanged<File> onElectricityBillFileCaptured;
   final ValueChanged<bool> onBankStatementChanged;
+  final ValueChanged<File> onBankStatementFileCaptured;
   final bool isRented;
   final ValueChanged<bool?> onIsRentedChanged;
   final ValueChanged<bool> onRentalAgreementChanged;
+  final ValueChanged<File> onRentalAgreementFileCaptured;
 
   /// Business Loan only — two extra required documents.
   final bool isBusinessLoan;
   final ValueChanged<bool> onGstCertificateChanged;
+  final ValueChanged<File> onGstCertificateFileCaptured;
   final ValueChanged<bool> onBusinessPremisesChanged;
+  final ValueChanged<File> onBusinessPremisesFileCaptured;
 
   @override
   Widget build(BuildContext context) {
@@ -1017,6 +1073,7 @@ class _KycDocumentsStep extends StatelessWidget {
           icon: Icons.fingerprint_rounded,
           color: const Color(0xFFFF9933),
           onStatusChanged: onAadhaarChanged,
+          onFileCaptured: onAadhaarFileCaptured,
         ),
         const SizedBox(height: 10),
         DocumentUploadTile(
@@ -1024,6 +1081,7 @@ class _KycDocumentsStep extends StatelessWidget {
           icon: Icons.badge_rounded,
           color: const Color(0xFF1565C0),
           onStatusChanged: onPanChanged,
+          onFileCaptured: onPanFileCaptured,
         ),
         const SizedBox(height: 10),
         DocumentUploadTile(
@@ -1058,6 +1116,7 @@ class _KycDocumentsStep extends StatelessWidget {
           icon: Icons.bolt_rounded,
           color: const Color(0xFFF9A825),
           onStatusChanged: onElectricityBillChanged,
+          onFileCaptured: onElectricityBillFileCaptured,
         ),
         const SizedBox(height: 10),
         DocumentUploadTile(
@@ -1065,6 +1124,7 @@ class _KycDocumentsStep extends StatelessWidget {
           icon: Icons.receipt_long_rounded,
           color: const Color(0xFF2E7D32),
           onStatusChanged: onBankStatementChanged,
+          onFileCaptured: onBankStatementFileCaptured,
         ),
         const SizedBox(height: 4),
         CheckboxListTile(
@@ -1082,6 +1142,7 @@ class _KycDocumentsStep extends StatelessWidget {
             icon: Icons.home_work_rounded,
             color: const Color(0xFF6D4C41),
             onStatusChanged: onRentalAgreementChanged,
+            onFileCaptured: onRentalAgreementFileCaptured,
           ),
         ],
         if (isBusinessLoan) ...[
@@ -1098,6 +1159,7 @@ class _KycDocumentsStep extends StatelessWidget {
             icon: Icons.receipt_rounded,
             color: const Color(0xFF00838F),
             onStatusChanged: onGstCertificateChanged,
+            onFileCaptured: onGstCertificateFileCaptured,
           ),
           const SizedBox(height: 10),
           DocumentUploadTile(
@@ -1105,6 +1167,7 @@ class _KycDocumentsStep extends StatelessWidget {
             icon: Icons.storefront_rounded,
             color: const Color(0xFFAD1457),
             onStatusChanged: onBusinessPremisesChanged,
+            onFileCaptured: onBusinessPremisesFileCaptured,
           ),
         ],
         const SizedBox(height: 12),

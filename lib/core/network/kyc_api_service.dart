@@ -95,4 +95,25 @@ class KycApiService {
   static Future<Map<String, dynamic>> getKycStatus(String token) async {
     return ApiClient.get('/auth/kyc/status', token: token);
   }
+
+  /// Persists a KYC document (Aadhaar/PAN/bill/statement/etc. scan) to the
+  /// backend's generic Document store so it's visible in the admin panel —
+  /// distinct from [createAadhaar]/[createPan], which only save the typed
+  /// number, not the actual document image/PDF.
+  static Future<void> uploadDocument(
+    String token, {
+    required String docType,
+    required String fileName,
+    required String mimeType,
+    required String dataBase64,
+    int? loanId,
+  }) async {
+    await ApiClient.post('/auth/documents', {
+      'docType': docType,
+      'fileName': fileName,
+      'mimeType': mimeType,
+      'dataBase64': dataBase64,
+      if (loanId != null) 'loanId': loanId,
+    }, token: token);
+  }
 }
