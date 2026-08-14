@@ -42,25 +42,28 @@ class _LanguageScreenState extends State<LanguageScreen> {
             const SizedBox(height: 16),
             PremiumCard(
               padding: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  for (int i = 0; i < _languages.length; i++) ...[
-                    RadioListTile<String>(
-                      value: _languages[i].$2,
-                      groupValue: _selected,
-                      activeColor: AppColors.primary,
-                      title: Text(_languages[i].$1),
-                      subtitle: _languages[i].$2 != _languages[i].$1 ? Text(_languages[i].$2) : null,
-                      onChanged: (v) {
-                        setState(() => _selected = v!);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('App language set to ${_languages[i].$2}.')),
-                        );
-                      },
-                    ),
-                    if (i != _languages.length - 1) const Divider(height: 1, indent: 16),
+              child: RadioGroup<String>(
+                groupValue: _selected,
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() => _selected = v);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('App language set to $v.')),
+                  );
+                },
+                child: Column(
+                  children: [
+                    for (int i = 0; i < _languages.length; i++) ...[
+                      RadioListTile<String>(
+                        value: _languages[i].$2,
+                        activeColor: AppColors.primary,
+                        title: Text(_languages[i].$1),
+                        subtitle: _languages[i].$2 != _languages[i].$1 ? Text(_languages[i].$2) : null,
+                      ),
+                      if (i != _languages.length - 1) const Divider(height: 1, indent: 16),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ],

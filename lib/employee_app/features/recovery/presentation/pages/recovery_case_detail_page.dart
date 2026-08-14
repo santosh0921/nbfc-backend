@@ -479,7 +479,7 @@ class _RecoveryActionsCard extends StatelessWidget {
               AppTextField(label: 'Amount (₹)', hint: 'Enter amount', controller: amountController, keyboardType: TextInputType.number),
               const SizedBox(height: AppSpacing.md),
               DropdownButtonFormField<PaymentMode>(
-                value: mode,
+                initialValue: mode,
                 decoration: const InputDecoration(labelText: 'Payment Mode'),
                 items: PaymentMode.values.map((m) => DropdownMenuItem(value: m, child: Text(m.label))).toList(),
                 onChanged: (value) => setSheetState(() => mode = value ?? mode),

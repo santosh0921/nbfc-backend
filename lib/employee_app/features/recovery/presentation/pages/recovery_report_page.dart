@@ -138,7 +138,7 @@ class _RecoveryReportPageState extends State<RecoveryReportPage> {
                   Text('Recovery Status', style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: AppSpacing.sm),
                   DropdownButtonFormField<RecoveryStatus>(
-                    value: report.status,
+                    initialValue: report.status,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Status'),
                     items: RecoveryStatus.values.map((s) => DropdownMenuItem(value: s, child: Text(s.label))).toList(),

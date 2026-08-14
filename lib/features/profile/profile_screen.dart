@@ -168,7 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: 'Dark Mode',
                   trailing: Switch(
                     value: themeProvider.isDark,
-                    activeColor: AppColors.primary,
+                    activeThumbColor: AppColors.primary,
                     onChanged: (_) => themeProvider.toggle(),
                   ),
                   onTap: themeProvider.toggle,

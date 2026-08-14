@@ -123,11 +123,11 @@ class _GaugePainter extends CustomPainter {
       sweepAngle,
       false,
       Paint()
-        ..shader = SweepGradient(
+        ..shader = const SweepGradient(
           startAngle: startAngle,
           endAngle: startAngle + sweepAngle,
           colors: _zoneColors,
-          stops: const [0.0, 0.30, 0.55, 1.0],
+          stops: [0.0, 0.30, 0.55, 1.0],
         ).createShader(track)
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth
@@ -157,11 +157,11 @@ class _GaugePainter extends CustomPainter {
         filledSweep,
         false,
         Paint()
-          ..shader = SweepGradient(
+          ..shader = const SweepGradient(
             startAngle: startAngle,
             endAngle: startAngle + sweepAngle,
             colors: _zoneColors,
-            stops: const [0.0, 0.30, 0.55, 1.0],
+            stops: [0.0, 0.30, 0.55, 1.0],
           ).createShader(track)
           ..style = PaintingStyle.stroke
           ..strokeWidth = strokeWidth

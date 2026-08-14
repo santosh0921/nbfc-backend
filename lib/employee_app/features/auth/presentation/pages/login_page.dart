@@ -200,7 +200,7 @@ class _LoginPageState extends State<LoginPage> {
                         style: Theme.of(context).textTheme.labelLarge),
                     const SizedBox(height: AppSpacing.xs),
                     DropdownButtonFormField<String>(
-                      value: _selectedCity,
+                      initialValue: _selectedCity,
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.location_city_outlined),
                         border: OutlineInputBorder(),

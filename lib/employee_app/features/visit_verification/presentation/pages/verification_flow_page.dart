@@ -909,15 +909,21 @@ class _ReviewStep extends StatelessWidget {
               children: [
                 Text('Recommendation', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.sm),
-                for (final r in _recommendations)
-                  RadioListTile<String>(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(r),
-                    value: r,
-                    groupValue: draft.recommendation,
-                    activeColor: AppColors.secondary,
-                    onChanged: (value) => context.read<VerificationDraftProvider>().setRecommendation(value!),
+                RadioGroup<String>(
+                  groupValue: draft.recommendation,
+                  onChanged: (value) => context.read<VerificationDraftProvider>().setRecommendation(value!),
+                  child: Column(
+                    children: [
+                      for (final r in _recommendations)
+                        RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(r),
+                          value: r,
+                          activeColor: AppColors.secondary,
+                        ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),

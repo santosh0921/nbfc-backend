@@ -68,7 +68,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen> with Widget
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('$label permission was denied. Enable it from system Settings.'),
-        action: SnackBarAction(label: 'Settings', onPressed: PermissionService.openSettings),
+        action: const SnackBarAction(label: 'Settings', onPressed: PermissionService.openSettings),
       ),
     );
   }

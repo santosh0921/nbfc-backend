@@ -27,8 +27,8 @@ class QuickAction {
 /// frequently-needed actions only.
 final List<QuickAction> quickActions = [
   QuickAction(icon: Icons.add_task_outlined, label: 'New Visit', onTap: (context) async => context.goNamed(RouteNames.cases)),
-  QuickAction(icon: Icons.qr_code_scanner_outlined, label: 'Scan Doc', onTap: _scanDocument),
-  QuickAction(icon: Icons.map_outlined, label: 'Route Map', onTap: _openRouteMap),
+  const QuickAction(icon: Icons.qr_code_scanner_outlined, label: 'Scan Doc', onTap: _scanDocument),
+  const QuickAction(icon: Icons.map_outlined, label: 'Route Map', onTap: _openRouteMap),
   QuickAction(icon: Icons.description_outlined, label: 'Reports', onTap: (context) async => _pushHistory(context)),
   QuickAction(icon: Icons.diamond_outlined, label: 'Gold Appraisal', onTap: (context) async => _showGoldAppraisalForm(context)),
   QuickAction(icon: Icons.home_work_outlined, label: 'Property Verify', onTap: (context) async => _showPropertyForm(context)),

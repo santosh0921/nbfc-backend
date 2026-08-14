@@ -86,7 +86,7 @@ class _PhoneMockup extends StatelessWidget {
           Container(
             width: 30,
             height: 30,
-            decoration: BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+            decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
             child: Icon(_iconFor(scene), color: Colors.white, size: 16),
           ),
           const SizedBox(height: 14),
@@ -122,7 +122,7 @@ class _ScreenContent extends StatelessWidget {
             (_) => Container(
               width: 8,
               height: 8,
-              decoration: BoxDecoration(color: AppColors.borderLight, shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: AppColors.borderLight, shape: BoxShape.circle),
             ),
           ),
         );
@@ -135,14 +135,14 @@ class _ScreenContent extends StatelessWidget {
               margin: const EdgeInsets.symmetric(horizontal: 2),
               width: 6,
               height: 6,
-              decoration: BoxDecoration(color: AppColors.secondaryDark, shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: AppColors.secondaryDark, shape: BoxShape.circle),
             ),
           ),
         );
       case AuthScene.mpin:
-        return Icon(Icons.lock_open_rounded, color: AppColors.secondaryDark, size: 26);
+        return const Icon(Icons.lock_open_rounded, color: AppColors.secondaryDark, size: 26);
       case AuthScene.biometric:
-        return Icon(Icons.fingerprint_rounded, color: AppColors.secondaryDark, size: 30);
+        return const Icon(Icons.fingerprint_rounded, color: AppColors.secondaryDark, size: 30);
     }
   }
 }
@@ -205,9 +205,9 @@ class _PlantPot extends StatelessWidget {
           Container(
             width: 20,
             height: 14,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.secondary,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(4)),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(4)),
             ),
           ),
         ],

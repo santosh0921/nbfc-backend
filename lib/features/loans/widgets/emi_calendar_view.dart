@@ -116,7 +116,7 @@ class _EmiCalendarViewState extends State<EmiCalendarView> {
             },
           ),
           const SizedBox(height: 8),
-          Wrap(
+          const Wrap(
             spacing: 14,
             runSpacing: 4,
             children: [

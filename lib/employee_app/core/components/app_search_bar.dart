@@ -25,7 +25,7 @@ class AppSearchBar extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(Icons.search, size: 20, color: AppColors.textSecondary),
+                const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: TextField(

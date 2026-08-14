@@ -57,7 +57,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     title: const Text('Biometric Login'),
                     subtitle: const Text('Use fingerprint or face unlock'),
                     value: _biometricEnabled,
-                    activeColor: AppColors.primary,
+                    activeThumbColor: AppColors.primary,
                     onChanged: (v) => setState(() => _biometricEnabled = v),
                   ),
                 ],

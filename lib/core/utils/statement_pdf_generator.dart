@@ -22,7 +22,7 @@ class StatementPdfGenerator {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('NBFC PREMIUM', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF0057FF))),
+              pw.Text('NBFC PREMIUM', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF0057FF))),
               pw.Text(_dateFmt.format(DateTime.now()), style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
             ],
           ),

@@ -272,7 +272,7 @@ class _ContactTabState extends State<_ContactTab> {
                 Text('Category', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _category,
+                  initialValue: _category,
                   items: [for (final c in _categories) DropdownMenuItem(value: c, child: Text(c))],
                   onChanged: (v) => setState(() => _category = v ?? _category),
                   decoration: InputDecoration(

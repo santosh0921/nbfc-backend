@@ -214,7 +214,7 @@ class _CaseCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              Icon(Icons.account_balance_outlined, size: 14, color: AppColors.textSecondary),
+              const Icon(Icons.account_balance_outlined, size: 14, color: AppColors.textSecondary),
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
@@ -225,7 +225,7 @@ class _CaseCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
-              Icon(Icons.currency_rupee, size: 14, color: AppColors.textSecondary),
+              const Icon(Icons.currency_rupee, size: 14, color: AppColors.textSecondary),
               Flexible(
                 child: Text(
                   caseItem.loanAmount.toStringAsFixed(0),

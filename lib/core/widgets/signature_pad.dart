@@ -285,7 +285,7 @@ class _SignatureFullscreenPageState extends State<_SignatureFullscreenPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              Text(
+              const Text(
                 'Draw your signature with your finger, then tap Done',
                 style: TextStyle(color: AppColors.textSecondaryLight, fontSize: 12.5),
               ),

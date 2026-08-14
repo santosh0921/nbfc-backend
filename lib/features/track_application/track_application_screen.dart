@@ -141,7 +141,7 @@ class _TrackApplicationScreenState extends State<TrackApplicationScreen> with Ti
               children: [
                 if (loans.length > 1) ...[
                   DropdownButtonFormField<LoanApplication>(
-                    value: loan,
+                    initialValue: loan,
                     decoration: const InputDecoration(labelText: 'Tracking', border: OutlineInputBorder()),
                     items: [
                       for (final l in loans)

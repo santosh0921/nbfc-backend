@@ -944,7 +944,7 @@ class _StateDropdown extends StatelessWidget {
         Text('State', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           hint: const Text('Select state'),
           items: [for (final s in IndiaLocations.states) DropdownMenuItem(value: s, child: Text(s))],
           onChanged: onChanged,
@@ -979,7 +979,7 @@ class _CityDropdown extends StatelessWidget {
         Text('City', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           hint: const Text('Select city'),
           items: [for (final c in cities) DropdownMenuItem(value: c, child: Text(c))],
           onChanged: onChanged,

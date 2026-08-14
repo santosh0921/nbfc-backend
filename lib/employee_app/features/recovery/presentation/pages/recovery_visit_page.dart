@@ -306,29 +306,29 @@ class _CustomerPresenceStepState extends State<_CustomerPresenceStep> {
               children: [
                 Text('Was the customer present?', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Present'),
-                        value: true,
-                        groupValue: visit.customerPresent,
-                        activeColor: AppColors.secondary,
-                        onChanged: (value) => context.read<RecoveryVisitProvider>().setCustomerPresent(value!),
+                RadioGroup<bool>(
+                  groupValue: visit.customerPresent,
+                  onChanged: (value) => context.read<RecoveryVisitProvider>().setCustomerPresent(value!),
+                  child: const Row(
+                    children: [
+                      Expanded(
+                        child: RadioListTile<bool>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('Present'),
+                          value: true,
+                          activeColor: AppColors.secondary,
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Not Present'),
-                        value: false,
-                        groupValue: visit.customerPresent,
-                        activeColor: AppColors.secondary,
-                        onChanged: (value) => context.read<RecoveryVisitProvider>().setCustomerPresent(value!),
+                      Expanded(
+                        child: RadioListTile<bool>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('Not Present'),
+                          value: false,
+                          activeColor: AppColors.secondary,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),

@@ -110,7 +110,7 @@ class ApplyFormDropdown<T> extends StatelessWidget {
         Text(label, style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         DropdownButtonFormField<T>(
-          value: value,
+          initialValue: value,
           items: [
             for (final item in items) DropdownMenuItem(value: item, child: Text(labelBuilder(item))),
           ],

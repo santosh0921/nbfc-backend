@@ -154,7 +154,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   Text('Role', style: Theme.of(context).textTheme.labelLarge),
                   const SizedBox(height: AppSpacing.xs),
                   DropdownButtonFormField<String>(
-                    value: _role,
+                    initialValue: _role,
                     decoration: const InputDecoration(prefixIcon: Icon(Icons.work_outline), border: OutlineInputBorder()),
                     items: [for (final r in _roles) DropdownMenuItem(value: r.value, child: Text(r.label))],
                     onChanged: (v) => setState(() => _role = v ?? _role),
