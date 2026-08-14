@@ -78,6 +78,7 @@ class CallService extends ChangeNotifier {
   final _ringtonePlayer = FlutterRingtonePlayer();
   bool _ringing = false;
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
+  bool _remoteDescriptionSet = false;
   Timer? _keepAliveTimer;
 
   // Public STUN only (no TURN relay configured) — this is a genuine
@@ -184,6 +185,8 @@ class CallService extends ChangeNotifier {
         break;
       case 'answer':
         await _pc?.setRemoteDescription(RTCSessionDescription(data['sdp'] as String, 'answer'));
+        _remoteDescriptionSet = true;
+        await _drainPendingCandidates();
         break;
       case 'ice-candidate':
         final cand = RTCIceCandidate(
@@ -191,13 +194,43 @@ class CallService extends ChangeNotifier {
           data['sdpMid'] as String?,
           data['sdpMLineIndex'] as int?,
         );
-        if (_pc == null) {
+        // Gating on `_pc == null` was the bug: on the caller's side, _pc
+        // is already non-null (created in _startAsCaller, before the
+        // offer is even sent) for the entire window until the answer's
+        // setRemoteDescription completes — so every candidate the callee
+        // sent in that window skipped the queue and went straight to
+        // addCandidate() on a connection with no remote description set
+        // yet. WebRTC rejects that (silently, since nothing here awaited
+        // or caught it), permanently losing that candidate — which is
+        // exactly the kind of one-sided ICE failure that shows up as a
+        // black remote-video screen on whichever party's candidates got
+        // dropped. The only correct gate is whether the remote
+        // description has actually been applied, not whether the
+        // RTCPeerConnection object merely exists.
+        if (_pc == null || !_remoteDescriptionSet) {
           _pendingRemoteCandidates.add(cand);
         } else {
-          await _pc!.addCandidate(cand);
+          try {
+            await _pc!.addCandidate(cand);
+          } catch (_) {
+            // Best-effort — losing one late candidate isn't fatal as
+            // long as others get through.
+          }
         }
         break;
     }
+  }
+
+  Future<void> _drainPendingCandidates() async {
+    if (_pc == null) return;
+    for (final c in _pendingRemoteCandidates) {
+      try {
+        await _pc!.addCandidate(c);
+      } catch (_) {
+        // Best-effort, see addCandidate note above.
+      }
+    }
+    _pendingRemoteCandidates.clear();
   }
 
   /// Callee-side: accept an incoming call — grabs local media and waits
@@ -238,10 +271,8 @@ class CallService extends ChangeNotifier {
   Future<void> _handleOffer(Map<String, dynamic> data) async {
     await _ensurePeerConnection();
     await _pc!.setRemoteDescription(RTCSessionDescription(data['sdp'] as String, 'offer'));
-    for (final c in _pendingRemoteCandidates) {
-      await _pc!.addCandidate(c);
-    }
-    _pendingRemoteCandidates.clear();
+    _remoteDescriptionSet = true;
+    await _drainPendingCandidates();
     final answer = await _pc!.createAnswer({'offerToReceiveAudio': 1, 'offerToReceiveVideo': 1});
     await _pc!.setLocalDescription(answer);
     _send({'type': 'answer', 'sdp': answer.sdp});
@@ -351,6 +382,8 @@ class CallService extends ChangeNotifier {
     _keepAliveTimer = null;
     _pc?.close();
     _pc = null;
+    _remoteDescriptionSet = false;
+    _pendingRemoteCandidates.clear();
     _localStream?.getTracks().forEach((t) => t.stop());
     _localStream?.dispose();
     _localStream = null;

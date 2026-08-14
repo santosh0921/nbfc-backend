@@ -59,6 +59,33 @@ func (r *room) leave(c *client) {
 	delete(r.clients, c)
 }
 
+// evictRole force-closes any existing connection(s) already in the room
+// under the same role before a new one joins — rooms are keyed only by
+// loanID with no per-call session identifier, so a connection left over
+// from a previous call attempt (app backgrounded mid-call, a dropped
+// network link the server hasn't noticed yet, a rapid double-tap on
+// "Start Video Call") could otherwise still be sitting in r.clients and
+// receive/interfere with a fresh call's signaling — e.g. a stray
+// leftover employee-role connection getting a customer's call-request
+// instead of (or in a race with) the real live one, which is exactly
+// the kind of thing that would make the wrong party appear to ring, or
+// the right party silently never ring at all. Closing the stale
+// connection's socket triggers its own readPump's error path, which
+// cleans it out of the room through the normal leave() flow.
+func (r *room) evictRole(role string, except *client) {
+	r.mu.Lock()
+	var stale []*client
+	for c := range r.clients {
+		if c.role == role && c != except {
+			stale = append(stale, c)
+		}
+	}
+	r.mu.Unlock()
+	for _, c := range stale {
+		_ = c.conn.Close()
+	}
+}
+
 // broadcastExcept relays a message to every OTHER client in the room —
 // with at most 2 participants (customer, employee) this is always
 // exactly "relay to the other party", but written generally in case a
@@ -143,6 +170,7 @@ func CallSignalHandler(c *gin.Context) {
 
 	r := getOrCreateRoom(loanID)
 	cl := &client{conn: conn, room: r, role: role, send: make(chan []byte, 16)}
+	r.evictRole(role, cl)
 	r.join(cl)
 	// Let the other party (if already connected) know someone joined —
 	// the caller can use this to start the offer/answer exchange rather

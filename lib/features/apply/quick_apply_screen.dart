@@ -19,6 +19,7 @@ import '../../core/services/notification_service.dart';
 import '../../core/widgets/success_celebration.dart';
 import '../../mock/india_locations.dart';
 import '../../models/loan_product.dart';
+import 'widgets/aadhaar_number_field.dart';
 import 'widgets/apply_form_field.dart';
 import 'widgets/bank_document_upload_tile.dart';
 import 'widgets/document_upload_tile.dart';
@@ -1000,20 +1001,32 @@ class _KycDocumentsStep extends StatelessWidget {
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
-        ApplyFormField(
-          label: 'Aadhaar Number',
+        AadhaarNumberField(
           controller: aadhaarNumberController,
-          hint: '12-digit Aadhaar number',
-          maxLength: 12,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           validator: (v) => (v == null || v.trim().length != 12) ? 'Enter a valid 12-digit Aadhaar number' : null,
         ),
-        DocumentUploadTile(label: 'Aadhaar Card', icon: Icons.fingerprint_rounded, onStatusChanged: onAadhaarChanged),
+        const SizedBox(height: 16),
+        DocumentUploadTile(
+          label: 'Aadhaar Card',
+          icon: Icons.fingerprint_rounded,
+          color: const Color(0xFFFF9933),
+          onStatusChanged: onAadhaarChanged,
+        ),
         const SizedBox(height: 10),
-        DocumentUploadTile(label: 'PAN Card', icon: Icons.badge_rounded, onStatusChanged: onPanChanged),
+        DocumentUploadTile(
+          label: 'PAN Card',
+          icon: Icons.badge_rounded,
+          color: const Color(0xFF1565C0),
+          onStatusChanged: onPanChanged,
+        ),
         const SizedBox(height: 10),
-        DocumentUploadTile(label: 'Photograph', icon: Icons.face_rounded, onStatusChanged: onPhotoChanged, onFileCaptured: onPhotoCaptured),
+        DocumentUploadTile(
+          label: 'Photograph',
+          icon: Icons.face_rounded,
+          color: const Color(0xFF8E24AA),
+          onStatusChanged: onPhotoChanged,
+          onFileCaptured: onPhotoCaptured,
+        ),
         const SizedBox(height: 4),
         CheckboxListTile(
           value: aadhaarConsent,
@@ -1037,12 +1050,14 @@ class _KycDocumentsStep extends StatelessWidget {
         DocumentUploadTile(
           label: 'Electricity Bill (Address Proof)',
           icon: Icons.bolt_rounded,
+          color: const Color(0xFFF9A825),
           onStatusChanged: onElectricityBillChanged,
         ),
         const SizedBox(height: 10),
         DocumentUploadTile(
           label: 'Bank Statement (Last 6 Months)',
           icon: Icons.receipt_long_rounded,
+          color: const Color(0xFF2E7D32),
           onStatusChanged: onBankStatementChanged,
         ),
         const SizedBox(height: 4),
@@ -1059,6 +1074,7 @@ class _KycDocumentsStep extends StatelessWidget {
           DocumentUploadTile(
             label: 'Rental Agreement',
             icon: Icons.home_work_rounded,
+            color: const Color(0xFF6D4C41),
             onStatusChanged: onRentalAgreementChanged,
           ),
         ],
@@ -1074,12 +1090,14 @@ class _KycDocumentsStep extends StatelessWidget {
           DocumentUploadTile(
             label: 'GST Certificate',
             icon: Icons.receipt_rounded,
+            color: const Color(0xFF00838F),
             onStatusChanged: onGstCertificateChanged,
           ),
           const SizedBox(height: 10),
           DocumentUploadTile(
             label: 'Proof of Business Premises',
             icon: Icons.storefront_rounded,
+            color: const Color(0xFFAD1457),
             onStatusChanged: onBusinessPremisesChanged,
           ),
         ],

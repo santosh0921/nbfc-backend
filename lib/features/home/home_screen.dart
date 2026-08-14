@@ -7,15 +7,20 @@ import '../../core/network/credit_score_api_service.dart';
 import '../../core/network/emi_api_service.dart';
 import '../../core/network/notification_api_service.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/router/scale_fade_route.dart';
 import '../../core/services/active_loan_loader.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/services/shown_big_notifications_store.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/big_notification_page.dart';
 import '../../core/widgets/dashboard_tour.dart';
 import '../../core/widgets/section_header.dart';
 import '../../mock/mock_data.dart';
 import '../../models/active_loan.dart';
+import '../../models/backend_notification.dart';
 import '../../models/emi_schedule.dart';
 import '../../models/loan_product.dart';
+import '../my_loans/my_loans_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'widgets/credit_score_card.dart';
 import 'widgets/emi_dashboard_summary_card.dart';
@@ -140,10 +145,53 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       if (hasImportantUnread) {
         _bellController.repeat();
       }
+      await _showBigNotificationIfNew(notifications);
     } on ApiException {
       // Non-fatal — bell simply stays still.
     } catch (_) {
       // Non-fatal.
+    }
+  }
+
+  /// A Sanction/Disbursement Letter needing the customer's signature
+  /// used to only ever show as a badge + bell-shake on this screen —
+  /// easy to notice and just as easy to ignore, for something that's
+  /// actually time-sensitive. This forces it in front of the customer
+  /// as a full-screen takeover exactly once per notification (tracked
+  /// via [ShownBigNotificationsStore] so it doesn't re-interrupt every
+  /// time the dashboard reloads while it's still unread).
+  Future<void> _showBigNotificationIfNew(List<BackendNotification> notifications) async {
+    for (final n in notifications) {
+      if (n.read) continue;
+      final info = LetterNotificationInfo.parse(n);
+      if (info == null) continue;
+      if (await ShownBigNotificationsStore.hasShown(n.id)) continue;
+
+      await ShownBigNotificationsStore.markShown(n.id);
+      if (!mounted) return;
+      await Navigator.of(context, rootNavigator: true).push(
+        ScaleFadeRoute(
+          builder: (_) => BigNotificationPage(
+            letterType: info.letterType,
+            body: n.body,
+            onReviewNow: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              Navigator.of(context, rootNavigator: true).push(
+                ScaleFadeRoute(
+                  builder: (_) => MyLoansScreen(
+                    initialLoanId: info.loanId,
+                    initialLetterType: info.letterType,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      // Only ever surface one at a time — if there's another, it'll show
+      // next time this loads (e.g. after the customer deals with this one
+      // and returns to the dashboard).
+      return;
     }
   }
 

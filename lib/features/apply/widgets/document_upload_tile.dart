@@ -19,11 +19,18 @@ class DocumentUploadTile extends StatefulWidget {
     required this.icon,
     required this.onStatusChanged,
     this.onFileCaptured,
+    this.color = AppColors.primary,
   });
 
   final String label;
   final IconData icon;
   final ValueChanged<bool> onStatusChanged;
+
+  /// Each document type gets its own recognizable color (Aadhaar orange,
+  /// PAN blue, electricity yellow, ...) so the icon+color combination is
+  /// distinguishable at a glance without having to read the label —
+  /// deliberately for customers who may not read comfortably.
+  final Color color;
 
   /// Reports the cropped image file once captured — used by the KYC step
   /// to submit the selfie/photograph to the backend as base64.
@@ -124,13 +131,14 @@ class _DocumentUploadTileState extends State<DocumentUploadTile> {
             )
           else
             Container(
-              width: 44,
-              height: 44,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: widget.color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
+                border: Border.all(color: widget.color.withValues(alpha: 0.3)),
               ),
-              child: Icon(widget.icon, color: AppColors.primary),
+              child: Icon(widget.icon, color: widget.color, size: 26),
             ),
           const SizedBox(width: 14),
           Expanded(child: Text(widget.label, style: theme.textTheme.titleSmall)),

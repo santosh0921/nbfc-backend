@@ -12,15 +12,23 @@ import (
 )
 
 type UserListItem struct {
-	ID                   string  `json:"id"`
-	Mobile               string  `json:"mobile"`
-	FirstName            string  `json:"first_name"`
-	LastName             string  `json:"last_name"`
-	IsMobileVerified     bool    `json:"is_mobile_verified"`
-	IsActive             bool    `json:"is_active"`
-	CompletionPercentage int     `json:"completion_percentage"`
-	KYCReviewStatus      string  `json:"kyc_review_status"`
-	CreatedAt            string  `json:"created_at"`
+	ID                   string `json:"id"`
+	Mobile               string `json:"mobile"`
+	FirstName            string `json:"first_name"`
+	LastName             string `json:"last_name"`
+	IsMobileVerified     bool   `json:"is_mobile_verified"`
+	IsActive             bool   `json:"is_active"`
+	CompletionPercentage int    `json:"completion_percentage"`
+	KYCReviewStatus      string `json:"kyc_review_status"`
+	// City is the customer's current-residence city from their KYC
+	// address record (models.CustomerAddress), the only place a
+	// customer-level city is actually captured — neither User nor
+	// CustomerProfile has one, and LoanApplication.City is per-loan, not
+	// per-customer, so it can't answer "what city is this customer in"
+	// for someone with zero or multiple loans. Empty until the customer
+	// completes the address step of KYC.
+	City      string `json:"city"`
+	CreatedAt string `json:"created_at"`
 }
 
 func ListUsersHandler(c *gin.Context) {
@@ -51,6 +59,11 @@ func ListUsersHandler(c *gin.Context) {
 		if err := database.DB.Where("user_id = ?", user.ID).First(&profile).Error; err == nil {
 			item.FirstName = profile.FirstName
 			item.LastName = profile.LastName
+		}
+
+		var address models.CustomerAddress
+		if err := database.DB.Where("user_id = ?", user.ID).First(&address).Error; err == nil {
+			item.City = address.CurrentCity
 		}
 
 		item.CompletionPercentage = computeKYCCompletion(user.ID)
