@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -42,6 +43,7 @@ class DocumentUploadTile extends StatefulWidget {
 
 class _DocumentUploadTileState extends State<DocumentUploadTile> {
   File? _image;
+  bool _isPdf = false;
   DocStatus _status = DocStatus.notUploaded;
 
   Future<void> _pick(ImageSource source) async {
@@ -68,6 +70,7 @@ class _DocumentUploadTileState extends State<DocumentUploadTile> {
 
       setState(() {
         _image = File(cropped.path);
+        _isPdf = false;
         _status = DocStatus.verifying;
       });
       widget.onFileCaptured?.call(_image!);
@@ -80,6 +83,32 @@ class _DocumentUploadTileState extends State<DocumentUploadTile> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not access camera/gallery for ${widget.label}.')),
+      );
+    }
+  }
+
+  Future<void> _pickPdf() async {
+    Navigator.of(context).pop(); // close the bottom sheet
+    try {
+      final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
+      final path = result?.files.single.path;
+      if (path == null) return;
+
+      setState(() {
+        _image = File(path);
+        _isPdf = true;
+        _status = DocStatus.verifying;
+      });
+      widget.onFileCaptured?.call(_image!);
+
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      if (!mounted) return;
+      setState(() => _status = DocStatus.verified);
+      widget.onStatusChanged(true);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open the PDF for ${widget.label}.')),
       );
     }
   }
@@ -111,6 +140,11 @@ class _DocumentUploadTileState extends State<DocumentUploadTile> {
               title: const Text('Choose from Gallery'),
               onTap: () => _pick(ImageSource.gallery),
             ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_rounded, color: AppColors.primary),
+              title: const Text('Upload PDF'),
+              onTap: _pickPdf,
+            ),
           ],
         ),
       ),
@@ -124,7 +158,19 @@ class _DocumentUploadTileState extends State<DocumentUploadTile> {
       onTap: _showSourceSheet,
       child: Row(
         children: [
-          if (_image != null)
+          if (_image != null && _isPdf)
+            Container(
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: widget.color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                border: Border.all(color: widget.color.withValues(alpha: 0.3)),
+              ),
+              child: Icon(Icons.picture_as_pdf_rounded, color: widget.color, size: 26),
+            )
+          else if (_image != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.sm),
               child: Image.file(_image!, width: 44, height: 44, fit: BoxFit.cover),
