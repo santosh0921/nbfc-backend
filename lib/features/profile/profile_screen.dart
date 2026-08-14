@@ -185,10 +185,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.logout_rounded,
                   label: 'Logout',
                   color: AppColors.error,
-                  onTap: () {
-                    AuthProvider.instance.logout();
-                    context.go('/login');
-                  },
+                  onTap: () => _confirmLogout(context),
                 ),
               ],
             ),
@@ -196,6 +193,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Logout')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    AuthProvider.instance.logout();
+    if (context.mounted) context.go('/login');
   }
 }
 
