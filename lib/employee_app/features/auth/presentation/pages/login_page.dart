@@ -15,7 +15,16 @@ import '../providers/auth_provider.dart';
 // Branch cities the backend actually seeds employees under
 // (internal/seed/seed.go) — alphabetical, verification and recovery
 // cities combined since either module's employee can pick any of them.
-const _employeeCities = ['Ahmedabad', 'Bengaluru', 'Chennai', 'Delhi', 'Hyderabad', 'Mumbai', 'Pune', 'Thane'];
+const _employeeCities = [
+  'Ahmedabad',
+  'Bengaluru',
+  'Chennai',
+  'Delhi',
+  'Hyderabad',
+  'Mumbai',
+  'Pune',
+  'Thane'
+];
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -85,7 +94,8 @@ class _LoginPageState extends State<LoginPage> {
   // share the password "onefin123". Login is name-based now, so these are
   // the seeded employees' real names, not their old internal codes.
   void _fillDemoAccount(EmployeeAppModule module) {
-    final name = module == EmployeeAppModule.recovery ? 'Anita Rao' : 'Priya Deshmukh';
+    final name =
+        module == EmployeeAppModule.recovery ? 'Anita Rao' : 'Priya Deshmukh';
     setState(() {
       _nameController.text = name;
       _passwordController.text = 'onefin123';
@@ -108,142 +118,189 @@ class _LoginPageState extends State<LoginPage> {
     final auth = context.watch<AuthProvider>();
     final isLoading = auth.status == AuthStatus.authenticating;
 
-    return AppScaffold(
-      showAppBar: false,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      body: Center(
-        child: SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: AppSpacing.xl),
-                  Container(
-                    width: 72,
-                    height: 72,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary,
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+    return PopScope(
+      // This login page is the employee app's own initial route, with
+      // nothing left to pop inside its own (nested) router — the employee
+      // app is a second MaterialApp.router mounted inside the customer
+      // app (see EmployeeGateScreen/OnefinEmployeeApp), and that inner
+      // router's default back-button handling was quitting the whole app
+      // outright instead of falling back to the customer app's own
+      // role-selection screen underneath it. Intercepting the pop here
+      // and driving the OUTER (root) Navigator instead is what actually
+      // takes the user back to Verification/Recovery role selection.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context, rootNavigator: true).maybePop();
+      },
+      child: AppScaffold(
+        showAppBar: false,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        body: Center(
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: AppSpacing.xl),
+                    Container(
+                      width: 72,
+                      height: 72,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary,
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusLg),
+                      ),
+                      child: const Icon(Icons.shield_outlined,
+                          color: AppColors.primary, size: 34),
                     ),
-                    child: const Icon(Icons.shield_outlined, color: AppColors.primary, size: 34),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  Text('ONEFIN Employee', style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Sign in to manage cases, visits & collections',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  AppTextField(
-                    label: 'Full Name',
-                    hint: 'e.g. Priya Deshmukh',
-                    controller: _nameController,
-                    prefixIcon: Icons.badge_outlined,
-                    keyboardType: TextInputType.name,
-                    textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.name],
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your full name' : null,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    label: 'Password',
-                    hint: 'Enter your password',
-                    controller: _passwordController,
-                    prefixIcon: Icons.lock_outline,
-                    obscureText: true,
-                    textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.password],
-                    validator: (v) => (v == null || v.length < 4) ? 'Enter a valid password' : null,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text('Branch City', style: Theme.of(context).textTheme.labelLarge),
-                  const SizedBox(height: AppSpacing.xs),
-                  DropdownButtonFormField<String>(
-                    value: _selectedCity,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.location_city_outlined),
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text('ONEFIN Employee',
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Sign in to manage cases, visits & collections',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: AppColors.textSecondary),
                     ),
-                    hint: const Text('Select your branch city'),
-                    items: [
-                      for (final city in _employeeCities) DropdownMenuItem(value: city, child: Text(city)),
-                    ],
-                    onChanged: (v) => setState(() => _selectedCity = v),
-                    validator: (v) => v == null ? 'Select your branch city' : null,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => setState(() => _rememberMe = !_rememberMe),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Checkbox(value: _rememberMe, onChanged: (v) => setState(() => _rememberMe = v ?? false)),
-                              const Flexible(child: Text('Remember me', overflow: TextOverflow.ellipsis)),
-                            ],
+                    const SizedBox(height: AppSpacing.xl),
+                    AppTextField(
+                      label: 'Full Name',
+                      hint: 'e.g. Priya Deshmukh',
+                      controller: _nameController,
+                      prefixIcon: Icons.badge_outlined,
+                      keyboardType: TextInputType.name,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.name],
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Enter your full name'
+                          : null,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppTextField(
+                      label: 'Password',
+                      hint: 'Enter your password',
+                      controller: _passwordController,
+                      prefixIcon: Icons.lock_outline,
+                      obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.password],
+                      validator: (v) => (v == null || v.length < 4)
+                          ? 'Enter a valid password'
+                          : null,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Text('Branch City',
+                        style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(height: AppSpacing.xs),
+                    DropdownButtonFormField<String>(
+                      value: _selectedCity,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.location_city_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      hint: const Text('Select your branch city'),
+                      items: [
+                        for (final city in _employeeCities)
+                          DropdownMenuItem(value: city, child: Text(city)),
+                      ],
+                      onChanged: (v) => setState(() => _selectedCity = v),
+                      validator: (v) =>
+                          v == null ? 'Select your branch city' : null,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () =>
+                                setState(() => _rememberMe = !_rememberMe),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Checkbox(
+                                    value: _rememberMe,
+                                    onChanged: (v) => setState(
+                                        () => _rememberMe = v ?? false)),
+                                const Flexible(
+                                    child: Text('Remember me',
+                                        overflow: TextOverflow.ellipsis)),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      TextButton(
-                        onPressed: () => context.pushNamed(RouteNames.forgotPassword),
-                        child: const Text('Forgot Password?'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppButton(label: 'Sign In', isLoading: isLoading, onPressed: _submit),
-                  const SizedBox(height: AppSpacing.sm),
-                  Center(
-                    child: TextButton(
-                      onPressed: isLoading ? null : () => context.pushNamed(RouteNames.register),
-                      child: const Text('New employee? Create an account'),
-                    ),
-                  ),
-                  if (_biometricAvailable) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    Row(
-                      children: [
-                        Expanded(child: Divider(color: AppColors.divider)),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                          child: Text('or', style: Theme.of(context).textTheme.bodySmall),
+                        TextButton(
+                          onPressed: () =>
+                              context.pushNamed(RouteNames.forgotPassword),
+                          child: const Text('Forgot Password?'),
                         ),
-                        Expanded(child: Divider(color: AppColors.divider)),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.md),
                     AppButton(
-                      label: 'Sign in with Biometrics',
-                      variant: AppButtonVariant.outline,
-                      icon: Icons.fingerprint,
-                      onPressed: isLoading ? null : _submitBiometric,
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.xl),
-                  Center(
-                    child: TextButton(
-                      onPressed: isLoading ? null : () => _fillDemoAccount(auth.module),
-                      style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
-                      child: Text(
-                        auth.module == EmployeeAppModule.recovery
-                            ? 'Use demo Recovery account'
-                            : 'Use demo Verification account',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
-                              decoration: TextDecoration.underline,
-                            ),
+                        label: 'Sign In',
+                        isLoading: isLoading,
+                        onPressed: _submit),
+                    const SizedBox(height: AppSpacing.sm),
+                    Center(
+                      child: TextButton(
+                        onPressed: isLoading
+                            ? null
+                            : () => context.pushNamed(RouteNames.register),
+                        child: const Text('New employee? Create an account'),
                       ),
                     ),
-                  ),
-                ],
+                    if (_biometricAvailable) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: AppColors.divider)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.sm),
+                            child: Text('or',
+                                style: Theme.of(context).textTheme.bodySmall),
+                          ),
+                          Expanded(child: Divider(color: AppColors.divider)),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppButton(
+                        label: 'Sign in with Biometrics',
+                        variant: AppButtonVariant.outline,
+                        icon: Icons.fingerprint,
+                        onPressed: isLoading ? null : _submitBiometric,
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.xl),
+                    Center(
+                      child: TextButton(
+                        onPressed: isLoading
+                            ? null
+                            : () => _fillDemoAccount(auth.module),
+                        style: TextButton.styleFrom(
+                            foregroundColor: AppColors.textSecondary),
+                        child: Text(
+                          auth.module == EmployeeAppModule.recovery
+                              ? 'Use demo Recovery account'
+                              : 'Use demo Verification account',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppColors.textSecondary,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
