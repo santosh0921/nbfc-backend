@@ -115,6 +115,12 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
   bool _gstCertificateVerified = false;
   bool _businessPremisesVerified = false;
 
+  // The field displays the number grouped as "1234 5678 9012" for
+  // readability, so every length/validity check needs the spaces
+  // stripped first — comparing the raw controller text against 12
+  // undercounts by the 2 grouping spaces and always fails.
+  String get _aadhaarDigits => _aadhaarNumberController.text.replaceAll(' ', '');
+
   bool get _allDocumentsVerified =>
       _aadhaarVerified &&
       _panVerified &&
@@ -122,7 +128,7 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
       _electricityBillVerified &&
       _bankStatementVerified &&
       (!_isRented || _rentalAgreementVerified) &&
-      _aadhaarNumberController.text.trim().length == 12 &&
+      _aadhaarDigits.length == 12 &&
       _aadhaarConsent &&
       (!_isBusinessLoan || (_gstCertificateVerified && _businessPremisesVerified));
 
@@ -237,7 +243,7 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              _aadhaarNumberController.text.trim().length != 12
+              _aadhaarDigits.length != 12
                   ? 'Please enter a valid 12-digit Aadhaar number.'
                   : !_aadhaarConsent
                       ? 'Please provide Aadhaar verification consent to continue.'
@@ -335,7 +341,7 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
 
     await _submitOrSkipIfExists(() => KycApiService.createAadhaar(
           token,
-          aadhaarNumber: _aadhaarNumberController.text.trim(),
+          aadhaarNumber: _aadhaarDigits,
           nameOnAadhaar: _nameController.text.trim(),
           consent: _aadhaarConsent,
         ));
