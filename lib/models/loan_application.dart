@@ -60,6 +60,20 @@ class LoanApplication {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// Processing fee + GST, fixed at sanction time against the sanctioned
+  /// amount and the customer's KYC address state — kept as separate line
+  /// items throughout (never merged into the loan principal). `gstType` is
+  /// "CGST_SGST" for an intra-state customer or "IGST" for inter-state;
+  /// all these are 0/empty until the loan is sanctioned.
+  final double processingFeeBase;
+  final double processingFeeCgst;
+  final double processingFeeSgst;
+  final double processingFeeIgst;
+  final double processingFeeGstTotal;
+  final double processingFeeTotal;
+  final String processingFeeGstType;
+  final String processingFeeCustomerState;
+
   /// Set only for loans created via `POST /auth/loans/:id/topup` — the ID
   /// of the disbursed loan this top-up application is linked to.
   final int? parentLoanId;
@@ -102,6 +116,14 @@ class LoanApplication {
     this.parentLoanId,
     this.cibilScore = 0,
     this.references = const [],
+    this.processingFeeBase = 0,
+    this.processingFeeCgst = 0,
+    this.processingFeeSgst = 0,
+    this.processingFeeIgst = 0,
+    this.processingFeeGstTotal = 0,
+    this.processingFeeTotal = 0,
+    this.processingFeeGstType = '',
+    this.processingFeeCustomerState = '',
   });
 
   factory LoanApplication.fromJson(Map<String, dynamic> json) {
@@ -136,6 +158,14 @@ class LoanApplication {
               ?.map((e) => LoanReferenceInfo.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      processingFeeBase: (json['processingFeeBase'] as num?)?.toDouble() ?? 0,
+      processingFeeCgst: (json['processingFeeCgst'] as num?)?.toDouble() ?? 0,
+      processingFeeSgst: (json['processingFeeSgst'] as num?)?.toDouble() ?? 0,
+      processingFeeIgst: (json['processingFeeIgst'] as num?)?.toDouble() ?? 0,
+      processingFeeGstTotal: (json['processingFeeGstTotal'] as num?)?.toDouble() ?? 0,
+      processingFeeTotal: (json['processingFeeTotal'] as num?)?.toDouble() ?? 0,
+      processingFeeGstType: json['processingFeeGstType'] as String? ?? '',
+      processingFeeCustomerState: json['processingFeeCustomerState'] as String? ?? '',
     );
   }
 }

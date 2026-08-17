@@ -145,6 +145,21 @@ func AdminDecisionHandler(c *gin.Context) {
 		loan.TenureMonths = body.TenureMonths
 		loan.InterestRatePercent = &effectiveRate
 		loan.Status = models.LoanStatusSanctioned
+
+		// Processing fee + GST are fixed at the moment of sanction, against
+		// the sanctioned amount — not recomputed later even if the address
+		// changes or the loan is later disbursed for a different amount.
+		var custAddr models.CustomerAddress
+		database.DB.Where("user_id = ?", loan.CustomerID).First(&custAddr)
+		gst := calculateProcessingFeeGST(loan.AmountRequested, custAddr.CurrentState)
+		loan.ProcessingFeeBase = gst.ProcessingFeeBase
+		loan.ProcessingFeeCGST = gst.CGST
+		loan.ProcessingFeeSGST = gst.SGST
+		loan.ProcessingFeeIGST = gst.IGST
+		loan.ProcessingFeeGSTTotal = gst.GSTTotal
+		loan.ProcessingFeeTotal = gst.Total
+		loan.ProcessingFeeGSTType = gst.GSTType
+		loan.ProcessingFeeCustomerState = gst.CustomerState
 	case "reject":
 		loan.Status = models.LoanStatusRejected
 	default:

@@ -192,6 +192,16 @@ func buildSanctionLetterPDF(loan models.LoanApplication, signaturePNG []byte, si
 	tableRow(pdf, "Overdue Charges (Late Payment)", "2% per month on overdue installment amount", 65)
 	tableRow(pdf, "Foreclosure Charges", "Nil", 65)
 
+	sectionHeading(pdf, "Processing Fee & GST")
+	tableRow(pdf, "Processing Fee (Base, excl. GST)", rupees(loan.ProcessingFeeBase), 65)
+	if loan.ProcessingFeeGSTType == "IGST" {
+		tableRow(pdf, "IGST @18%", rupees(loan.ProcessingFeeIGST), 65)
+	} else {
+		tableRow(pdf, "CGST @9%", rupees(loan.ProcessingFeeCGST), 65)
+		tableRow(pdf, "SGST @9%", rupees(loan.ProcessingFeeSGST), 65)
+	}
+	tableRow(pdf, "Total Processing Fee (incl. GST)", rupees(loan.ProcessingFeeTotal), 65)
+
 	sectionHeading(pdf, "Borrower Acknowledgement")
 	pdf.SetFont("Arial", "", 10)
 	pdf.MultiCell(0, 6, "By signing and submitting this letter, the Borrower confirms having read, understood, and accepted "+
@@ -273,6 +283,16 @@ func buildDisbursementLetterPDF(loan models.LoanApplication, signaturePNG []byte
 		tableRow(pdf, "Total Repayment Amount", rupees(totalRepayment), 65)
 	}
 	tableRow(pdf, "Overdue Charges (Late Payment)", "2% per month on overdue installment amount", 65)
+
+	sectionHeading(pdf, "Processing Fee & GST (Charged at Sanction)")
+	tableRow(pdf, "Processing Fee (Base, excl. GST)", rupees(loan.ProcessingFeeBase), 65)
+	if loan.ProcessingFeeGSTType == "IGST" {
+		tableRow(pdf, "IGST @18%", rupees(loan.ProcessingFeeIGST), 65)
+	} else {
+		tableRow(pdf, "CGST @9%", rupees(loan.ProcessingFeeCGST), 65)
+		tableRow(pdf, "SGST @9%", rupees(loan.ProcessingFeeSGST), 65)
+	}
+	tableRow(pdf, "Total Processing Fee (incl. GST)", rupees(loan.ProcessingFeeTotal), 65)
 
 	sectionHeading(pdf, "Important Note")
 	pdf.SetFont("Arial", "", 10)

@@ -490,6 +490,29 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                       ),
                     ),
                   ],
+                  if (loan.processingFeeTotal > 0) ...[
+                    const SizedBox(height: 16),
+                    PremiumCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Processing Fee & GST', style: theme.textTheme.titleSmall),
+                          const SizedBox(height: 12),
+                          _DetailRow(label: 'Processing Fee (excl. GST)', value: currency.format(loan.processingFeeBase)),
+                          const Divider(height: 20),
+                          if (loan.processingFeeGstType == 'IGST') ...[
+                            _DetailRow(label: 'IGST (18%)', value: currency.format(loan.processingFeeIgst)),
+                          ] else ...[
+                            _DetailRow(label: 'CGST (9%)', value: currency.format(loan.processingFeeCgst)),
+                            const Divider(height: 20),
+                            _DetailRow(label: 'SGST (9%)', value: currency.format(loan.processingFeeSgst)),
+                          ],
+                          const Divider(height: 20),
+                          _DetailRow(label: 'Total Processing Fee (incl. GST)', value: currency.format(loan.processingFeeTotal)),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (loan.status == 'sanctioned' || loan.status == 'disbursed') ...[
                     const SizedBox(height: 16),
                     LoanLetterActionsSection(loan: loan, highlightLetterType: widget.highlightLetterType),

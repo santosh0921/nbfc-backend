@@ -63,6 +63,22 @@ type LoanApplication struct {
 	VisitDate        *time.Time `json:"visitDate,omitempty"`
 	VisitTimeSlot    string     `json:"visitTimeSlot,omitempty"`
 
+	// GST on the NBFC processing fee — computed once at sanction time (see
+	// internal/loans/gst.go) and kept as its own line items throughout:
+	// principal, processing fee, and tax are never merged into a single
+	// number anywhere they're stored or displayed. CustomerState is a
+	// snapshot of the place-of-supply state used for the calculation, kept
+	// separately from CustomerAddress so a later address edit can't
+	// silently change which tax rate this loan was actually charged under.
+	ProcessingFeeBase          float64 `json:"processingFeeBase,omitempty"`
+	ProcessingFeeCGST          float64 `json:"processingFeeCgst,omitempty"`
+	ProcessingFeeSGST          float64 `json:"processingFeeSgst,omitempty"`
+	ProcessingFeeIGST          float64 `json:"processingFeeIgst,omitempty"`
+	ProcessingFeeGSTTotal      float64 `json:"processingFeeGstTotal,omitempty"`
+	ProcessingFeeTotal         float64 `json:"processingFeeTotal,omitempty"`
+	ProcessingFeeGSTType       string  `json:"processingFeeGstType,omitempty"` // "CGST_SGST" | "IGST"
+	ProcessingFeeCustomerState string  `json:"processingFeeCustomerState,omitempty"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
