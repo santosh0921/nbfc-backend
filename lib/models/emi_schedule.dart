@@ -151,6 +151,57 @@ class EmiDashboardSummary {
   }
 }
 
+/// A payment order created against the gateway
+/// (`POST /auth/loans/:id/emi/:installmentId/create-order`,
+/// `internal/payments/order_handler.go`) — the customer's checkout SDK
+/// pays against this; the backend only ever marks the EMI paid once its
+/// own webhook independently verifies the gateway confirms SUCCESS for
+/// this exact order (see [PaymentStatus]).
+class PaymentOrder {
+  final int paymentId;
+  final String gatewayOrderId;
+  final String? gatewayKeyId;
+  final int amountPaise;
+  final String currency;
+  final String gateway;
+
+  const PaymentOrder({
+    required this.paymentId,
+    required this.gatewayOrderId,
+    this.gatewayKeyId,
+    required this.amountPaise,
+    required this.currency,
+    required this.gateway,
+  });
+
+  factory PaymentOrder.fromJson(Map<String, dynamic> json) => PaymentOrder(
+        paymentId: json['paymentId'] as int,
+        gatewayOrderId: json['gatewayOrderId'] as String? ?? '',
+        gatewayKeyId: json['gatewayKeyId'] as String?,
+        amountPaise: (json['amountPaise'] as num?)?.toInt() ?? 0,
+        currency: json['currency'] as String? ?? 'INR',
+        gateway: json['gateway'] as String? ?? '',
+      );
+}
+
+/// The customer app polls this — it only ever reflects what
+/// internal/payments.RazorpayWebhookHandler has independently verified
+/// and written server-side; the app itself never declares a payment
+/// successful.
+class PaymentStatus {
+  final int id;
+  final String status; // INITIATED | PENDING | SUCCESS | FAILED | REFUNDED | CANCELLED
+  final String? failureReason;
+
+  const PaymentStatus({required this.id, required this.status, this.failureReason});
+
+  factory PaymentStatus.fromJson(Map<String, dynamic> json) => PaymentStatus(
+        id: json['id'] as int,
+        status: json['status'] as String? ?? 'INITIATED',
+        failureReason: json['failureReason'] as String?,
+      );
+}
+
 /// Maps the backend's raw EMI installment status strings
 /// (`internal/models/emi.go`) to customer-friendly copy and a badge color
 /// — mirrors `LoanStatusInfo` in `loan_application.dart` for consistency.

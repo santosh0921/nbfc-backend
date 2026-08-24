@@ -1,10 +1,8 @@
 package loans
 
 import (
-	"hash/fnv"
-
-	"github.com/google/uuid"
-
+	"github.com/santosh0921/nbfc-backend/internal/bureau"
+	"github.com/santosh0921/nbfc-backend/internal/config"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 	"github.com/santosh0921/nbfc-backend/internal/security"
@@ -55,25 +53,38 @@ func loadMaskedReferences(loanID uint) []MaskedReference {
 	return out
 }
 
-// getOrCreateCibilScore returns the customer's stored CIBIL score,
-// generating a deterministic mock score (550-850) the first time — seeded
-// from the customer's UUID so it's stable across every application they
-// ever submit, not re-randomized each time.
-func getOrCreateCibilScore(user *models.User) int {
+// getOrCreateCibilScore returns the customer's credit score via
+// internal/bureau (Phase 3) — the deterministic mock generator that used
+// to live directly in this function has moved to
+// internal/bureau.sandboxProvider, reachable only through
+// bureau.PullScore's consent-and-audit path, and only outside production
+// (config.IsProduction()). In production with no real bureau configured,
+// this now returns an error instead of silently fabricating a score —
+// every caller must handle that by failing closed (see
+// customer_handler.go), not by proceeding with a zero/default score.
+func getOrCreateCibilScore(user *models.User) (int, error) {
 	if user.CibilScore > 0 {
-		return user.CibilScore
+		return user.CibilScore, nil
 	}
-	score := deterministicCibil(user.ID)
-	user.CibilScore = score
-	database.DB.Model(user).Update("cibil_score", score)
-	return score
-}
 
-// deterministicCibil hashes the customer's UUID (FNV-1a, fast + stable)
-// into the 550-850 CIBIL range.
-func deterministicCibil(id uuid.UUID) int {
-	h := fnv.New32a()
-	h.Write([]byte(id.String()))
-	sum := h.Sum32()
-	return 550 + int(sum%301) // 550..850 inclusive
+	bureauName := models.BureauCIBIL
+	if !config.IsProduction() {
+		bureauName = models.BureauSandbox
+		// Outside production there is no customer-facing consent-capture
+		// screen wired up yet (see the Phase 3 report) — record an
+		// explicit, clearly-labeled implicit consent so the sandbox flow
+		// keeps working without silently skipping the consent
+		// requirement altogether, and so the audit trail is honest about
+		// what actually happened.
+		bureau.RecordConsent(user.ID, bureauName, "loan underwriting", "v0-implicit-preconsent-flow", "", "", "")
+	}
+
+	req, err := bureau.PullScore(user.ID, bureauName)
+	if err != nil {
+		return 0, err
+	}
+
+	user.CibilScore = req.Score
+	database.DB.Model(user).Update("cibil_score", req.Score)
+	return req.Score, nil
 }

@@ -68,3 +68,13 @@ nbfc.db
 
 # Debug screenshots pulled from the device during troubleshooting.
 *_screenshot.png
+
+# Phase 16.1 — local backup artifacts must never be committed.
+backups/
+*.dump
+*.dump.sha256
+*.manifest.json
+
+# Backup PostgreSQL instance — password/data must never be committed.
+nbfc-backup-pg/
+*.pgpassword

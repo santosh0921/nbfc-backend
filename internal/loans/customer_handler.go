@@ -10,8 +10,28 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/santosh0921/nbfc-backend/internal/database"
+	"github.com/santosh0921/nbfc-backend/internal/kyc"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 )
+
+// checkKYCEligibility is the backend-authoritative KYCEligibilityService
+// gate the brief requires ahead of loan submission — the frontend never
+// decides this. See internal/kyc.IsSubmissionEligible for what
+// "eligible" means here and why it's completeness, not full
+// provider-verified status.
+func checkKYCEligibility(c *gin.Context, user *models.User) bool {
+	record, err := kyc.Recompute(user.ID, "customer", user.Mobile)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Unable to verify KYC status"})
+		return false
+	}
+	eligible, reason := kyc.IsSubmissionEligible(record.Status)
+	if !eligible {
+		c.JSON(http.StatusForbidden, gin.H{"message": reason, "kycStatus": record.Status})
+		return false
+	}
+	return true
+}
 
 func currentUser(c *gin.Context) (*models.User, bool) {
 	mobile := c.GetString("mobile")
@@ -31,6 +51,9 @@ func currentUser(c *gin.Context) (*models.User, bool) {
 func SubmitLoanHandler(c *gin.Context) {
 	user, ok := currentUser(c)
 	if !ok {
+		return
+	}
+	if !checkKYCEligibility(c, user) {
 		return
 	}
 
@@ -53,8 +76,13 @@ func SubmitLoanHandler(c *gin.Context) {
 		return
 	}
 
-	cibil := getOrCreateCibilScore(user)
+	cibil, err := getOrCreateCibilScore(user)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "Unable to complete a required credit bureau check right now — please try again shortly."})
+		return
+	}
 	eligibility := evaluateEligibility(body.AmountRequested, body.TenureMonths, body.MonthlyIncome, cibil)
+	recordEligibilityDecision(0, eligibility, cibil, body.AmountRequested, body.MonthlyIncome)
 	if !eligibility.Eligible {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"message":           eligibility.Message,
@@ -117,6 +145,9 @@ func TopUpLoanHandler(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !checkKYCEligibility(c, user) {
+		return
+	}
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid loan id"})
@@ -158,8 +189,13 @@ func TopUpLoanHandler(c *gin.Context) {
 		monthlyIncome = employment.MonthlyIncome
 	}
 
-	cibil := getOrCreateCibilScore(user)
+	cibil, err := getOrCreateCibilScore(user)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "Unable to complete a required credit bureau check right now — please try again shortly."})
+		return
+	}
 	eligibility := evaluateEligibility(body.Amount, body.TenureMonths, monthlyIncome, cibil)
+	recordEligibilityDecision(0, eligibility, cibil, body.Amount, monthlyIncome)
 	if !eligibility.Eligible {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"message":           eligibility.Message,
@@ -202,7 +238,11 @@ func CustomerCreditScoreHandler(c *gin.Context) {
 	if !ok {
 		return
 	}
-	score := getOrCreateCibilScore(user)
+	score, err := getOrCreateCibilScore(user)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "Credit score is not available right now."})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"score":             score,
 		"band":              creditScoreBand(score),

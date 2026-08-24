@@ -1,17 +1,13 @@
 package loans
 
 import (
-	"errors"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm/clause"
 
-	"github.com/santosh0921/nbfc-backend/internal/audit"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 )
@@ -27,11 +23,11 @@ type emiSummary struct {
 }
 
 type emiScheduleResponse struct {
-	LoanID              uint                     `json:"loanId"`
-	TenureMonths        int                      `json:"tenureMonths"`
-	InterestRatePercent float64                  `json:"interestRatePercent"`
+	LoanID              uint                    `json:"loanId"`
+	TenureMonths        int                     `json:"tenureMonths"`
+	InterestRatePercent float64                 `json:"interestRatePercent"`
 	Installments        []models.EmiInstallment `json:"installments"`
-	Summary             emiSummary               `json:"summary"`
+	Summary             emiSummary              `json:"summary"`
 }
 
 // buildScheduleResponse computes read-time "overdue" status on each
@@ -104,122 +100,19 @@ func CustomerEmiScheduleHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, buildScheduleResponse(loan, installments))
 }
 
-// payEmiRequest is the proof-of-payment the caller must present. There is
-// no payment gateway wired into this project yet (no Razorpay/Cashfree/PayU
-// account or API keys are configured anywhere in the codebase) — until one
-// is, VerifyGatewaySignature below is the seam a real webhook-signature
-// check plugs into. What this handler enforces today, for real: the caller
-// cannot mark an installment paid by simply asserting so with no
-// information — a non-empty, single-use transaction reference and an
-// amount that matches the installment exactly are both required, the
-// check-then-write is atomic and row-locked against concurrent double-pay,
-// and the same reference can never be replayed against a second
-// installment (PaymentReference has a unique index).
-type payEmiRequest struct {
-	TransactionID string  `json:"transactionId" binding:"required"`
-	Amount        float64 `json:"amount" binding:"required"`
-	Method        string  `json:"method"`
-}
-
-// VerifyGatewaySignature is a placeholder seam for real payment-gateway
-// webhook/signature verification (e.g. Razorpay's X-Razorpay-Signature
-// HMAC). Wiring up a real gateway requires that provider's API
-// credentials, which this project does not have configured — replace this
-// function's body with the real HMAC check once they're available. Until
-// then it only enforces that a transaction reference was actually
-// supplied, which is what the unique index and unit tests below assume.
-func VerifyGatewaySignature(transactionID string) error {
-	if strings.TrimSpace(transactionID) == "" {
-		return errors.New("missing transaction reference")
-	}
-	return nil
-}
-
 // CustomerPayEmiHandler handles POST /auth/loans/:id/emi/:installmentId/pay
+// — disabled as of the Phase 2 real-payment-gateway rework. This endpoint
+// used to mark an installment paid on nothing more than a customer-
+// supplied transaction-reference string (VerifyGatewaySignature only
+// checked it was non-empty) — a customer could settle any EMI by typing
+// any string in. An EMI is now only ever marked paid by
+// internal/payments.RazorpayWebhookHandler, after independently verifying
+// a real gateway webhook's HMAC signature and matching its amount/order
+// against a Payment row this backend created. See
+// POST /auth/loans/:id/emi/:installmentId/create-order in
+// internal/payments/order_handler.go for the replacement flow.
 func CustomerPayEmiHandler(c *gin.Context) {
-	user, ok := currentUser(c)
-	if !ok {
-		return
-	}
-	id, _ := strconv.Atoi(c.Param("id"))
-	var loan models.LoanApplication
-	if err := database.DB.First(&loan, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "Loan not found"})
-		return
-	}
-	if loan.CustomerID != user.ID {
-		c.JSON(http.StatusForbidden, gin.H{"message": "Not your loan"})
-		return
-	}
-	if loan.Status != models.LoanStatusDisbursed {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "This loan has no active EMI schedule to pay against"})
-		return
-	}
-
-	var body payEmiRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "A transaction reference and amount are required"})
-		return
-	}
-	if err := VerifyGatewaySignature(body.TransactionID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Could not verify payment: " + err.Error()})
-		return
-	}
-
-	installmentID, _ := strconv.Atoi(c.Param("installmentId"))
-
-	tx := database.DB.Begin()
-	if tx.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Database error"})
-		return
-	}
-
-	var inst models.EmiInstallment
-	// SELECT ... FOR UPDATE — holds a row lock for the rest of this
-	// transaction so two concurrent pay requests for the same installment
-	// can't both read "pending" and both write "paid".
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("id = ? AND loan_id = ?", installmentID, loan.ID).First(&inst).Error; err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Installment not found"})
-		return
-	}
-	if inst.Status == models.EmiStatusPaid {
-		tx.Rollback()
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Installment already paid"})
-		return
-	}
-	if math.Abs(body.Amount-inst.Amount) > 0.01 {
-		tx.Rollback()
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Payment amount does not match the amount due for this installment"})
-		return
-	}
-
-	now := time.Now()
-	inst.Status = models.EmiStatusPaid
-	inst.PaidAt = &now
-	inst.PaymentReference = strings.TrimSpace(body.TransactionID)
-	inst.PaymentMethod = body.Method
-
-	if err := tx.Save(&inst).Error; err != nil {
-		tx.Rollback()
-		if isUniqueViolation(err) {
-			c.JSON(http.StatusConflict, gin.H{"message": "This transaction reference has already been used to settle a different installment"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to record payment"})
-		return
-	}
-	if err := tx.Commit().Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to record payment"})
-		return
-	}
-
-	audit.RecordAs("customer", user.Mobile, "emi.pay", "emi_installment", strconv.Itoa(int(inst.ID)),
-		"Paid installment #"+strconv.Itoa(inst.InstallmentNumber)+" on loan #"+itoa(loan.ID)+
-			" - amount "+strconv.FormatFloat(inst.Amount, 'f', 2, 64)+", ref "+inst.PaymentReference)
-
-	c.JSON(http.StatusOK, inst)
+	c.JSON(http.StatusGone, gin.H{"message": "Direct EMI settlement has been disabled. Use POST /auth/loans/:id/emi/:installmentId/create-order to start a verified gateway payment."})
 }
 
 func isUniqueViolation(err error) bool {

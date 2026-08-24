@@ -1,11 +1,24 @@
 package loans
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 
+	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 )
+
+// PolicyVersion identifies the exact underwriting-rule set that produced
+// a CreditDecision row (Phase 3, item H) — every threshold in this file
+// (minLoanAmount, maxFOIRPercent, the CIBIL bands in rateForCibil) is this
+// version's actual policy. Bump this string whenever any of those values
+// changes so historical decisions remain attributable to the rules that
+// were actually in force when they were made. Configurable only by
+// editing this file today (a DB-backed, admin-editable policy table is a
+// natural next step, out of scope for this phase — see the Phase 3
+// report).
+const PolicyVersion = "underwriting-v1"
 
 // Loan eligibility engine — before this existed, SubmitLoanHandler accepted
 // literally any positive amountRequested with no relationship at all to the
@@ -139,4 +152,67 @@ func evaluateEligibility(amount float64, tenureMonths int, monthlyIncome float64
 
 func formatAmount(v float64) string {
 	return fmt.Sprintf("%.0f", v)
+}
+
+// recordEligibilityDecision writes the CreditDecision audit trail row for
+// an apply-time (or top-up-time) eligibility check — separate from the
+// bureau pull that fed it (internal/bureau.PullScore already records its
+// own BureauRequest) and separate from the sanction-time decision
+// recorded in maker_checker_handler.go. loanID is nil when the
+// application was rejected before a LoanApplication row ever existed.
+func recordEligibilityDecision(loanID uint, result EligibilityResult, cibil int, amount, monthlyIncome float64) {
+	decision := "ELIGIBLE"
+	reasonCodes := ""
+	if !result.Eligible {
+		decision = "REJECTED"
+		reasonCodes = classifyRejectionReason(amount, cibil, result)
+	}
+
+	inputs, _ := json.Marshal(map[string]interface{}{
+		"amountRequested": amount, "monthlyIncome": monthlyIncome, "cibilScore": cibil,
+		"ratePercent": result.RatePercent, "monthlyEmi": result.MonthlyEmi,
+	})
+
+	var loanIDPtr *uint
+	if loanID != 0 {
+		loanIDPtr = &loanID
+	}
+
+	database.DB.Create(&models.CreditDecision{
+		LoanID: loanIDPtr, PolicyVersion: PolicyVersion, InputsJSON: string(inputs),
+		Decision: decision, ReasonCodes: reasonCodes, ReviewerOrSystem: "system",
+	})
+}
+
+// recordSanctionDecision writes the CreditDecision audit trail row for the
+// sanction-time decision (AdminApproveSanctionHandler) — distinct from the
+// apply-time recordEligibilityDecision above: here the loan already exists
+// (LoanID is real, never nil) and the reviewer is the approving admin, not
+// "system".
+func recordSanctionDecision(loan models.LoanApplication, reasonCodes, adminUsername string) {
+	inputs, _ := json.Marshal(map[string]interface{}{
+		"amountRequested": loan.AmountRequested,
+		"cibilScore":      loan.CibilScore,
+		"tenureMonths":    loan.TenureMonths,
+		"ratePercent":     loan.InterestRatePercent,
+	})
+	loanID := loan.ID
+	database.DB.Create(&models.CreditDecision{
+		LoanID: &loanID, CustomerID: loan.CustomerID, PolicyVersion: PolicyVersion,
+		InputsJSON: string(inputs), Decision: "SANCTIONED", ReasonCodes: reasonCodes,
+		ReviewerOrSystem: adminUsername,
+	})
+}
+
+func classifyRejectionReason(amount float64, cibil int, result EligibilityResult) string {
+	if cibil > 0 && cibil < models.CibilRejectThreshold {
+		return "CIBIL_BELOW_THRESHOLD"
+	}
+	if amount < minLoanAmount || amount > maxLoanAmount {
+		return "AMOUNT_OUT_OF_RANGE"
+	}
+	if result.MaxEligibleAmount > 0 {
+		return "FOIR_EXCEEDED"
+	}
+	return "OTHER"
 }

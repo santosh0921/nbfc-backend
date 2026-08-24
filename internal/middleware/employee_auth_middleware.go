@@ -41,6 +41,7 @@ func EmployeeAuthMiddleware() gin.HandlerFunc {
 			func(token *jwt.Token) (interface{}, error) {
 				return employee.JWTSecret, nil
 			},
+			jwt.WithValidMethods([]string{"HS256"}),
 		)
 
 		if err != nil {

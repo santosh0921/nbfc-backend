@@ -1,22 +1,26 @@
 package documents
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"github.com/santosh0921/nbfc-backend/internal/audit"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
+	"github.com/santosh0921/nbfc-backend/internal/storage"
 )
 
 // maxDocumentBytes caps the DECODED size of an uploaded document. KYC scans
-// and statements are realistically a few MB at most; with no cap at all a
-// single request could inline an arbitrarily large blob into the database
-// (documents are stored as base64 text, not object storage).
+// and statements are realistically a few MB at most.
 const maxDocumentBytes = 10 * 1024 * 1024 // 10MB
 
 var allowedDocumentMimeTypes = map[string]bool{
@@ -48,17 +52,12 @@ type uploadRequest struct {
 	LoanID     *uint  `json:"loanId"`
 }
 
-// validateUpload enforces the checks that used to not exist at all: the
-// MIME type must be one this app actually handles, the payload must
-// actually be valid base64, and the DECODED size must stay under
-// maxDocumentBytes — checking the base64 string's own length isn't
-// equivalent (base64 inflates size by ~33%, and a crafted string could
-// still decode to something larger than intended relative to its encoded
-// length in edge cases), so it's decoded first and the real byte count is
-// what's compared against the cap.
-func validateUpload(body uploadRequest) (decodedSize int, err error) {
+// validateUpload enforces MIME allowlist + valid base64 + decoded size
+// cap, and returns the decoded bytes so the caller never has to decode
+// twice.
+func validateUpload(body uploadRequest) (decoded []byte, err error) {
 	if !allowedDocumentMimeTypes[strings.ToLower(strings.TrimSpace(body.MimeType))] {
-		return 0, errUnsupportedMime
+		return nil, errUnsupportedMime
 	}
 	trimmed := strings.TrimSpace(body.DataBase64)
 	if idx := strings.Index(trimmed, ","); idx != -1 && strings.HasPrefix(trimmed, "data:") {
@@ -66,15 +65,15 @@ func validateUpload(body uploadRequest) (decodedSize int, err error) {
 	}
 	decoded, decodeErr := base64.StdEncoding.DecodeString(trimmed)
 	if decodeErr != nil {
-		return 0, errInvalidBase64
+		return nil, errInvalidBase64
 	}
 	if len(decoded) == 0 {
-		return 0, errEmptyDocument
+		return nil, errEmptyDocument
 	}
 	if len(decoded) > maxDocumentBytes {
-		return 0, errDocumentTooLarge
+		return nil, errDocumentTooLarge
 	}
-	return len(decoded), nil
+	return decoded, nil
 }
 
 type uploadValidationError string
@@ -87,6 +86,76 @@ const (
 	errEmptyDocument    = uploadValidationError("File data is empty")
 	errDocumentTooLarge = uploadValidationError("File is too large (max 10MB)")
 )
+
+// persistDocument encrypts+stores decoded via internal/storage when a
+// provider is configured (the normal, production-required path — see
+// config.ValidateProductionSafety), and only falls back to the legacy
+// inline DataBase64 column when no provider is configured, which is
+// itself only reachable in development (production refuses to start
+// without DOCUMENT_ENCRYPTION_KEY).
+func persistDocument(doc *models.Document, decoded []byte) error {
+	sum := sha256.Sum256(decoded)
+	doc.Hash = hex.EncodeToString(sum[:])
+	doc.SizeBytes = len(decoded)
+	doc.Status = models.DocumentStatusActive
+
+	if provider := storage.Active(); provider != nil {
+		ref, err := provider.Store(doc.CustomerID, doc.ID, decoded)
+		if err != nil {
+			return err
+		}
+		doc.StorageReference = ref
+		return nil
+	}
+	// Development-only fallback — no encrypted storage provider
+	// configured. Never reachable in production (fail-closed at startup).
+	doc.DataBase64 = base64.StdEncoding.EncodeToString(decoded)
+	return nil
+}
+
+// hydrateDocument builds the API response shape: every Document field
+// plus a decrypted-on-read dataBase64 value, so existing clients (the
+// admin panel and Flutter apps, which render this field directly) keep
+// working unchanged even though the database itself no longer holds
+// plaintext bytes for new uploads.
+func hydrateDocument(doc models.Document) gin.H {
+	dataBase64 := doc.DataBase64
+	if doc.StorageReference != "" {
+		if provider := storage.Active(); provider != nil {
+			if raw, err := provider.Retrieve(doc.StorageReference); err == nil {
+				dataBase64 = base64.StdEncoding.EncodeToString(raw)
+			}
+		}
+	}
+	return gin.H{
+		"id": doc.ID, "customerId": doc.CustomerID, "loanId": doc.LoanID,
+		"docType": doc.DocType, "fileName": doc.FileName, "mimeType": doc.MimeType,
+		"hash": doc.Hash, "sizeBytes": doc.SizeBytes, "status": doc.Status,
+		"storageReference": maskReference(doc.StorageReference),
+		"uploadedByType":   doc.UploadedByType, "uploadedByRef": doc.UploadedByRef,
+		"createdAt": doc.CreatedAt, "verifiedAt": doc.VerifiedAt,
+		"dataBase64": dataBase64,
+	}
+}
+
+// maskReference never returns the raw storage reference to a customer-
+// facing caller context isn't checked here (both admin and customer
+// handlers use hydrateDocument) — kept as a no-op passthrough today since
+// the reference is already an opaque random UUID with no direct-access
+// meaning outside the server process, but named/kept separate from the
+// raw field so a future real object-storage key isn't accidentally
+// exposed by reusing this same helper without revisiting it.
+func maskReference(ref string) string {
+	return ref
+}
+
+func hydrateDocuments(docs []models.Document) []gin.H {
+	out := make([]gin.H, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, hydrateDocument(d))
+	}
+	return out
+}
 
 // UploadCustomerDocumentHandler handles POST /auth/documents
 func UploadCustomerDocumentHandler(c *gin.Context) {
@@ -101,12 +170,6 @@ func UploadCustomerDocumentHandler(c *gin.Context) {
 		return
 	}
 
-	// loanId used to be taken straight from the request body with no
-	// verification that the loan actually belongs to this customer — any
-	// authenticated customer could attach a document to a stranger's loan
-	// file, where an admin would review it as part of that stranger's
-	// application. Now it's checked like every other loan-scoped endpoint
-	// in this codebase already does (see loans/customer_handler.go).
 	if body.LoanID != nil {
 		var loan models.LoanApplication
 		if err := database.DB.First(&loan, *body.LoanID).Error; err != nil {
@@ -119,20 +182,26 @@ func UploadCustomerDocumentHandler(c *gin.Context) {
 		}
 	}
 
-	if _, err := validateUpload(body); err != nil {
+	decoded, err := validateUpload(body)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
 	doc := models.Document{
+		ID:             uuid.New(),
 		CustomerID:     user.ID,
 		LoanID:         body.LoanID,
 		DocType:        body.DocType,
 		FileName:       body.FileName,
 		MimeType:       body.MimeType,
-		DataBase64:     body.DataBase64,
 		UploadedByType: "customer",
 		UploadedByRef:  user.ID.String(),
+		CreatedBy:      user.Mobile,
+	}
+	if err := persistDocument(&doc, decoded); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Unable to store document"})
+		return
 	}
 
 	if err := database.DB.Create(&doc).Error; err != nil {
@@ -140,7 +209,13 @@ func UploadCustomerDocumentHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, doc)
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "customer", ActorRef: user.Mobile,
+		Action: "document.upload", TargetType: "document", TargetID: doc.ID.String(),
+		Result: audit.ResultSuccess, Details: doc.DocType + " (" + fmt.Sprint(doc.SizeBytes) + " bytes)",
+	})
+
+	c.JSON(http.StatusCreated, hydrateDocument(doc))
 }
 
 // ListCustomerDocumentsHandler handles GET /auth/documents
@@ -151,16 +226,12 @@ func ListCustomerDocumentsHandler(c *gin.Context) {
 	}
 
 	query := database.DB.Where("customer_id = ?", user.ID)
-	// Optional filter so a customer with multiple loans can see just the
-	// documents (e.g. verification photos captured by the assigned
-	// employee) tied to one specific loan, instead of always getting
-	// every document across every loan they've ever applied for.
 	if loanID := c.Query("loanId"); loanID != "" {
 		query = query.Where("loan_id = ?", loanID)
 	}
 	var docs []models.Document
 	query.Order("created_at desc").Find(&docs)
-	c.JSON(http.StatusOK, docs)
+	c.JSON(http.StatusOK, hydrateDocuments(docs))
 }
 
 // UploadEmployeeLoanDocumentHandler handles POST /employee/loans/:id/documents
@@ -179,9 +250,6 @@ func UploadEmployeeLoanDocumentHandler(c *gin.Context) {
 		return
 	}
 
-	// Mirror-image of the customer-side check above: an employee used to
-	// be able to attach a document to ANY loan, not just one assigned to
-	// them.
 	if loan.AssignedEmployeeID == nil || *loan.AssignedEmployeeID != empID {
 		c.JSON(http.StatusForbidden, gin.H{"message": "This loan is not assigned to you"})
 		return
@@ -199,21 +267,27 @@ func UploadEmployeeLoanDocumentHandler(c *gin.Context) {
 		return
 	}
 
-	if _, err := validateUpload(body); err != nil {
+	decoded, err := validateUpload(body)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
 	loanID := loan.ID
 	doc := models.Document{
+		ID:             uuid.New(),
 		CustomerID:     loan.CustomerID,
 		LoanID:         &loanID,
 		DocType:        body.DocType,
 		FileName:       body.FileName,
 		MimeType:       body.MimeType,
-		DataBase64:     body.DataBase64,
 		UploadedByType: "employee",
 		UploadedByRef:  emp.Code,
+		CreatedBy:      emp.Code,
+	}
+	if err := persistDocument(&doc, decoded); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Unable to store document"})
+		return
 	}
 
 	if err := database.DB.Create(&doc).Error; err != nil {
@@ -221,7 +295,13 @@ func UploadEmployeeLoanDocumentHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, doc)
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "employee", ActorRef: emp.Code,
+		Action: "document.upload", TargetType: "document", TargetID: doc.ID.String(),
+		Result: audit.ResultSuccess, Details: doc.DocType + " for loan #" + strconv.Itoa(int(loan.ID)),
+	})
+
+	c.JSON(http.StatusCreated, hydrateDocument(doc))
 }
 
 // AdminListLoanDocumentsHandler handles GET /admin/loans/:id/documents
@@ -249,7 +329,8 @@ func AdminListLoanDocumentsHandler(c *gin.Context) {
 		Order("created_at asc").
 		Find(&docs)
 
-	c.JSON(http.StatusOK, docs)
+	recordDocumentAccess(c, "loan", strconv.Itoa(id), len(docs))
+	c.JSON(http.StatusOK, hydrateDocuments(docs))
 }
 
 // AdminListCustomerDocumentsHandler handles GET /admin/customers/:id/documents
@@ -259,5 +340,21 @@ func AdminListCustomerDocumentsHandler(c *gin.Context) {
 	var docs []models.Document
 	database.DB.Where("customer_id = ?", customerID).Order("created_at asc").Find(&docs)
 
-	c.JSON(http.StatusOK, docs)
+	recordDocumentAccess(c, "customer", customerID, len(docs))
+	c.JSON(http.StatusOK, hydrateDocuments(docs))
+}
+
+// recordDocumentAccess audits admin access to KYC documents — these
+// responses embed the actual file content (decrypted-on-read base64), so
+// listing IS downloading here, not just metadata browsing.
+func recordDocumentAccess(c *gin.Context, targetType, targetID string, count int) {
+	adminID, _ := c.Get("admin_id")
+	username, _ := c.Get("admin_username")
+	role, _ := c.Get("admin_role")
+	id, _ := adminID.(uint)
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "admin", ActorID: id, ActorRef: fmt.Sprint(username), ActorRole: fmt.Sprint(role),
+		Action: "document.download", TargetType: targetType, TargetID: targetID,
+		Result: audit.ResultSuccess, Details: fmt.Sprintf("%d document(s) returned", count),
+	})
 }

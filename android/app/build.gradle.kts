@@ -25,7 +25,7 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // 23, not the Flutter default of 21: mobile_scanner's CameraX
         // dependency (androidx.camera:camera-core) requires API 23+.
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

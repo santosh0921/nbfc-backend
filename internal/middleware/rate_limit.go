@@ -66,12 +66,30 @@ func (l *ipRateLimiter) cleanupLoop() {
 
 // RateLimit returns a gin middleware allowing `rps` requests per second per
 // client IP, with a `burst` allowance for short spikes. Intended for public,
-// unauthenticated endpoints prone to abuse (OTP/login).
+// unauthenticated endpoints prone to abuse (OTP/login). Each call creates
+// its OWN independent limiter instance/map — callers should hold one
+// long-lived variable per distinct endpoint category (item E: "use
+// endpoint-specific limits rather than one global number"), never share
+// one RateLimit(...) value across unrelated routes.
 func RateLimit(rps float64, burst int) gin.HandlerFunc {
+	return NamedRateLimit("unlabeled", rps, burst)
+}
+
+// NamedRateLimit is RateLimit with a label attached to the audit event a
+// violation generates (Phase 7 item E: "record rate-limit violations for
+// security monitoring"). Every endpoint-specific limiter added in
+// internal/routes uses this so a security review can distinguish "OTP
+// abuse" from "export abuse" from "webhook abuse" in the audit log rather
+// than one undifferentiated 429 count.
+func NamedRateLimit(label string, rps float64, burst int) gin.HandlerFunc {
 	limiter := newIPRateLimiter(rate.Limit(rps), burst)
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		if !limiter.getLimiter(ip).Allow() {
+			// Aggregated rather than one synchronous DB insert per
+			// rejected request — see rate_limit_audit.go for why that
+			// was a DoS amplification vector.
+			recordRateLimitViolation(c, label, ip, c.FullPath())
 			c.JSON(http.StatusTooManyRequests, gin.H{
 				"message": "Too many requests — please slow down and try again shortly",
 			})

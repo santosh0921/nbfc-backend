@@ -16,6 +16,24 @@ const (
 	LoanStatusSanctioned   = "sanctioned"
 	LoanStatusRejected     = "rejected"
 	LoanStatusDisbursed    = "disbursed"
+
+	// Maker-checker states (Phase 1 security work) — a loan no longer goes
+	// straight from "verified" to "sanctioned" under a single admin's own
+	// decision. LoanStatusSanctioned is still the terminal "approved,
+	// ready to disburse" state (kept exactly as before so every existing
+	// downstream check — eSign, EMI eligibility, letters — keeps working
+	// unchanged), it's just no longer reachable in one step by one admin.
+	LoanStatusPendingSanctionApproval = "pending_sanction_approval"
+	LoanStatusReadyForDisbursement    = "ready_for_disbursement"
+
+	// LoanStatusDisbursementProcessing (Phase 2) — the checker approving a
+	// disbursement no longer flips a loan straight to LoanStatusDisbursed.
+	// It moves here while the actual bank transfer is in flight
+	// (internal/disbursement.Disbursement), and only becomes
+	// LoanStatusDisbursed once that transfer is independently confirmed
+	// (internal/loans.ConfirmDisbursement) — a real bank/payout
+	// confirmation, or a matched bank-statement line during reconciliation.
+	LoanStatusDisbursementProcessing = "disbursement_processing"
 )
 
 type LoanApplication struct {
@@ -78,6 +96,31 @@ type LoanApplication struct {
 	ProcessingFeeTotal         float64 `json:"processingFeeTotal,omitempty"`
 	ProcessingFeeGSTType       string  `json:"processingFeeGstType,omitempty"` // "CGST_SGST" | "IGST"
 	ProcessingFeeCustomerState string  `json:"processingFeeCustomerState,omitempty"`
+
+	// Maker-checker: sanction. RecommendedBy is the maker (LOAN_REVIEW
+	// permission); DecidedBy (existing field, reused) is the checker who
+	// approved/rejected the recommendation (LOAN_SANCTION permission) — the
+	// handler enforces RecommendedByAdminID != approving admin's ID, so
+	// the same person can never be both.
+	RecommendedByAdminID           *uint      `json:"recommendedByAdminId,omitempty"`
+	RecommendedBy                  string     `json:"recommendedBy,omitempty"` // admin username, for display
+	RecommendedAt                  *time.Time `json:"recommendedAt,omitempty"`
+	RecommendedTenureMonths        *int       `json:"recommendedTenureMonths,omitempty"`
+	RecommendedInterestRatePercent *float64   `json:"recommendedInterestRatePercent,omitempty"`
+	RecommendationRemarks          string     `json:"recommendationRemarks,omitempty"`
+	DecidedByAdminID               *uint      `json:"decidedByAdminId,omitempty"`
+
+	// Maker-checker: disbursement. DisbursementPreparedByAdminID is the
+	// maker (LOAN_DISBURSE_PREPARE); DisbursementApprovedByAdminID is the
+	// checker who released the funds (LOAN_DISBURSE) — same
+	// maker != checker enforcement as sanction, checked independently.
+	DisbursementPreparedByAdminID *uint      `json:"disbursementPreparedByAdminId,omitempty"`
+	DisbursementPreparedBy        string     `json:"disbursementPreparedBy,omitempty"`
+	DisbursementPreparedAt        *time.Time `json:"disbursementPreparedAt,omitempty"`
+	DisbursementPreparedAmount    *float64   `json:"disbursementPreparedAmount,omitempty"`
+	DisbursementApprovedByAdminID *uint      `json:"disbursementApprovedByAdminId,omitempty"`
+	DisbursementApprovedBy        string     `json:"disbursementApprovedBy,omitempty"`
+	DisbursementApprovedAt        *time.Time `json:"disbursementApprovedAt,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`

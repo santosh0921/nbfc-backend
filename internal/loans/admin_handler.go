@@ -1,7 +1,6 @@
 package loans
 
 import (
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,9 +10,21 @@ import (
 	"github.com/santosh0921/nbfc-backend/internal/audit"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
+	"github.com/santosh0921/nbfc-backend/internal/pagination"
 )
 
 // AdminListLoansHandler handles GET /admin/loans
+//
+// PHASE 15: this previously returned EVERY matching loan with no limit.
+// The loan table grows with the business, so at 100k+ loans an unfiltered
+// call would serialize the entire book into one response. Now paginated
+// via the shared bounded contract (internal/pagination).
+//
+// The response shape changed from a bare JSON array to an object with
+// "loans" plus a "pagination" block — a breaking change for any client
+// that assumed the array, and a deliberate one: silently truncating to a
+// page while still returning a bare array would have been worse, because
+// a caller could not tell a full result from a first page.
 func AdminListLoansHandler(c *gin.Context) {
 	category := c.Query("category")
 	status := c.Query("status")
@@ -24,9 +35,18 @@ func AdminListLoansHandler(c *gin.Context) {
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+
+	var total int64
+	q.Count(&total)
+
+	p := pagination.FromQuery(c)
 	var loans []models.LoanApplication
-	q.Order("created_at desc").Find(&loans)
-	c.JSON(http.StatusOK, loans)
+	q.Order("created_at desc").Limit(p.Limit).Offset(p.Offset()).Find(&loans)
+
+	c.JSON(http.StatusOK, gin.H{
+		"loans":      loans,
+		"pagination": p.Meta(total, len(loans)),
+	})
 }
 
 // AdminGetLoanHandler handles GET /admin/loans/:id
@@ -89,7 +109,14 @@ func AdminReassignLoanHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, withReferences(loan))
 }
 
-// AdminDecisionHandler handles POST /admin/loans/:id/decision
+// AdminDecisionHandler handles POST /admin/loans/:id/decision — as of the
+// Phase 1 maker-checker rework this ONLY supports outright rejection
+// (pre-recommendation; a reviewer who never wants to recommend the loan
+// for sanction at all). "sanction" is no longer accepted here — it used
+// to let a single admin unilaterally sanction a loan in one call; that
+// path is now split into two independently-authorized steps, see
+// AdminRecommendSanctionHandler + AdminApproveSanctionHandler in
+// internal/loans/maker_checker_handler.go.
 func AdminDecisionHandler(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var loan models.LoanApplication
@@ -98,149 +125,72 @@ func AdminDecisionHandler(c *gin.Context) {
 		return
 	}
 	var body struct {
-		Action              string   `json:"action" binding:"required"` // sanction | reject
-		Remarks             string   `json:"remarks"`
-		TenureMonths        *int     `json:"tenureMonths"`
-		InterestRatePercent *float64 `json:"interestRatePercent"`
+		Action  string `json:"action" binding:"required"`
+		Remarks string `json:"remarks"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	var cibilRateNote string
-	switch body.Action {
-	case "sanction":
-		if body.TenureMonths == nil || *body.TenureMonths <= 0 || body.InterestRatePercent == nil || *body.InterestRatePercent <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "tenureMonths and interestRatePercent are required and must be positive when sanctioning"})
-			return
-		}
-
-		// CIBIL-driven decision rules. Tenure stays fully admin-controlled;
-		// only the interest rate (and, below 650, the ability to sanction
-		// at all) is rule-driven.
-		if loan.CibilScore > 0 && loan.CibilScore < models.CibilRejectThreshold {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"message": "Cannot sanction: applicant's CIBIL score (" + strconv.Itoa(loan.CibilScore) +
-					") is below the minimum threshold of " + strconv.Itoa(models.CibilRejectThreshold) +
-					". This application must be rejected.",
-			})
-			return
-		}
-
-		effectiveRate := *body.InterestRatePercent
-		switch {
-		case loan.CibilScore > models.CibilPrimeThreshold:
-			effectiveRate = models.CibilMinRatePercent
-			cibilRateNote = "CIBIL " + strconv.Itoa(loan.CibilScore) + " > " + strconv.Itoa(models.CibilPrimeThreshold) +
-				" — rate forced to minimum " + strconv.FormatFloat(models.CibilMinRatePercent, 'f', 2, 64) + "%"
-		case loan.CibilScore >= models.CibilRejectThreshold:
-			effectiveRate = models.CibilMidRatePercent
-			cibilRateNote = "CIBIL " + strconv.Itoa(loan.CibilScore) + " in [" + strconv.Itoa(models.CibilRejectThreshold) +
-				"-" + strconv.Itoa(models.CibilPrimeThreshold) + "] — rate forced to " +
-				strconv.FormatFloat(models.CibilMidRatePercent, 'f', 2, 64) + "%"
-		default:
-			cibilRateNote = "CIBIL score not on file — admin-submitted rate used as-is"
-		}
-
-		loan.TenureMonths = body.TenureMonths
-		loan.InterestRatePercent = &effectiveRate
-		loan.Status = models.LoanStatusSanctioned
-
-		// Processing fee + GST are fixed at the moment of sanction, against
-		// the sanctioned amount — not recomputed later even if the address
-		// changes or the loan is later disbursed for a different amount.
-		var custAddr models.CustomerAddress
-		database.DB.Where("user_id = ?", loan.CustomerID).First(&custAddr)
-		gst := calculateProcessingFeeGST(loan.AmountRequested, custAddr.CurrentState)
-		loan.ProcessingFeeBase = gst.ProcessingFeeBase
-		loan.ProcessingFeeCGST = gst.CGST
-		loan.ProcessingFeeSGST = gst.SGST
-		loan.ProcessingFeeIGST = gst.IGST
-		loan.ProcessingFeeGSTTotal = gst.GSTTotal
-		loan.ProcessingFeeTotal = gst.Total
-		loan.ProcessingFeeGSTType = gst.GSTType
-		loan.ProcessingFeeCustomerState = gst.CustomerState
-	case "reject":
-		loan.Status = models.LoanStatusRejected
-	default:
-		c.JSON(http.StatusBadRequest, gin.H{"message": "action must be sanction or reject"})
+	if body.Action == "sanction" {
+		c.JSON(http.StatusGone, gin.H{"message": "Single-admin sanction has been disabled. Use POST /admin/loans/:id/recommend to recommend sanction terms, then a different authorized admin must call POST /admin/loans/:id/approve-sanction."})
 		return
 	}
+	if body.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "action must be reject"})
+		return
+	}
+
+	before := audit.Snapshot(loan)
 	now := time.Now()
+	loan.Status = models.LoanStatusRejected
 	loan.DecisionRemarks = body.Remarks
 	loan.DecidedBy = c.GetString("admin_username")
+	if v, ok := c.Get("admin_id"); ok {
+		if id, ok := v.(uint); ok {
+			loan.DecidedByAdminID = &id
+		}
+	}
 	loan.DecidedAt = &now
 	database.DB.Save(&loan)
 
-	title := "Loan " + loan.Status
-	notifBody := "Your " + loan.Category + " application #" + itoa(loan.ID) + " has been " + loan.Status + ". Remarks: " + body.Remarks
-	if body.Action == "sanction" {
-		notifBody += " Please review, sign, and re-upload your Sanction Letter."
-	}
-	createNotification("customer", loan.CustomerID.String(), title, notifBody)
+	createNotification("customer", loan.CustomerID.String(), "Loan rejected",
+		"Your "+loan.Category+" application #"+itoa(loan.ID)+" has been rejected. Remarks: "+body.Remarks)
 
-	switch body.Action {
-	case "sanction":
-		details := "Sanctioned loan #" + itoa(loan.ID) + " — tenure " + strconv.Itoa(*loan.TenureMonths) + "mo @ " +
-			strconv.FormatFloat(*loan.InterestRatePercent, 'f', 2, 64) + "%. " + cibilRateNote + ". Remarks: " + body.Remarks
-		audit.Record(loan.DecidedBy, "loan.sanction", "loan", itoa(loan.ID), details)
-
-		if err := generateLoanLetter(loan, "Sanction Letter"); err != nil {
-			log.Println("failed to generate sanction letter:", err)
-		}
-	case "reject":
-		audit.Record(loan.DecidedBy, "loan.reject", "loan", itoa(loan.ID), "Rejected: "+body.Remarks)
-	}
+	role, _ := c.Get("admin_role")
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "admin", ActorID: toAdminID(c), ActorRef: loan.DecidedBy, ActorRole: toStr(role),
+		Action: "loan.reject", TargetType: "loan", TargetID: itoa(loan.ID),
+		Result: audit.ResultSuccess, Reason: body.Remarks, Details: before,
+	})
 
 	c.JSON(http.StatusOK, withReferences(loan))
 }
 
-// AdminDisburseHandler handles POST /admin/loans/:id/disburse
+func toAdminID(c *gin.Context) uint {
+	if v, ok := c.Get("admin_id"); ok {
+		if id, ok := v.(uint); ok {
+			return id
+		}
+	}
+	return 0
+}
+
+func toStr(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+// AdminDisburseHandler handles POST /admin/loans/:id/disburse — disabled
+// as of the Phase 1 maker-checker rework. A single admin could previously
+// disburse real funds in one call the moment a loan was sanctioned; that
+// is now split into AdminPrepareDisbursementHandler (maker) +
+// AdminApproveDisbursementHandler (checker), see
+// internal/loans/maker_checker_handler.go.
 func AdminDisburseHandler(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	var loan models.LoanApplication
-	if err := database.DB.First(&loan, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
-		return
-	}
-	if loan.Status != models.LoanStatusSanctioned {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "loan must be sanctioned before disbursement"})
-		return
-	}
-	var body struct {
-		Amount float64 `json:"amount"`
-	}
-	c.ShouldBindJSON(&body)
-	amt := body.Amount
-	if amt == 0 {
-		amt = loan.AmountRequested
-	}
-	if loan.TenureMonths == nil || *loan.TenureMonths <= 0 || loan.InterestRatePercent == nil || *loan.InterestRatePercent <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "loan is missing tenureMonths/interestRatePercent from sanction — cannot generate EMI schedule"})
-		return
-	}
-
-	now := time.Now()
-	loan.Status = models.LoanStatusDisbursed
-	loan.DisbursedAmount = amt
-	loan.DisbursedAt = &now
-	database.DB.Save(&loan)
-
-	if err := generateEmiSchedule(&loan); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed to generate EMI schedule: " + err.Error()})
-		return
-	}
-
-	notifyDisbursement(loan, amt, now)
-
-	audit.Record(c.GetString("admin_username"), "loan.disburse", "loan", itoa(loan.ID),
-		"Disbursed Rs."+strconv.FormatFloat(amt, 'f', 2, 64)+" on "+now.Format("2006-01-02"))
-
-	if err := generateLoanLetter(loan, "Disbursement Letter"); err != nil {
-		log.Println("failed to generate disbursement letter:", err)
-	}
-
-	c.JSON(http.StatusOK, withReferences(loan))
+	c.JSON(http.StatusGone, gin.H{"message": "Single-admin disbursement has been disabled. Use POST /admin/loans/:id/prepare-disbursement, then a different authorized admin must call POST /admin/loans/:id/approve-disbursement."})
 }
 
 // letterNotificationMergeWindow: how recently the sanction notification for

@@ -6,9 +6,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	DocumentStatusActive  = "ACTIVE"
+	DocumentStatusRemoved = "REMOVED"
+)
+
 // Document is a generic uploaded file (KYC document photo, verification
-// visit photo, etc.) stored inline as base64 — same precedent as
-// CustomerSelfie.ImagePath, fine for this demo's scale.
+// visit photo, etc.).
+//
+// Phase 3: new uploads no longer store plaintext file bytes in this
+// table at all — StorageReference points at an AES-256-GCM-encrypted
+// file written by internal/storage instead (see that package's doc
+// comment), and Hash/SizeBytes/MimeType are metadata the database DOES
+// still hold, per the "store metadata/reference, not raw bytes"
+// requirement. DataBase64 is kept, still populated, ONLY for rows
+// created before this change (or if no storage provider is configured —
+// see internal/documents/handler.go) — never written to for a document
+// that has a StorageReference.
 type Document struct {
 	ID uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
 
@@ -25,13 +39,36 @@ type Document struct {
 
 	MimeType string `json:"mimeType"`
 
-	// TEXT: holds the base64-encoded file content inline (no object
-	// storage/upload step wired up yet) — same approach as
-	// CustomerSelfie.ImagePath.
-	DataBase64 string `gorm:"type:text" json:"dataBase64"`
+	// DataBase64 — legacy inline storage. See type doc comment above:
+	// never written for a document that has StorageReference set.
+	DataBase64 string `gorm:"type:text" json:"-"`
+
+	// StorageReference is the opaque reference internal/storage.Provider
+	// returned for this document's encrypted bytes — never a raw
+	// filesystem path or anything else a client could turn into direct
+	// file access.
+	StorageReference string `json:"storageReference,omitempty"`
+
+	// Hash is SHA-256 of the DECODED (plaintext) file bytes — an
+	// integrity check independent of wherever the bytes are actually
+	// stored, and a way to detect a duplicate re-upload without needing
+	// to decrypt/compare the stored copies.
+	Hash      string `gorm:"index" json:"hash,omitempty"`
+	SizeBytes int    `json:"sizeBytes,omitempty"`
+
+	Status string `gorm:"default:'ACTIVE'" json:"status"`
+
+	// RetentionExpiry is a placeholder for a data-retention policy — no
+	// automated purge job exists yet (out of scope for this phase); the
+	// field exists so one can be added without a schema change. See the
+	// Phase 3 report for this as a flagged remaining gap.
+	RetentionExpiry *time.Time `json:"retentionExpiry,omitempty"`
 
 	UploadedByType string `json:"uploadedByType"` // "customer" | "employee"
 	UploadedByRef  string `json:"uploadedByRef"`  // customer user ID (uuid string) or employee code
+	CreatedBy      string `json:"createdBy,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
+
+	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
 }

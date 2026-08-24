@@ -34,7 +34,7 @@ func CustomerOrEmployeeAuthMiddleware() gin.HandlerFunc {
 		empClaims := &employee.Claims{}
 		if tok, err := jwt.ParseWithClaims(tokenString, empClaims, func(t *jwt.Token) (interface{}, error) {
 			return employee.JWTSecret, nil
-		}); err == nil && tok.Valid {
+		}, jwt.WithValidMethods([]string{"HS256"})); err == nil && tok.Valid {
 			var emp models.Employee
 			if err := database.DB.First(&emp, empClaims.EmployeeID).Error; err == nil && emp.Active {
 				c.Set("employee_id", emp.ID)
@@ -48,7 +48,7 @@ func CustomerOrEmployeeAuthMiddleware() gin.HandlerFunc {
 		custClaims := &auth.Claims{}
 		if tok, err := jwt.ParseWithClaims(tokenString, custClaims, func(t *jwt.Token) (interface{}, error) {
 			return auth.JWTSecret, nil
-		}); err == nil && tok.Valid {
+		}, jwt.WithValidMethods([]string{"HS256"})); err == nil && tok.Valid {
 			c.Set("mobile", custClaims.Mobile)
 			c.Next()
 			return

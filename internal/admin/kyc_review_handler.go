@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/santosh0921/nbfc-backend/internal/audit"
 	"github.com/santosh0921/nbfc-backend/internal/constants"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
@@ -69,6 +70,8 @@ func setKYCReviewStatus(c *gin.Context, status string, reason string) {
 		}
 	}
 
+	before := audit.Snapshot(review)
+
 	review.Status = status
 	review.ReviewedBy = adminUsername
 	review.ReviewedAt = &now
@@ -81,8 +84,15 @@ func setKYCReviewStatus(c *gin.Context, status string, reason string) {
 		return
 	}
 
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "admin", ActorID: toAdminIDCtx(c), ActorRef: adminUsername, ActorRole: c.GetString("admin_role"),
+		Action: "kyc.review." + status, TargetType: "customer", TargetID: userID.String(),
+		Result: audit.ResultSuccess, Reason: reason,
+		Details: before, After: review,
+	})
+
 	c.JSON(http.StatusOK, gin.H{
-		"message":     "KYC review updated",
-		"kyc_review":  review,
+		"message":    "KYC review updated",
+		"kyc_review": review,
 	})
 }
