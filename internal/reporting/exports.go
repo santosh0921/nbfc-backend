@@ -107,7 +107,7 @@ func generateExportAsync(exportID uint, format string, headers []string, rows []
 		case models.ExportFormatCSV:
 			data, err = generateCSV(headers, rows)
 		case models.ExportFormatPDF:
-			data, err = generatePDFPlaceholder(headers, rows)
+			data, err = buildPDFReport(meta, headers, rows)
 		default:
 			data, err = generateCSV(headers, rows)
 		}
@@ -171,59 +171,6 @@ func generateCSV(headers []string, rows [][]string) ([]byte, error) {
 	}
 	w.Flush()
 	return buf.Bytes(), w.Error()
-}
-
-// generatePDFPlaceholder emits a minimal, valid, text-only PDF — a real
-// formatted-report PDF renderer is out of scope for this phase's
-// generic export scaffolding (see the Phase 6 report's gaps); this
-// produces an actually-openable PDF rather than mislabeling a CSV.
-func generatePDFPlaceholder(headers []string, rows [][]string) ([]byte, error) {
-	var content bytes.Buffer
-	content.WriteString("Report Export\n")
-	if len(headers) > 0 {
-		content.WriteString(joinRow(headers) + "\n")
-	}
-	for _, r := range rows {
-		content.WriteString(joinRow(r) + "\n")
-	}
-	text := content.String()
-
-	var pdf bytes.Buffer
-	pdf.WriteString("%PDF-1.4\n")
-	pdf.WriteString("1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n")
-	pdf.WriteString("2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n")
-	pdf.WriteString("3 0 obj<</Type/Page/Parent 2 0 R/Resources<</Font<</F1 5 0 R>>>>/MediaBox[0 0 612 792]/Contents 4 0 R>>endobj\n")
-	streamContent := "BT /F1 10 Tf 20 750 Td (" + pdfEscape(text) + ") Tj ET"
-	pdf.WriteString("4 0 obj<</Length " + itoaInt(len(streamContent)) + ">>stream\n" + streamContent + "\nendstream endobj\n")
-	pdf.WriteString("5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n")
-	pdf.WriteString("trailer<</Root 1 0 R>>\n%%EOF")
-	return pdf.Bytes(), nil
-}
-
-func joinRow(fields []string) string {
-	out := ""
-	for i, f := range fields {
-		if i > 0 {
-			out += ", "
-		}
-		out += f
-	}
-	return out
-}
-
-func pdfEscape(s string) string {
-	out := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '(' || c == ')' || c == '\\' {
-			out = append(out, '\\')
-		}
-		if c == '\n' {
-			continue
-		}
-		out = append(out, c)
-	}
-	return string(out)
 }
 
 // failExport records a terminal failure reason on an export row. Single

@@ -78,3 +78,12 @@ backups/
 # Backup PostgreSQL instance — password/data must never be committed.
 nbfc-backup-pg/
 *.pgpassword
+
+# Encrypted customer documents (KYC/compliance uploads) — real customer
+# data, must never be committed regardless of which storage path writes it.
+storage/
+internal/compliance/storage/documents/*.enc
+
+# Local k6 load-test scripts/reports — dev-machine artifacts, not app code.
+k6_load_test*.js
+K6_*.txt

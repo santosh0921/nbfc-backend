@@ -1,14 +1,17 @@
 package reporting
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/santosh0921/nbfc-backend/internal/audit"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
+	"github.com/santosh0921/nbfc-backend/internal/storage"
 )
 
 func adminActor(c *gin.Context) string {
@@ -486,4 +489,109 @@ func AdminValidateRetentionHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "validated"})
+}
+
+// AdminDownloadExportHandler streams a completed export's bytes to the
+// caller (item — admin panel "downloadable" reports). Kept separate from
+// AdminGetExportHandler (status/metadata only) so the JSON status-poll
+// path and the byte-download path stay distinct — a client polls status
+// first, then downloads once READY, rather than every status check
+// re-reading a potentially large file from storage.
+func AdminDownloadExportHandler(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var export models.ReportExport
+	if err := database.DB.First(&export, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Export not found"})
+		return
+	}
+	if export.Status != models.ExportStatusReady {
+		c.JSON(http.StatusConflict, gin.H{"message": "Export is not ready yet", "status": export.Status})
+		return
+	}
+	if export.StorageReference == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Export has no stored file"})
+		return
+	}
+	provider := storage.Active()
+	if provider == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "No storage provider configured"})
+		return
+	}
+	data, err := provider.Retrieve(export.StorageReference)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to retrieve export: " + err.Error()})
+		return
+	}
+
+	ext := map[string]string{models.ExportFormatExcel: "xlsx", models.ExportFormatCSV: "csv", models.ExportFormatPDF: "pdf"}[export.Format]
+	mime := map[string]string{
+		models.ExportFormatExcel: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		models.ExportFormatCSV:   "text/csv",
+		models.ExportFormatPDF:   "application/pdf",
+	}[export.Format]
+	if ext == "" {
+		ext = "bin"
+	}
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	filename := fmt.Sprintf("%s_%s.%s", export.ReportType, export.RequestedAt.Format("20060102_150405"), ext)
+
+	// Every download of a completed export is itself an auditable event
+	// — who pulled which report's bytes and when.
+	audit.RecordDetailed(nil, audit.Entry{
+		ActorType: "admin", ActorID: adminIDFrom(c), ActorRef: adminActor(c),
+		Action: "report.export.downloaded", TargetType: "report_export", TargetID: itoa(export.ID),
+		Result: audit.ResultSuccess, Details: export.ReportType,
+	})
+
+	c.Header("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	c.Data(http.StatusOK, mime, data)
+}
+
+// AdminPreviewReportHandler returns a JSON preview of a controlled
+// report — headers, totals, record count, and the first 25 rows — so an
+// admin panel can show what a report contains before committing to a
+// full export/download. Deliberately separate from the export pipeline:
+// this never touches storage or the async export/audit path, since a
+// preview is not itself a data export.
+func AdminPreviewReportHandler(c *gin.Context) {
+	reportType := c.Param("reportType")
+	from := time.Now().AddDate(0, 0, -30)
+	to := time.Now()
+	if v := c.Query("from"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			from = t
+		}
+	}
+	if v := c.Query("to"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			to = t
+		}
+	}
+
+	report, ok := BuildRegisterReport(reportType, from, to)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Unknown or unsupported report type: " + reportType})
+		return
+	}
+
+	const sampleLimit = 25
+	sample := report.Rows
+	truncated := false
+	if len(sample) > sampleLimit {
+		sample = sample[:sampleLimit]
+		truncated = true
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"reportType":  reportType,
+		"periodFrom":  from.Format("2006-01-02"),
+		"periodTo":    to.Format("2006-01-02"),
+		"headers":     report.Headers,
+		"totals":      report.Totals,
+		"recordCount": len(report.Rows),
+		"sampleRows":  sample,
+		"truncated":   truncated,
+	})
 }

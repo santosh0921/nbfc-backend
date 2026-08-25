@@ -500,6 +500,8 @@ func RegisterRoutes(router *gin.Engine) {
 	adminGroup.POST("/reporting/exports/:reportType", exportPerm, exportLimit, reporting.AdminExportControlledReportHandler)
 	adminGroup.GET("/reporting/exports", exportPerm, reporting.AdminListExportsHandler)
 	adminGroup.GET("/reporting/exports/:id", exportPerm, reporting.AdminGetExportHandler)
+	adminGroup.GET("/reporting/exports/:id/download", exportPerm, reporting.AdminDownloadExportHandler)
+	adminGroup.GET("/reporting/preview/:reportType", exportPerm, reporting.AdminPreviewReportHandler)
 
 	adminGroup.GET("/reporting/retention", misView, reporting.AdminListRetentionHandler)
 	adminGroup.POST("/reporting/retention", taskManage, reporting.AdminConfigureRetentionHandler)

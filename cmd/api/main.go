@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -163,7 +167,32 @@ func main() {
 
 	log.Println("🚀 Server starting on port", cfg.AppPort)
 
-	if err := router.Run(":" + cfg.AppPort); err != nil {
-		log.Fatal(err)
+	srv := &http.Server{
+		Addr:    ":" + cfg.AppPort,
+		Handler: router,
+	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+
+	// Graceful shutdown: without this, router.Run's process exits the
+	// instant SIGTERM/SIGINT arrives, killing every in-flight request mid-
+	// transaction — including money-moving ones — on every deploy or
+	// restart. This waits up to 15s for in-flight requests to finish
+	// draining before the process actually exits.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("🛑 Shutdown signal received, draining in-flight requests...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Println("⚠️  Graceful shutdown did not complete cleanly:", err)
+	} else {
+		log.Println("✅ Server shut down cleanly")
 	}
 }

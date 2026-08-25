@@ -88,7 +88,8 @@ func LoginHandler(c *gin.Context) {
 
 	if bcrypt.CompareHashAndPassword([]byte(adminUser.PasswordHash), []byte(req.Password)) != nil {
 		adminUser.FailedLoginAttempts++
-		if adminUser.FailedLoginAttempts >= maxFailedLoginAttempts {
+		locked := adminUser.FailedLoginAttempts >= maxFailedLoginAttempts
+		if locked {
 			lockUntil := time.Now().Add(lockoutDuration)
 			adminUser.LockedUntil = &lockUntil
 		}
@@ -99,7 +100,14 @@ func LoginHandler(c *gin.Context) {
 			Result: audit.ResultFailure, Reason: "wrong password",
 			Details: "failed_login_attempts=" + itoa(uint(adminUser.FailedLoginAttempts)),
 		})
-		c.JSON(http.StatusUnauthorized, gin.H{"message": genericInvalidCredentials})
+		resp := gin.H{"message": genericInvalidCredentials}
+		// attemptsRemaining is UX-only (helps a genuine employee notice
+		// they're about to get locked out before it happens) — omitted
+		// once locked, since the lockout message itself takes over.
+		if !locked {
+			resp["attemptsRemaining"] = maxFailedLoginAttempts - adminUser.FailedLoginAttempts
+		}
+		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
