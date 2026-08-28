@@ -26,6 +26,8 @@ class _NetBankingAuthScreenState extends State<NetBankingAuthScreen> {
   _Stage _stage = _Stage.login;
   final _userIdController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _userIdFocus = FocusNode();
+  final _passwordFocus = FocusNode();
   String _otp = '';
   bool _obscure = true;
 
@@ -33,6 +35,8 @@ class _NetBankingAuthScreenState extends State<NetBankingAuthScreen> {
   void dispose() {
     _userIdController.dispose();
     _passwordController.dispose();
+    _userIdFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -107,7 +111,14 @@ class _NetBankingAuthScreenState extends State<NetBankingAuthScreen> {
                 if (_stage == _Stage.login || _stage == _Stage.authenticating) ...[
                   Text('Log in to authorize your payment of ${widget.amountLabel}', style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
                   const SizedBox(height: 24),
-                  ApplyFormField(label: 'User ID', controller: _userIdController, hint: 'Enter your net banking user ID', onChanged: (_) => setState(() {})),
+                  ApplyFormField(
+                    label: 'User ID',
+                    controller: _userIdController,
+                    focusNode: _userIdFocus,
+                    nextFocusNode: _passwordFocus,
+                    hint: 'Enter your net banking user ID',
+                    onChanged: (_) => setState(() {}),
+                  ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -122,6 +133,12 @@ class _NetBankingAuthScreenState extends State<NetBankingAuthScreen> {
                   ApplyFormField(
                     label: '',
                     controller: _passwordController,
+                    focusNode: _passwordFocus,
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) {
+                      _passwordFocus.unfocus();
+                      if (_canLogin) _login();
+                    },
                     hint: 'Enter your password',
                     obscureText: _obscure,
                     onChanged: (_) => setState(() {}),

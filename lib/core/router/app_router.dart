@@ -5,6 +5,8 @@ import 'app_shell.dart';
 import '../../features/apply/quick_apply_screen.dart';
 import '../../features/auth/biometric_auth_page.dart';
 import '../../features/auth/create_mpin_page.dart';
+import '../../features/auth/forgot_mpin_page.dart';
+import '../../features/auth/login_mpin_page.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/mpin_unlock_page.dart';
 import '../../features/auth/otp_verify_page.dart';
@@ -46,6 +48,8 @@ const _publicPaths = [
   '/register',
   '/create-mpin',
   '/mpin-unlock',
+  '/login-mpin',
+  '/forgot-mpin',
   '/biometric',
   '/employee',
 ];
@@ -124,6 +128,16 @@ class AppRouter {
         path: '/mpin-unlock',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const MpinUnlockPage(),
+      ),
+      GoRoute(
+        path: '/login-mpin',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => LoginMpinPage(mobile: state.extra as String? ?? ''),
+      ),
+      GoRoute(
+        path: '/forgot-mpin',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => ForgotMpinPage(mobile: state.extra as String? ?? ''),
       ),
       GoRoute(
         path: '/biometric',

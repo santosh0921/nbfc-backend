@@ -17,6 +17,14 @@ class ActiveLoanLoader {
     final detail = await LoanApiService.detail(token, loanId);
     final schedule = await EmiApiService.schedule(token, loanId);
 
+    // Earliest not-yet-paid installment — the one an "Pay Now" action
+    // actually settles. Falls back to 0 (no upcoming installment call
+    // possible) only if the schedule is empty, which hasUpcomingEmi
+    // already guards against at the call site.
+    final unpaid = schedule.installments.where((i) => i.status != 'paid').toList()
+      ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    final nextInstallmentId = unpaid.isNotEmpty ? unpaid.first.id : 0;
+
     return ActiveLoan(
       loanId: 'NBFC-APP-$loanId',
       productName: detail.category,
@@ -28,6 +36,8 @@ class ActiveLoanLoader {
       monthsPaid: schedule.installments.where((i) => i.status == 'paid').length,
       interestRate: schedule.interestRatePercent,
       status: LoanStatus.active,
+      rawLoanId: loanId,
+      nextInstallmentId: nextInstallmentId,
     );
   }
 }

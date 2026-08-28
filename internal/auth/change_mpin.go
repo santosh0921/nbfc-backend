@@ -24,71 +24,71 @@ func ChangeMPINHandler(c *gin.Context) {
 
 	mobile := c.GetString("mobile")
 
-    if mobile == "" {
-	    c.JSON(http.StatusUnauthorized, gin.H{
-		    "message": "Unauthorized",
-	    })
-	    return
-    }
-
-	var user models.User
-
-err := database.DB.
-	Where("mobile = ?", mobile).
-	First(&user).Error
-
-if err != nil {
-
-	if err == gorm.ErrRecordNotFound {
-		c.JSON(http.StatusNotFound, gin.H{
-			"message": "User not found",
+	if mobile == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Unauthorized",
 		})
 		return
 	}
 
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"message": "Database error",
-	})
-	return
-}
+	var user models.User
 
-if !CheckMPIN(user.MPIN, req.CurrentMPIN) {
-	c.JSON(http.StatusUnauthorized, gin.H{
-		"message": "Current MPIN is incorrect",
-	})
-	return
-}
+	err := database.DB.
+		Where("mobile = ?", mobile).
+		First(&user).Error
 
-if req.NewMPIN != req.ConfirmMPIN {
-	c.JSON(http.StatusBadRequest, gin.H{
-		"message": "New MPIN and Confirm MPIN do not match",
-	})
-	return
-}
+	if err != nil {
 
-if req.CurrentMPIN == req.NewMPIN {
-	c.JSON(http.StatusBadRequest, gin.H{
-		"message": "New MPIN cannot be the same as the current MPIN",
-	})
-	return
-}
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{
+				"message": "User not found",
+			})
+			return
+		}
 
-hashedMPIN, err := HashMPIN(req.NewMPIN)
-if err != nil {
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"message": "Unable to hash MPIN",
-	})
-	return
-}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Database error",
+		})
+		return
+	}
 
-if err := database.DB.Model(&user).Update("mpin", hashedMPIN).Error; err != nil {
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"message": "Unable to update MPIN",
+	if !CheckMPIN(user.MPIN, req.CurrentMPIN) {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Current MPIN is incorrect",
+		})
+		return
+	}
+
+	if req.NewMPIN != req.ConfirmMPIN {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "New MPIN and Confirm MPIN do not match",
+		})
+		return
+	}
+
+	if req.CurrentMPIN == req.NewMPIN {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "New MPIN cannot be the same as the current MPIN",
+		})
+		return
+	}
+
+	hashedMPIN, err := HashMPIN(req.NewMPIN)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Unable to hash MPIN",
+		})
+		return
+	}
+
+	if err := database.DB.Model(&user).Update("mpin", hashedMPIN).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Unable to update MPIN",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "MPIN changed successfully",
 	})
-	return
-}
-c.JSON(http.StatusOK, gin.H{
-	"message": "MPIN changed successfully",
-})
 
 }

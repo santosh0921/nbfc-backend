@@ -3,8 +3,10 @@ import '../config/app_config.dart';
 import '../network/api_exception.dart';
 import '../network/auth_api_service.dart';
 import '../network/kyc_api_service.dart';
+import '../services/biometric_credential_storage.dart';
 import '../services/last_role_storage.dart';
 import '../services/token_storage.dart';
+import '../services/unlock_count_storage.dart';
 
 /// App-wide session state. Singleton (mirroring [ThemeProvider]'s scope,
 /// but session state needs to be readable by the router's `redirect`
@@ -27,6 +29,13 @@ class AuthProvider extends ChangeNotifier {
   String? token;
   bool biometricEnabled = false;
 
+  /// Set by [verifyOtp] — whether [pendingPhoneNumber] already has an
+  /// account with an MPIN set. The OTP screen uses this to route a
+  /// returning user (logged out, logging back in with the same number)
+  /// straight to "enter your existing MPIN" instead of "create a new
+  /// MPIN", which would otherwise silently overwrite their real one.
+  bool pendingAccountExists = false;
+
   // Collected on the post-OTP Registration screen, saved to the backend
   // profile right after the first successful login (real-backend mode
   // only).
@@ -48,20 +57,32 @@ class AuthProvider extends ChangeNotifier {
     return AuthApiService.sendOtp(phoneNumber);
   }
 
-  /// Step 2: verify the OTP the user entered.
+  /// Step 2: verify the OTP the user entered. Also records whether this
+  /// mobile already has an account (see [pendingAccountExists]).
   Future<bool> verifyOtp(String code) async {
     final mobile = pendingPhoneNumber;
     if (mobile == null) return false;
     if (AppConfig.useMockBackend) {
       await Future<void>.delayed(const Duration(milliseconds: 700));
+      pendingAccountExists = false;
       return code.length == 6;
     }
     try {
-      await AuthApiService.verifyOtp(mobile, code);
+      pendingAccountExists = await AuthApiService.verifyOtp(mobile, code);
       return true;
     } on ApiException {
       return false;
     }
+  }
+
+  /// Returning-user path: mobile+OTP already re-verified this session,
+  /// the account is known to already have an MPIN (see
+  /// [pendingAccountExists]) — this just logs in with it, the same real
+  /// server-verified call as every other MPIN path. Distinct from
+  /// [createMpinAndLogin], which would overwrite the existing MPIN.
+  Future<void> loginWithMpin(String mobile, String mpin) async {
+    pendingPhoneNumber = mobile;
+    await _loginAndPersist(mobile, mpin);
   }
 
   /// Step 3: set (or reset) the MPIN, then immediately log in with it to
@@ -158,6 +179,77 @@ class AuthProvider extends ChangeNotifier {
     if (mobile == null) throw ApiException('No saved account on this device — please log in again.');
     pendingPhoneNumber = mobile;
     await _loginAndPersist(mobile, mpin);
+    await UnlockCountStorage.increment();
+  }
+
+  /// Fingerprint/face unlock: gates access to the MPIN saved in secure
+  /// storage behind the caller's own biometric prompt (the caller —
+  /// [MpinUnlockPage] — runs `LocalAuthentication().authenticate()` before
+  /// calling this), then completes the exact same server-verified login
+  /// as typing the MPIN by hand. Throws if biometric login was never
+  /// enabled on this device, or the stored credential is missing (e.g.
+  /// cleared by a MPIN reset) — the caller falls back to manual MPIN entry.
+  Future<void> unlockWithBiometric() async {
+    final mobile = await TokenStorage.readMobile();
+    if (mobile == null) throw ApiException('No saved account on this device — please log in again.');
+    final mpin = await BiometricCredentialStorage.readMpin(mobile);
+    if (mpin == null) {
+      throw ApiException('Fingerprint login isn\'t set up on this device — enter your MPIN.');
+    }
+    pendingPhoneNumber = mobile;
+    await _loginAndPersist(mobile, mpin);
+    await UnlockCountStorage.increment();
+  }
+
+  /// Offer "enable fingerprint login" after a few manual MPIN unlocks in a
+  /// row, not on the very first one — and never again once the customer
+  /// has enabled it or explicitly dismissed the offer.
+  Future<bool> shouldOfferBiometricEnrollment() async {
+    if (biometricEnabled) return false;
+    if (await UnlockCountStorage.isOfferDismissed()) return false;
+    final count = await UnlockCountStorage.read();
+    return count >= 3;
+  }
+
+  Future<void> dismissBiometricOffer() => UnlockCountStorage.markOfferDismissed();
+
+  /// Enables biometric login: stores the MPIN the customer just proved
+  /// they know (they either just typed it to unlock, or just set it) in
+  /// secure storage, and flips the server-side preference flag.
+  Future<void> enableBiometricLogin(String mpin) async {
+    final mobile = await TokenStorage.readMobile() ?? pendingPhoneNumber;
+    if (mobile == null) throw ApiException('Missing account — please log in again.');
+    await BiometricCredentialStorage.saveMpin(mobile, mpin);
+    await setBiometricEnabled(true);
+  }
+
+  Future<void> disableBiometricLogin() async {
+    final mobile = await TokenStorage.readMobile();
+    if (mobile != null) await BiometricCredentialStorage.clear(mobile);
+    await setBiometricEnabled(false);
+  }
+
+  /// Logged-in path — the customer knows their current MPIN, backend
+  /// verifies it server-side before accepting the new one. Keeps the
+  /// biometric-stored copy in sync so fingerprint login doesn't silently
+  /// start failing with the old MPIN.
+  Future<void> changeMpin(String currentMpin, String newMpin, String confirmMpin) async {
+    final t = token;
+    if (t == null) throw ApiException('Not logged in.');
+    await AuthApiService.changeMpin(t, currentMpin, newMpin, confirmMpin);
+    if (biometricEnabled) {
+      final mobile = await TokenStorage.readMobile();
+      if (mobile != null) await BiometricCredentialStorage.saveMpin(mobile, newMpin);
+    }
+  }
+
+  /// Forgot-MPIN path — no token yet, gated by the same OTP verification
+  /// as sign-up. Disables biometric login afterwards: the stored MPIN is
+  /// now stale, and re-enabling requires the customer to prove the new
+  /// MPIN once more, same as any other credential rotation.
+  Future<void> forgotMpin(String mobile, String newMpin, String confirmMpin) async {
+    await AuthApiService.forgotMpin(mobile, newMpin, confirmMpin);
+    await BiometricCredentialStorage.clear(mobile);
   }
 
   Future<void> setBiometricEnabled(bool enabled) async {

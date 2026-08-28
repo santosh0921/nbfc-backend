@@ -3,6 +3,7 @@ package support
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -95,28 +96,65 @@ func ListMessagesHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"thread": thread, "messages": messages})
 }
 
-// AdminListThreadsHandler handles GET /admin/support/threads
+// AdminListThreadsHandler handles GET /admin/support/threads. Enriched
+// with customer identity and a per-thread message count/last-sender so the
+// admin list can actually show who's waiting on a reply, rather than just
+// a thread ID and a truncated snippet — every field here is a real lookup
+// against the customer/message rows, nothing synthesized.
 func AdminListThreadsHandler(c *gin.Context) {
 	var threads []models.SupportThread
 	database.DB.Order("updated_at desc").Find(&threads)
 
 	type threadSummary struct {
 		models.SupportThread
-		LastMessage string `json:"lastMessage"`
+		LastMessage    string `json:"lastMessage"`
+		LastSenderType string `json:"lastSenderType"`
+		MessageCount   int64  `json:"messageCount"`
+		CustomerName   string `json:"customerName"`
+		CustomerMobile string `json:"customerMobile"`
+		AwaitingReply  bool   `json:"awaitingReply"`
 	}
 	out := make([]threadSummary, 0, len(threads))
 	for _, t := range threads {
 		var last models.SupportMessage
 		preview := ""
+		lastSender := ""
 		if err := database.DB.Where("thread_id = ?", t.ID).Order("created_at desc").First(&last).Error; err == nil {
 			preview = last.Body
+			lastSender = last.SenderType
 		}
-		out = append(out, threadSummary{SupportThread: t, LastMessage: preview})
+
+		var count int64
+		database.DB.Model(&models.SupportMessage{}).Where("thread_id = ?", t.ID).Count(&count)
+
+		var user models.User
+		customerName := ""
+		customerMobile := ""
+		if err := database.DB.First(&user, "id = ?", t.CustomerID).Error; err == nil {
+			customerMobile = user.Mobile
+			var profile models.CustomerProfile
+			if err := database.DB.Where("user_id = ?", t.CustomerID).First(&profile).Error; err == nil {
+				customerName = strings.TrimSpace(profile.FirstName + " " + profile.LastName)
+			}
+		}
+
+		out = append(out, threadSummary{
+			SupportThread:  t,
+			LastMessage:    preview,
+			LastSenderType: lastSender,
+			MessageCount:   count,
+			CustomerName:   customerName,
+			CustomerMobile: customerMobile,
+			AwaitingReply:  t.Status == "open" && lastSender == models.SupportSenderCustomer,
+		})
 	}
 	c.JSON(http.StatusOK, out)
 }
 
-// AdminThreadMessagesHandler handles GET /admin/support/threads/:id/messages
+// AdminThreadMessagesHandler handles GET /admin/support/threads/:id/messages.
+// The returned "thread" object carries the same customerName/customerMobile
+// enrichment as AdminListThreadsHandler, so the detail panel's header can
+// show who the agent is actually talking to, not just a thread number.
 func AdminThreadMessagesHandler(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var thread models.SupportThread
@@ -126,7 +164,24 @@ func AdminThreadMessagesHandler(c *gin.Context) {
 	}
 	var messages []models.SupportMessage
 	database.DB.Where("thread_id = ?", thread.ID).Order("created_at asc").Find(&messages)
-	c.JSON(http.StatusOK, gin.H{"thread": thread, "messages": messages})
+
+	var user models.User
+	customerName := ""
+	customerMobile := ""
+	if err := database.DB.First(&user, "id = ?", thread.CustomerID).Error; err == nil {
+		customerMobile = user.Mobile
+		var profile models.CustomerProfile
+		if err := database.DB.Where("user_id = ?", thread.CustomerID).First(&profile).Error; err == nil {
+			customerName = strings.TrimSpace(profile.FirstName + " " + profile.LastName)
+		}
+	}
+
+	threadOut := gin.H{
+		"id": thread.ID, "customerId": thread.CustomerID, "status": thread.Status,
+		"createdAt": thread.CreatedAt, "updatedAt": thread.UpdatedAt,
+		"customerName": customerName, "customerMobile": customerMobile,
+	}
+	c.JSON(http.StatusOK, gin.H{"thread": threadOut, "messages": messages})
 }
 
 // AdminReplyHandler handles POST /admin/support/threads/:id/messages

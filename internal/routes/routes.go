@@ -34,6 +34,7 @@ import (
 	"github.com/santosh0921/nbfc-backend/internal/risk"
 	"github.com/santosh0921/nbfc-backend/internal/screening"
 	"github.com/santosh0921/nbfc-backend/internal/signaling"
+	"github.com/santosh0921/nbfc-backend/internal/complaints"
 	"github.com/santosh0921/nbfc-backend/internal/support"
 	taxpkg "github.com/santosh0921/nbfc-backend/internal/tax"
 	"github.com/santosh0921/nbfc-backend/internal/writeoff"
@@ -82,6 +83,13 @@ func RegisterRoutes(router *gin.Engine) {
 	router.POST("/auth/create-mpin", mpinLimit, auth.CreateMPINHandler)
 	router.POST("/auth/login", loginLimit, auth.LoginHandler)
 
+	// Forgot MPIN — same shape as create-mpin: public (the customer isn't
+	// logged in yet, that's the whole point), gated behind the same OTP
+	// verification the app's existing send-otp/verify-otp screens already
+	// implement. Previously implemented (internal/auth/forgot_mpin.go) but
+	// never actually registered as a route, so the app had nothing to call.
+	router.POST("/auth/forgot-mpin", mpinLimit, auth.ForgotMPINHandler)
+
 	// Payment gateway webhook — deliberately outside any JWT-authenticated
 	// group (the caller is the gateway, not a logged-in user); its own
 	// request is proven authentic via HMAC signature verification inside
@@ -106,6 +114,12 @@ func RegisterRoutes(router *gin.Engine) {
 	authorized.POST("/employment", profile.CreateEmploymentHandler)
 
 	authorized.PUT("/biometric", auth.ToggleBiometric)
+
+	// Change MPIN (logged-in customer, knows their current MPIN) —
+	// previously implemented (internal/auth/change_mpin.go) but, like
+	// forgot-mpin above, never actually registered — the app's "Change
+	// MPIN" screen had no real endpoint to call.
+	authorized.PUT("/change-mpin", auth.ChangeMPINHandler)
 
 	authorized.POST("/documents", documentUploadLimit, documents.UploadCustomerDocumentHandler)
 	authorized.GET("/documents", documents.ListCustomerDocumentsHandler)
@@ -563,6 +577,14 @@ func RegisterRoutes(router *gin.Engine) {
 	adminGroup.POST("/support/threads/:id/messages", perm(rbac.CustomerView), support.AdminReplyHandler)
 	adminGroup.POST("/support/threads/:id/close", perm(rbac.CustomerView), support.AdminCloseThreadHandler)
 
+	// Complaints — a distinct, categorized/status-tracked grievance queue,
+	// separate from the free-form Support chat above. Was previously a
+	// customer-app form that stored entries only in local device memory
+	// (never sent anywhere); this is the real backend it should have been
+	// calling all along.
+	adminGroup.GET("/complaints", perm(rbac.CustomerView), complaints.AdminListComplaintsHandler)
+	adminGroup.PUT("/complaints/:id", perm(rbac.CustomerView), complaints.AdminUpdateComplaintHandler)
+
 	// Customer loan routes (reuse existing customer JWT middleware)
 	authorized.POST("/loans/apply", loanSubmitLimit, loans.SubmitLoanHandler)
 	authorized.GET("/loans/mine", loans.ListMyLoansHandler)
@@ -570,6 +592,12 @@ func RegisterRoutes(router *gin.Engine) {
 	authorized.GET("/loans/:id/emi-schedule", loans.CustomerEmiScheduleHandler)
 	authorized.POST("/loans/:id/emi/:installmentId/pay", loans.CustomerPayEmiHandler) // disabled — returns 410
 	authorized.POST("/loans/:id/emi/:installmentId/create-order", paymentOrderLimit, payments.CustomerCreatePaymentOrderHandler)
+
+	// Demo-only EMI settlement (internal/loans/emi_handler.go's
+	// CustomerDemoPayEmiHandler) — 404s at the handler level unless
+	// config.DemoMode is true, so this route existing at all is harmless
+	// in production; the actual gate lives in the handler, not here.
+	authorized.POST("/loans/:id/emi/:installmentId/demo-pay", paymentOrderLimit, loans.CustomerDemoPayEmiHandler)
 	authorized.GET("/payments/:paymentId", payments.CustomerGetPaymentStatusHandler)
 	authorized.GET("/dashboard/emi-summary", loans.CustomerEmiSummaryHandler)
 	authorized.GET("/credit-score", loans.CustomerCreditScoreHandler)
@@ -579,6 +607,9 @@ func RegisterRoutes(router *gin.Engine) {
 
 	authorized.POST("/support/messages", support.PostMessageHandler)
 	authorized.GET("/support/messages", support.ListMessagesHandler)
+
+	authorized.POST("/complaints", complaints.CreateComplaintHandler)
+	authorized.GET("/complaints", complaints.ListMyComplaintsHandler)
 
 	// Employee routes (new employee JWT middleware)
 	router.POST("/employee/login", loginLimit, employee.LoginHandler)

@@ -21,6 +21,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _dobController = TextEditingController();
+  final _nameFocus = FocusNode();
+  final _emailFocus = FocusNode();
+  final _dobFocus = FocusNode();
   DateTime? _dobValue;
 
   @override
@@ -28,6 +31,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
     _nameController.dispose();
     _emailController.dispose();
     _dobController.dispose();
+    _nameFocus.dispose();
+    _emailFocus.dispose();
+    _dobFocus.dispose();
     super.dispose();
   }
 
@@ -107,14 +113,24 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 ApplyFormField(
                   label: 'Full Name',
                   controller: _nameController,
+                  focusNode: _nameFocus,
+                  nextFocusNode: _emailFocus,
                   hint: 'Enter your full name',
                   validator: _validateName,
                 ),
                 ApplyFormField(
                   label: 'Email Address',
                   controller: _emailController,
+                  focusNode: _emailFocus,
                   keyboardType: TextInputType.emailAddress,
                   hint: 'you@example.com',
+                  textInputAction: TextInputAction.next,
+                  onFieldSubmitted: (_) {
+                    // DOB isn't typed — hand off to the date picker
+                    // instead of just parking focus on a read-only field.
+                    _emailFocus.unfocus();
+                    _pickDob();
+                  },
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Enter your email';
                     if (!v.contains('@') || !v.contains('.')) return 'Enter a valid email';
@@ -124,6 +140,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 ApplyFormField(
                   label: 'Date of Birth',
                   controller: _dobController,
+                  focusNode: _dobFocus,
                   readOnly: true,
                   onTap: _pickDob,
                   hint: 'Select date',

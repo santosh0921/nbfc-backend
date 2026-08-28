@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:local_auth/local_auth.dart';
+import '../../core/network/api_exception.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
+import '../../core/widgets/app_snackbar.dart';
 import '../../core/widgets/premium_card.dart';
 import '../auth/widgets/code_boxes.dart';
 
-/// Profile → Security: change your MPIN (real 6-box flow, matching
-/// pattern), toggle biometric login, and review active sessions.
-/// Frontend-only — MPIN change is validated locally, nothing is sent
-/// anywhere.
+/// Profile → Security: change your MPIN, toggle biometric login, and
+/// review active sessions. Change-MPIN and the biometric toggle both call
+/// the real backend (`PUT /auth/change-mpin`, `PUT /auth/biometric`) via
+/// [AuthProvider] — nothing here is simulated.
 class SecurityScreen extends StatefulWidget {
   const SecurityScreen({super.key});
 
@@ -16,7 +20,7 @@ class SecurityScreen extends StatefulWidget {
 }
 
 class _SecurityScreenState extends State<SecurityScreen> {
-  bool _biometricEnabled = true;
+  final LocalAuthentication _localAuth = LocalAuthentication();
 
   static const _sessions = [
     ('This Device', 'Android · Active now', true),
@@ -30,6 +34,37 @@ class _SecurityScreenState extends State<SecurityScreen> {
       isScrollControlled: true,
       builder: (context) => const _ChangeMpinSheet(),
     );
+  }
+
+  /// Turning biometric ON needs the current MPIN once — it's what gets
+  /// stored (in OS secure storage) as the credential biometric unlock
+  /// later releases. Turning it OFF just clears that and flips the flag.
+  Future<void> _onBiometricToggled(bool enable) async {
+    if (!enable) {
+      await AuthProvider.instance.disableBiometricLogin();
+      if (mounted) setState(() {});
+      return;
+    }
+    final mpin = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => const _ConfirmMpinForBiometricSheet(),
+    );
+    if (mpin == null || mpin.length != 6) return;
+    try {
+      final authenticated = await _localAuth.authenticate(
+        localizedReason: 'Enable fingerprint login for NBFC Premium',
+        options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
+      );
+      if (!authenticated) return;
+      await AuthProvider.instance.enableBiometricLogin(mpin);
+      if (mounted) {
+        setState(() {});
+        AppSnackBar.showSuccess(context, 'Fingerprint login enabled.');
+      }
+    } catch (_) {
+      if (mounted) AppSnackBar.showError(context, 'Could not access biometrics on this device.');
+    }
   }
 
   @override
@@ -56,9 +91,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     secondary: const Icon(Icons.fingerprint_rounded, color: AppColors.primary),
                     title: const Text('Biometric Login'),
                     subtitle: const Text('Use fingerprint or face unlock'),
-                    value: _biometricEnabled,
+                    value: AuthProvider.instance.biometricEnabled,
                     activeThumbColor: AppColors.primary,
-                    onChanged: (v) => setState(() => _biometricEnabled = v),
+                    onChanged: _onBiometricToggled,
                   ),
                 ],
               ),
@@ -118,16 +153,35 @@ class _ChangeMpinSheetState extends State<_ChangeMpinSheet> {
   String _newMpin = '';
   String _confirmMpin = '';
   String? _error;
+  bool _isSubmitting = false;
 
   bool get _canSubmit => _current.length == 6 && _newMpin.length == 6 && _confirmMpin.length == 6;
 
-  void _submit() {
+  Future<void> _submit() async {
     if (_confirmMpin != _newMpin) {
       setState(() => _error = 'New MPIN and confirmation do not match.');
       return;
     }
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('MPIN updated successfully.')));
+    if (_current == _newMpin) {
+      setState(() => _error = 'New MPIN cannot be the same as the current MPIN.');
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+    try {
+      await AuthProvider.instance.changeMpin(_current, _newMpin, _confirmMpin);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      AppSnackBar.showSuccess(context, 'MPIN updated successfully.');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = e.message;
+      });
+    }
   }
 
   @override
@@ -163,9 +217,60 @@ class _ChangeMpinSheetState extends State<_ChangeMpinSheet> {
             ],
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _canSubmit ? _submit : null,
+              onPressed: _canSubmit && !_isSubmitting ? _submit : null,
               style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-              child: const Text('Update MPIN'),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.2, valueColor: AlwaysStoppedAnimation(Colors.white)),
+                    )
+                  : const Text('Update MPIN'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Confirms the current MPIN before turning biometric login on — this is
+/// the one moment the plaintext MPIN is available to store (in OS secure
+/// storage) as the credential biometric unlock will later release.
+class _ConfirmMpinForBiometricSheet extends StatefulWidget {
+  const _ConfirmMpinForBiometricSheet();
+
+  @override
+  State<_ConfirmMpinForBiometricSheet> createState() => _ConfirmMpinForBiometricSheetState();
+}
+
+class _ConfirmMpinForBiometricSheetState extends State<_ConfirmMpinForBiometricSheet> {
+  String _mpin = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Confirm Your MPIN', style: theme.textTheme.headlineSmall),
+            const SizedBox(height: 8),
+            Text(
+              'Enter your current MPIN to enable fingerprint login.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            CodeBoxes(obscure: true, autofocus: true, onChanged: (v) => setState(() => _mpin = v)),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _mpin.length == 6 ? () => Navigator.of(context).pop(_mpin) : null,
+              style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+              child: const Text('Continue'),
             ),
           ],
         ),

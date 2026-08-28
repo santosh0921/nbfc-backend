@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/network/emi_api_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/services/active_loan_loader.dart';
 import '../../core/services/notification_service.dart';
@@ -37,9 +38,13 @@ const _banks = [
 
 /// EMI Pay Now flow: pick a payment method and fill in its real form
 /// (UPI ID, card number/expiry/CVV, or a bank selection for net
-/// banking), confirm, "process" (mock delay), then a receipt-style
-/// success screen with a generated reference number. Frontend-only — no
-/// real payment gateway, nothing is sent anywhere.
+/// banking), confirm, then a receipt-style success screen. The payment
+/// method fields themselves are still cosmetic (no gateway SDK is wired
+/// up to actually charge a card/UPI ID) — but completing the flow now
+/// makes a real backend call (`EmiApiService.demoPay`, DEMO_MODE-gated)
+/// that actually marks the installment paid, so the app's own upcoming/
+/// paid EMI lists and payment history genuinely update, not just this
+/// screen's local state.
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key});
 
@@ -61,6 +66,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final _cardNameController = TextEditingController();
   String? _selectedBank;
   String? _scannedUpiName;
+  String? _payError;
 
   late Future<ActiveLoan?> _loanFuture;
   ActiveLoan? _cachedLoan;
@@ -164,19 +170,41 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (confirmed == true) await _completePayment();
   }
 
+  /// Demo mode: actually settles the installment server-side
+  /// (`POST .../demo-pay`) rather than just faking a delay — so the app's
+  /// own upcoming-EMI and payment-history views reflect a real state
+  /// change, not a UI-only illusion. See CustomerDemoPayEmiHandler's doc
+  /// comment for why this is safe (DEMO_MODE-gated, ownership-checked, no
+  /// customer-supplied "proof" accepted) and distinct from the real
+  /// gateway path used when a payment gateway is actually configured.
   Future<void> _completePayment() async {
-    setState(() => _isProcessing = true);
-    await Future<void>.delayed(const Duration(milliseconds: 1400));
-    if (!mounted) return;
-    setState(() {
-      _isProcessing = false;
-      _isPaid = true;
-    });
     final loan = _cachedLoan;
-    NotificationService.instance.show(
-      title: 'Payment Successful',
-      body: loan != null ? 'Your EMI payment for ${loan.productName} was received successfully.' : 'Your payment was received successfully.',
-    );
+    final token = AuthProvider.instance.token;
+    if (loan == null || token == null) return;
+
+    setState(() {
+      _isProcessing = true;
+      _payError = null;
+    });
+    try {
+      await EmiApiService.demoPay(token, loan.rawLoanId, loan.nextInstallmentId);
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _isPaid = true;
+      });
+      NotificationService.instance.show(
+        title: 'Payment Successful',
+        body: 'Your EMI payment for ${loan.productName} was received successfully.',
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _payError = e.message;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   @override
@@ -335,6 +363,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   selectedBank: _selectedBank,
                   onSelect: (bank) => setState(() => _selectedBank = bank),
                 ),
+              if (_payError != null) ...[
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(_payError!, style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w600, fontSize: 13))),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: (_isProcessing || !_isMethodValid) ? null : _pay,

@@ -13,14 +13,19 @@ class AppConfig {
     current = config;
   }
 
-  // Points at the deployed Render backend — same one the customer app's
-  // ApiClient (lib/core/network/api_client.dart) and the admin panel use —
-  // so login and every other call go to the real, always-on backend
-  // instead of a local `go run` process that needs to be kept running and
-  // (on a physical device) `adb reverse tcp:8080 tcp:8080` kept alive.
+  // Overridable at build time with `--dart-define=API_BASE_URL=...` (same
+  // pattern the customer app's ApiClient and the admin panel's ApiClient
+  // both use) — defaults to the deployed Render backend when not
+  // overridden, so login and every other call go to the real, always-on
+  // backend by default. Without this override hook, there was no way to
+  // point a build at a local backend at all: the constant below used to be
+  // hardcoded to the Render URL regardless of any build flag passed.
   static const development = AppConfig._(
     env: AppEnv.development,
-    apiBaseUrl: 'https://nbfc-backend-gr1t.onrender.com',
+    apiBaseUrl: String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: 'https://nbfc-backend-gr1t.onrender.com',
+    ),
     useMockData: false,
   );
 

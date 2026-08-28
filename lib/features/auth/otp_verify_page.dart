@@ -87,6 +87,13 @@ class _OtpVerifyPageState extends State<OtpVerifyPage> {
       setState(() => _hasError = true);
       return;
     }
+    if (AuthProvider.instance.pendingAccountExists) {
+      // Returning user — this number already has an MPIN set. Straight to
+      // "enter your MPIN", never back through registration/create-MPIN.
+      final mobile = widget.phoneNumber ?? AuthProvider.instance.pendingPhoneNumber ?? '';
+      context.go('/login-mpin', extra: mobile);
+      return;
+    }
     context.go('/register');
   }
 

@@ -23,78 +23,78 @@ func ForgotMPINHandler(c *gin.Context) {
 	}
 
 	if req.NewMPIN != req.ConfirmMPIN {
-	    c.JSON(http.StatusBadRequest, gin.H{
-		    "message": "New MPIN and Confirm MPIN do not match",
-	    })
-	    return
-    }
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "New MPIN and Confirm MPIN do not match",
+		})
+		return
+	}
 
 	var otpRecord otp.OTPVerification
 
-err := database.DB.
-	Where("mobile = ? AND verified = ?", req.Mobile, true).
-	First(&otpRecord).Error
+	err := database.DB.
+		Where("mobile = ? AND verified = ?", req.Mobile, true).
+		First(&otpRecord).Error
 
-if err != nil {
+	if err != nil {
 
-	if err == gorm.ErrRecordNotFound {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Please verify OTP first",
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"message": "Please verify OTP first",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Database error",
 		})
 		return
 	}
 
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"message": "Database error",
-	})	
-	return
-}
+	var user models.User
 
-var user models.User
+	err = database.DB.
+		Where("mobile = ?", req.Mobile).
+		First(&user).Error
 
-err = database.DB.
-	Where("mobile = ?", req.Mobile).
-	First(&user).Error
+	if err != nil {
 
-if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{
+				"message": "User not found",
+			})
+			return
+		}
 
-	if err == gorm.ErrRecordNotFound {
-		c.JSON(http.StatusNotFound, gin.H{
-			"message": "User not found",
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Database error",
 		})
 		return
 	}
 
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"message": "Database error",
-	})
-	return
-}
+	hashedMPIN, err := HashMPIN(req.NewMPIN)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Unable to hash MPIN",
+		})
+		return
+	}
 
-hashedMPIN, err := HashMPIN(req.NewMPIN)
-if err != nil {
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"message": "Unable to hash MPIN",
-	})
-	return
-}
+	if err := database.DB.Model(&user).Update("mpin", hashedMPIN).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Unable to update MPIN",
+		})
+		return
+	}
 
-if err := database.DB.Model(&user).Update("mpin", hashedMPIN).Error; err != nil {
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"message": "Unable to update MPIN",
-	})
-	return
-}
+	if err := database.DB.Delete(&otpRecord).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Unable to delete OTP",
+		})
+		return
+	}
 
-if err := database.DB.Delete(&otpRecord).Error; err != nil {
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"message": "Unable to delete OTP",
+	c.JSON(http.StatusOK, gin.H{
+		"message": "MPIN reset successfully",
 	})
-	return
-}
-
-c.JSON(http.StatusOK, gin.H{
-	"message": "MPIN reset successfully",
-})
 
 }

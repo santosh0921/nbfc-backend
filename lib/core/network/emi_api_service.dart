@@ -35,4 +35,16 @@ class EmiApiService {
     final res = await ApiClient.get('/auth/dashboard/emi-summary', token: token);
     return EmiDashboardSummary.fromJson(res);
   }
+
+  /// Demo-mode-only settlement (`internal/loans/emi_handler.go`'s
+  /// CustomerDemoPayEmiHandler) — 404s if the backend isn't running with
+  /// DEMO_MODE set. Unlike a real gateway payment, this genuinely marks
+  /// the installment paid server-side (accounting posting, receipt
+  /// generation, the works) without a gateway in the loop, so the demo
+  /// app's own EMI/payment-history views reflect a real state change
+  /// instead of a UI-only success screen. Returns the updated schedule.
+  static Future<EmiSchedule> demoPay(String token, int loanId, int installmentId) async {
+    final res = await ApiClient.post('/auth/loans/$loanId/emi/$installmentId/demo-pay', const {}, token: token);
+    return EmiSchedule.fromJson(res);
+  }
 }

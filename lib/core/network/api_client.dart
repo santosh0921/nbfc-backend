@@ -11,7 +11,14 @@ import 'api_exception.dart';
 class ApiClient {
   ApiClient._();
 
-  static const String baseUrl = 'https://nbfc-backend-gr1t.onrender.com';
+  // Overridable at build time with `--dart-define=API_BASE_URL=...` (same
+  // pattern the admin panel's ApiClient already uses) — without this, no
+  // build flag could ever point the app at a local backend; it silently
+  // hit Render regardless of what was passed.
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://nbfc-backend-gr1t.onrender.com',
+  );
   // The backend runs on Render's free tier, which spins the service down
   // after inactivity and can take 30-50s to cold-start on the next
   // request — Render won't even accept the connection until the app has

@@ -20,6 +20,9 @@ class ApplyFormField extends StatelessWidget {
     this.onTap,
     this.onChanged,
     this.focusNode,
+    this.textInputAction,
+    this.onFieldSubmitted,
+    this.nextFocusNode,
   });
 
   final String label;
@@ -34,6 +37,19 @@ class ApplyFormField extends StatelessWidget {
   final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
   final FocusNode? focusNode;
+
+  /// Defaults to [TextInputAction.next] when [nextFocusNode] is given (or
+  /// the field just isn't marked as the last one), [TextInputAction.done]
+  /// otherwise — so the on-screen keyboard's own action button matches
+  /// what actually happens when it's pressed.
+  final TextInputAction? textInputAction;
+
+  /// Called when the keyboard's action button is pressed. If not
+  /// provided but [nextFocusNode] is, submitting moves focus there
+  /// automatically — the common "finish one field, jump to the next"
+  /// behavior — without every call site needing to wire it by hand.
+  final ValueChanged<String>? onFieldSubmitted;
+  final FocusNode? nextFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +69,9 @@ class ApplyFormField extends StatelessWidget {
           readOnly: readOnly,
           onTap: onTap,
           onChanged: onChanged,
+          textInputAction: textInputAction ?? (nextFocusNode != null ? TextInputAction.next : null),
+          onFieldSubmitted: onFieldSubmitted ??
+              (nextFocusNode != null ? (_) => FocusScope.of(context).requestFocus(nextFocusNode) : null),
           decoration: InputDecoration(
             hintText: hint,
             counterText: '',

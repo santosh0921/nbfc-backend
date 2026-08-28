@@ -69,6 +69,14 @@ class _EmiScheduleScreenState extends State<EmiScheduleScreen> {
   /// independently verified via the gateway's webhook
   /// (internal/payments.RazorpayWebhookHandler) — this screen never marks
   /// itself "paid"; it polls and waits for the backend to say so.
+  ///
+  /// Falls back to the demo settlement path (CustomerDemoPayEmiHandler,
+  /// DEMO_MODE-gated) when the backend reports no gateway is configured
+  /// (503) — without this, "Pay Now" would just fail outright in any
+  /// environment that hasn't set up real Razorpay credentials, which is
+  /// every local/demo environment. Either way, [_refresh] afterwards is
+  /// what actually makes the paid/remaining totals on this screen move —
+  /// both paths lead to the same real, backend-verified state change.
   Future<void> _payNow(EmiInstallment installment) async {
     final id = _loanId;
     final token = AuthProvider.instance.token;
@@ -86,8 +94,23 @@ class _EmiScheduleScreenState extends State<EmiScheduleScreen> {
         await _refresh();
       }
     } on ApiException catch (e) {
+      if (e.statusCode == 503) {
+        await _payViaDemoSettlement(token, id, installment);
+        return;
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _paying = false);
+    }
+  }
+
+  Future<void> _payViaDemoSettlement(String token, int loanId, EmiInstallment installment) async {
+    try {
+      await EmiApiService.demoPay(token, loanId, installment.id);
+      if (mounted) await _refresh();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _paying = false);
     }

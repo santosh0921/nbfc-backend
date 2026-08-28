@@ -3,29 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/network/complaint_api_service.dart';
 import '../../core/network/support_api_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
+import '../../core/widgets/app_snackbar.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../mock/mock_data.dart';
+import '../../models/complaint.dart';
 import '../../models/support_message.dart';
-
-class _Complaint {
-  final String id;
-  final String category;
-  final String description;
-  final String status;
-  final DateTime raisedOn;
-
-  const _Complaint({
-    required this.id,
-    required this.category,
-    required this.description,
-    required this.status,
-    required this.raisedOn,
-  });
-}
 
 const _faqs = [
   ('How do I check my loan application status?', 'Go to Menu → Track Application, or check My Loans from the home screen for real-time status updates.'),
@@ -48,15 +35,7 @@ class SupportScreen extends StatefulWidget {
 
 class _SupportScreenState extends State<SupportScreen> with SingleTickerProviderStateMixin {
   late final TabController _tabController = TabController(length: 4, vsync: this);
-  final List<_Complaint> _complaints = [
-    _Complaint(
-      id: 'TCK-88214',
-      category: 'Payment Issue',
-      description: 'EMI deducted twice for Personal Loan in the same billing cycle.',
-      status: 'In Progress',
-      raisedOn: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-  ];
+  final _complaintsKey = GlobalKey<_ComplaintsTabState>();
 
   @override
   void dispose() {
@@ -64,20 +43,9 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
     super.dispose();
   }
 
-  void _addComplaint(String category, String description) {
-    setState(() {
-      _complaints.insert(
-        0,
-        _Complaint(
-          id: 'TCK-${90000 + _complaints.length}',
-          category: category,
-          description: description,
-          status: 'Open',
-          raisedOn: DateTime.now(),
-        ),
-      );
-    });
+  void _onComplaintRaised() {
     _tabController.animateTo(2);
+    _complaintsKey.currentState?.reload();
   }
 
   @override
@@ -98,8 +66,8 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
         controller: _tabController,
         children: [
           const _FaqTab(),
-          _ContactTab(onComplaintRaised: _addComplaint),
-          _ComplaintsTab(complaints: _complaints),
+          _ContactTab(onComplaintRaised: _onComplaintRaised),
+          _ComplaintsTab(key: _complaintsKey),
           const _SupportChatTab(),
         ],
       ),
@@ -139,7 +107,7 @@ class _FaqTab extends StatelessWidget {
 class _ContactTab extends StatefulWidget {
   const _ContactTab({required this.onComplaintRaised});
 
-  final void Function(String category, String description) onComplaintRaised;
+  final VoidCallback onComplaintRaised;
 
   @override
   State<_ContactTab> createState() => _ContactTabState();
@@ -149,6 +117,7 @@ class _ContactTabState extends State<_ContactTab> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
   String _category = 'Payment Issue';
+  bool _isSubmitting = false;
 
   static const _categories = ['Payment Issue', 'Application Status', 'KYC / Documents', 'Technical Issue', 'Other'];
 
@@ -173,11 +142,22 @@ class _ContactTabState extends State<_ContactTab> {
     }
   }
 
-  void _submit() {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    widget.onComplaintRaised(_category, _descriptionController.text.trim());
-    _descriptionController.clear();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Complaint raised successfully.')));
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false) || _isSubmitting) return;
+    final token = AuthProvider.instance.token;
+    if (token == null) return;
+    setState(() => _isSubmitting = true);
+    try {
+      await ComplaintApiService.create(token, _category, _descriptionController.text.trim());
+      _descriptionController.clear();
+      if (!mounted) return;
+      AppSnackBar.showSuccess(context, 'Complaint raised successfully.');
+      widget.onComplaintRaised();
+    } on ApiException catch (e) {
+      if (mounted) AppSnackBar.showError(context, e.message);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
@@ -303,9 +283,15 @@ class _ContactTabState extends State<_ContactTab> {
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: _submit,
+                  onPressed: _isSubmitting ? null : _submit,
                   style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-                  child: const Text('Submit Complaint'),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.2, valueColor: AlwaysStoppedAnimation(Colors.white)),
+                        )
+                      : const Text('Submit Complaint'),
                 ),
               ],
             ),
@@ -334,69 +320,165 @@ class _ContactTabState extends State<_ContactTab> {
   }
 }
 
-class _ComplaintsTab extends StatelessWidget {
-  const _ComplaintsTab({required this.complaints});
+/// Real "My Complaints" list — fetched from `GET /auth/complaints`
+/// (`internal/complaints/handler.go`). Previously this tab just rendered
+/// whatever the in-memory `_complaints` list on the device happened to
+/// hold; now it's the customer's actual complaint history, visible to
+/// admins in the same shape via the admin panel's Complaints section.
+class _ComplaintsTab extends StatefulWidget {
+  const _ComplaintsTab({super.key});
 
-  final List<_Complaint> complaints;
+  @override
+  State<_ComplaintsTab> createState() => _ComplaintsTabState();
+}
+
+class _ComplaintsTabState extends State<_ComplaintsTab> {
+  late Future<List<Complaint>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<List<Complaint>> _load() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return const [];
+    return ComplaintApiService.listMine(token);
+  }
+
+  void reload() => setState(() => _future = _load());
 
   Color _statusColor(String status) => switch (status) {
-        'Resolved' => AppColors.success,
-        'In Progress' => AppColors.warning,
+        'resolved' => AppColors.success,
+        'closed' => AppColors.textSecondaryLight,
+        'in_progress' => AppColors.warning,
         _ => AppColors.primary,
       };
 
   @override
   Widget build(BuildContext context) {
-    if (complaints.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.inbox_rounded, size: 48, color: AppColors.textSecondaryLight),
-              const SizedBox(height: 12),
-              Text('No complaints raised yet.', style: Theme.of(context).textTheme.bodyMedium),
-            ],
-          ),
-        ),
-      );
-    }
     final theme = Theme.of(context);
-    return ListView.separated(
-      padding: const EdgeInsets.all(20),
-      itemCount: complaints.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final c = complaints[i];
-        return PremiumCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(c.id, style: theme.textTheme.titleSmall),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _statusColor(c.status).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Text(c.status, style: theme.textTheme.labelSmall?.copyWith(color: _statusColor(c.status), fontWeight: FontWeight.w700)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(c.category, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              Text(c.description, style: theme.textTheme.bodySmall),
-              const SizedBox(height: 8),
-              Text('Raised ${_relativeDate(c.raisedOn)}', style: theme.textTheme.labelSmall),
-            ],
-          ),
-        );
+    return RefreshIndicator(
+      onRefresh: () async {
+        reload();
+        await _future;
       },
+      child: FutureBuilder<List<Complaint>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            final message = snapshot.error is ApiException
+                ? (snapshot.error as ApiException).message
+                : 'Could not load your complaints.';
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                SizedBox(
+                  height: 300,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
+                          const SizedBox(height: 12),
+                          Text(message, style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+          final complaints = snapshot.data ?? const [];
+          if (complaints.isEmpty) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                SizedBox(
+                  height: 300,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.inbox_rounded, size: 48, color: AppColors.textSecondaryLight),
+                          const SizedBox(height: 12),
+                          Text('No complaints raised yet.', style: theme.textTheme.bodyMedium),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+          return ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            itemCount: complaints.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, i) {
+              final c = complaints[i];
+              return PremiumCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(c.displayId, style: theme.textTheme.titleSmall),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _statusColor(c.status).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
+                          ),
+                          child: Text(c.statusLabel,
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: _statusColor(c.status), fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(c.category, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    Text(c.description, style: theme.textTheme.bodySmall),
+                    if (c.adminNote != null && c.adminNote!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.backgroundLight,
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Response from support', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 2),
+                            Text(c.adminNote!, style: theme.textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Text('Raised ${_relativeDate(c.createdAt)}', style: theme.textTheme.labelSmall),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 

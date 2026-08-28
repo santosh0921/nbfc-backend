@@ -24,6 +24,7 @@ func Migrate() {
 		&models.AuditLog{},
 		&models.SupportThread{},
 		&models.SupportMessage{},
+		&models.Complaint{},
 		&models.AdminUser{},
 		&models.AdminSession{},
 		&models.Payment{},

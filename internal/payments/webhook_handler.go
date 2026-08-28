@@ -14,6 +14,7 @@ import (
 	"github.com/santosh0921/nbfc-backend/internal/audit"
 	"github.com/santosh0921/nbfc-backend/internal/collections"
 	"github.com/santosh0921/nbfc-backend/internal/database"
+	"github.com/santosh0921/nbfc-backend/internal/loans"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 	"github.com/santosh0921/nbfc-backend/internal/risk"
 )
@@ -196,6 +197,17 @@ func processPaymentSuccess(c *gin.Context, gateway string, payment models.Paymen
 	// idempotency key on payment ID means a safe retry is possible later.
 	if _, err := accounting.PostEmiPayment(lockedPayment, inst, gateway); err != nil {
 		log.Println("payment webhook: accounting posting failed:", err)
+	}
+
+	// Best-effort: a customer who just paid should get an actual receipt
+	// document, not just a status flip. Never fatal — the payment/EMI
+	// state is already durably committed above regardless of whether the
+	// PDF generation succeeds.
+	var paidLoan models.LoanApplication
+	if err := database.DB.First(&paidLoan, lockedPayment.LoanID).Error; err == nil {
+		if err := loans.GenerateEmiPaymentReceipt(paidLoan, inst, gateway); err != nil {
+			log.Println("payment webhook: receipt generation failed:", err)
+		}
 	}
 
 	// A promise-to-pay is only ever settled by a verified payment reaching
