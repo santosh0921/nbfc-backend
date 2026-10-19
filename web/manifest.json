@@ -1,6 +1,6 @@
 {
-    "name": "nbfc_premium",
-    "short_name": "nbfc_premium",
+    "name": "onefinance",
+    "short_name": "onefinance",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

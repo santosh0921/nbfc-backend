@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/components/app_bottom_sheet.dart';
 import '../../../../core/components/app_card.dart';
+import '../../../../core/components/app_empty_state.dart';
+import '../../../../core/components/app_error_state.dart';
 import '../../../../core/components/app_filter_chips.dart';
 import '../../../../core/components/app_scaffold.dart';
 import '../../../../core/components/app_search_bar.dart';
+import '../../../../core/components/app_skeleton_card.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/widgets/app_badge.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../../../core/widgets/auto_refresh_mixin.dart';
 import '../../domain/entities/case_entity.dart';
 import '../providers/cases_provider.dart';
 import 'case_detail_page.dart';
@@ -20,11 +24,24 @@ class CasesListPage extends StatefulWidget {
   State<CasesListPage> createState() => _CasesListPageState();
 }
 
-class _CasesListPageState extends State<CasesListPage> {
+class _CasesListPageState extends State<CasesListPage> with AutoRefreshMixin {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => context.read<CasesProvider>().load());
+    startAutoRefresh();
+  }
+
+  @override
+  Future<void> onAutoRefresh() async {
+    if (!mounted) return;
+    await context.read<CasesProvider>().load(silent: true);
+  }
+
+  @override
+  void dispose() {
+    stopAutoRefresh();
+    super.dispose();
   }
 
   bool get _hasActiveFilters {
@@ -135,26 +152,25 @@ class _CasesListPageState extends State<CasesListPage> {
           const SizedBox(height: AppSpacing.md),
           Expanded(
             child: provider.isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? ListView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: List.generate(5, (_) => const AppSkeletonCard()),
+                  )
                 : provider.errorMessage != null
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(provider.errorMessage!, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
-                            const SizedBox(height: AppSpacing.md),
-                            AppButton(label: 'Retry', onPressed: provider.load),
-                          ],
-                        ),
-                      )
+                    ? AppErrorState(message: provider.errorMessage!, onRetry: provider.load)
                     : provider.filtered.isEmpty
-                    ? Center(
-                        child: Text('No cases match your filters', style: Theme.of(context).textTheme.bodyMedium),
+                    ? const AppEmptyState(
+                        title: 'No cases match your filters',
+                        message: 'Try adjusting or clearing your filters.',
+                        icon: Icons.folder_off_outlined,
                       )
                     : RefreshIndicator(
                         onRefresh: provider.load,
                         child: ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
+                          // See dashboard_home_page.dart — stops card
+                          // shadows getting hard-clipped at the list edge.
+                          clipBehavior: Clip.none,
                           itemCount: provider.filtered.length,
                           separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                           itemBuilder: (context, index) => _CaseCard(caseItem: provider.filtered[index]),
@@ -179,6 +195,7 @@ class _CaseCard extends StatelessWidget {
       };
 
   AppBadgeVariant get _statusVariant => switch (caseItem.status) {
+        CaseStatus.pendingClaim => AppBadgeVariant.gold,
         CaseStatus.assigned => AppBadgeVariant.info,
         CaseStatus.inProgress => AppBadgeVariant.warning,
         CaseStatus.pendingReview => AppBadgeVariant.gold,
@@ -186,12 +203,27 @@ class _CaseCard extends StatelessWidget {
         CaseStatus.rejected => AppBadgeVariant.danger,
       };
 
+  Future<void> _claim(BuildContext context) async {
+    final provider = context.read<CasesProvider>();
+    final error = await provider.claim(caseItem.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error ?? 'Case claimed — it\'s now yours.')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // An unclaimed pool case shouldn't jump straight into the detail/
+    // verification flow on tap — first-come-first-served means claiming
+    // it is the action, not viewing it.
+    final isPendingClaim = caseItem.status == CaseStatus.pendingClaim;
     return AppCard(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => CaseDetailPage(caseId: caseItem.id)),
-      ),
+      onTap: isPendingClaim
+          ? () => _claim(context)
+          : () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => CaseDetailPage(caseId: caseItem.id)),
+              ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -248,6 +280,13 @@ class _CaseCard extends StatelessWidget {
               ),
             ],
           ),
+          if (isPendingClaim) ...[
+            const SizedBox(height: AppSpacing.sm),
+            SizedBox(
+              width: double.infinity,
+              child: AppButton(label: 'Claim This Case', onPressed: () => _claim(context)),
+            ),
+          ],
         ],
       ),
     );

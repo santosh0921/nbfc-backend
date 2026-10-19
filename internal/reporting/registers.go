@@ -57,6 +57,8 @@ func BuildRegisterReport(reportType string, from, to time.Time) (*reportRows, bo
 		return buildLoanRegister(from, to), true
 	case "CUSTOMER_REGISTER":
 		return buildCustomerRegister(from, to), true
+	case "GST_REGISTER":
+		return buildGSTRegister(from, to), true
 
 	// Phase 13 analytics exports (item AD).
 	case "GROWTH_DASHBOARD":

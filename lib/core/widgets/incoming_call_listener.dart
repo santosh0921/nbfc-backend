@@ -27,94 +27,106 @@ class IncomingCallListener extends StatefulWidget {
   State<IncomingCallListener> createState() => _IncomingCallListenerState();
 }
 
-class _IncomingCallListenerState extends State<IncomingCallListener> with WidgetsBindingObserver {
-  CallService? _callService;
-  bool _showingCall = false;
-  int _reconnectAttempt = 0;
-  Timer? _reconnectTimer;
+/// One persistent signaling listener for one call "room" — either the
+/// customer's current in-progress loan (employee field-verification calls)
+/// or their own `kyc-<customerId>` room (KYC-officer video-verification
+/// calls, requested from the KYC portal — see the video-verification-
+/// request feature). Two independent instances of this run side by side so
+/// either kind of call can reach the customer while the app is open; each
+/// owns its own socket/reconnect/lifecycle exactly like the original
+/// single-room listener did.
+class _RoomListener {
+  _RoomListener({required this.peerLabel, required this.roomId});
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startListening());
+  final String peerLabel;
+
+  /// Either a loan id or `kyc-<customerId>` — resolved once per
+  /// (re)connect attempt via [resolveRoomId], since the active loan can
+  /// change between connects but the kyc room id cannot.
+  final Future<String?> Function() roomId;
+
+  CallService? callService;
+  bool showingCall = false;
+  int reconnectAttempt = 0;
+  Timer? reconnectTimer;
+
+  Future<void> Function()? _startListening;
+
+  void bind(BuildContext Function() contextGetter, VoidCallback onCallEnded) {
+    _startListening = () => _doStartListening(contextGetter, onCallEnded);
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // The signaling socket can die silently while the app is backgrounded
-    // (mobile OSes routinely suspend/kill sockets to save battery) with
-    // neither an error nor a close event ever firing — so coming back to
-    // the foreground is exactly when a stale connection needs to be
-    // actively checked, not just assumed to still be good.
-    if (state == AppLifecycleState.resumed) _ensureConnected();
-  }
+  Future<void> start() async => _startListening?.call();
 
-  void _ensureConnected() {
-    if (_showingCall) return; // an active call is already using this connection
-    final phase = _callService?.phase;
-    if (_callService == null || phase == CallPhase.failed || phase == CallPhase.ended) {
-      _reconnectTimer?.cancel();
-      _reconnectAttempt = 0;
-      _startListening();
+  void ensureConnected() {
+    if (showingCall) return; // an active call is already using this connection
+    final phase = callService?.phase;
+    // See the original single-room listener's comment (preserved
+    // verbatim in spirit): only a call actually in progress is trusted as
+    // proof the socket is alive — everything else, including "idle", gets
+    // a forced fresh reconnect on resume, since the OS can silently kill a
+    // backgrounded socket with no error/close event.
+    if (phase == CallPhase.ringingIncoming || phase == CallPhase.connecting || phase == CallPhase.active) {
+      return;
     }
+    reconnectTimer?.cancel();
+    reconnectAttempt = 0;
+    if (callService != null) {
+      callService!.removeListener(_onCallServiceChangeRef!);
+      callService!.dispose();
+      callService = null;
+    }
+    start();
   }
 
-  Future<void> _startListening() async {
+  VoidCallback? _onCallServiceChangeRef;
+
+  Future<void> _doStartListening(BuildContext Function() contextGetter, VoidCallback onCallEnded) async {
     final token = AuthProvider.instance.token;
     if (token == null) return;
 
-    List<LoanApplication> loans;
-    try {
-      loans = await LoanApiService.mine(token);
-    } catch (_) {
-      _scheduleReconnect();
-      return;
-    }
-    if (loans.isEmpty) return;
-
-    // Same "current active loan" resolution as Track Application — the
-    // most recent loan that isn't already disbursed or rejected, since
-    // video KYC calls happen during verification, before either of
-    // those terminal states.
-    final inProgress = loans.where((l) => l.status != 'disbursed' && l.status != 'rejected').toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    if (inProgress.isEmpty) return;
-    final loanId = '${inProgress.first.id}';
+    final id = await roomId();
+    if (id == null) return;
 
     final service = CallService(wsBaseUrl: ApiClient.baseUrl);
-    _callService = service;
-    service.addListener(_onCallServiceChange);
-    await service.connect(token: token, loanId: loanId, isCaller: false);
+    callService = service;
+    void onChange() => _onCallServiceChange(service, token, contextGetter, onCallEnded);
+    _onCallServiceChangeRef = onChange;
+    service.addListener(onChange);
+    try {
+      await service.connect(token: token, loanId: id, isCaller: false);
+    } catch (_) {
+      scheduleReconnect(contextGetter, onCallEnded);
+    }
   }
 
-  /// Reconnects with a capped exponential backoff (2s, 4s, 8s, ... up to
-  /// 30s) rather than either hammering the server in a tight loop or
-  /// giving up outright — a real network blip should recover in a few
-  /// seconds, while a genuine outage shouldn't be retried every second
-  /// for the rest of the session.
-  void _scheduleReconnect() {
-    _reconnectTimer?.cancel();
-    final delaySeconds = math.min(30, 2 << _reconnectAttempt);
-    _reconnectAttempt++;
-    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
-      if (!mounted || _showingCall) return;
-      _callService?.removeListener(_onCallServiceChange);
-      _callService?.dispose();
-      _callService = null;
-      _startListening();
+  void scheduleReconnect(BuildContext Function() contextGetter, VoidCallback onCallEnded) {
+    reconnectTimer?.cancel();
+    final delaySeconds = math.min(30, 2 << reconnectAttempt);
+    reconnectAttempt++;
+    reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
+      if (showingCall) return;
+      if (callService != null && _onCallServiceChangeRef != null) {
+        callService!.removeListener(_onCallServiceChangeRef!);
+      }
+      callService?.dispose();
+      callService = null;
+      start();
     });
   }
 
-  void _onCallServiceChange() {
-    final service = _callService;
-    if (service == null || _showingCall) return;
+  void _onCallServiceChange(
+    CallService service,
+    String token,
+    BuildContext Function() contextGetter,
+    VoidCallback onCallEnded,
+  ) {
+    if (showingCall) return;
 
     if (service.phase == CallPhase.ringingIncoming) {
-      _reconnectAttempt = 0;
-      _showingCall = true;
-      final token = AuthProvider.instance.token;
-      if (token == null) return;
+      reconnectAttempt = 0;
+      showingCall = true;
+      final context = contextGetter();
       Navigator.of(context, rootNavigator: true)
           .push(
         MaterialPageRoute(
@@ -124,41 +136,105 @@ class _IncomingCallListenerState extends State<IncomingCallListener> with Widget
             loanId: '', // unused on the callee path — CallScreen skips connect() since phase != idle
             isCaller: false,
             localDisplayName: '',
-            peerLabel: 'Field Officer',
+            peerLabel: peerLabel,
           ),
         ),
       )
           .then((_) async {
         final wasActive = service.wasEverActive;
-        if (wasActive && mounted) {
-          await Navigator.of(context, rootNavigator: true).push(
+        if (wasActive) {
+          final ctx = contextGetter();
+          await Navigator.of(ctx, rootNavigator: true).push(
             MaterialPageRoute(builder: (_) => const CallCompletedCelebrationPage()),
           );
         }
-        // The call ended (or was declined) — that CallService instance
-        // is done; open a fresh listening connection so a later call
-        // can still come through.
-        service.removeListener(_onCallServiceChange);
+        if (_onCallServiceChangeRef != null) service.removeListener(_onCallServiceChangeRef!);
         service.dispose();
-        _showingCall = false;
-        _startListening();
+        showingCall = false;
+        onCallEnded();
+        start();
       });
     } else if (service.phase == CallPhase.failed) {
-      // The signaling connection itself died (network drop, server
-      // restart, ...) — without this, a customer who never happens to
-      // relaunch the app would simply never be reachable again for the
-      // rest of this session, no matter how many times an employee tries
-      // to call.
-      _scheduleReconnect();
+      scheduleReconnect(contextGetter, onCallEnded);
+    }
+  }
+
+  void dispose() {
+    reconnectTimer?.cancel();
+    if (callService != null && _onCallServiceChangeRef != null) {
+      callService!.removeListener(_onCallServiceChangeRef!);
+    }
+    callService?.dispose();
+  }
+}
+
+class _IncomingCallListenerState extends State<IncomingCallListener> with WidgetsBindingObserver {
+  // Loan-verification calls (employee app, field officer) — keyed by the
+  // customer's current in-progress loan, same resolution as Track
+  // Application: the most recent loan that isn't already disbursed or
+  // rejected.
+  late final _RoomListener _loanRoom = _RoomListener(
+    peerLabel: 'Field Officer',
+    roomId: () async {
+      final token = AuthProvider.instance.token;
+      if (token == null) return null;
+      List<LoanApplication> loans;
+      try {
+        loans = await LoanApiService.mine(token);
+      } catch (_) {
+        rethrow;
+      }
+      if (loans.isEmpty) return null;
+      final inProgress = loans.where((l) => l.status != 'disbursed' && l.status != 'rejected').toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (inProgress.isEmpty) return null;
+      return '${inProgress.first.id}';
+    },
+  );
+
+  // KYC-officer video-verification calls (KYC portal, web) — keyed by this
+  // customer's own id, a synthetic room the loan-based listener above
+  // never covers since KYC verification can happen before any loan even
+  // exists. See lib/features/home/widgets/video_verification_request_page.dart
+  // for the request/response half of this feature.
+  late final _RoomListener _kycRoom = _RoomListener(
+    peerLabel: 'KYC Officer',
+    roomId: () async {
+      final id = AuthProvider.instance.customerId;
+      return id == null ? null : 'kyc-$id';
+    },
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loanRoom.bind(() => context, () {});
+    _kycRoom.bind(() => context, () {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loanRoom.start();
+      _kycRoom.start();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The signaling socket can die silently while the app is backgrounded
+    // (mobile OSes routinely suspend/kill sockets to save battery) with
+    // neither an error nor a close event ever firing — so coming back to
+    // the foreground is exactly when a stale connection needs to be
+    // actively checked, not just assumed to still be good.
+    if (state == AppLifecycleState.resumed) {
+      _loanRoom.ensureConnected();
+      _kycRoom.ensureConnected();
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _reconnectTimer?.cancel();
-    _callService?.removeListener(_onCallServiceChange);
-    _callService?.dispose();
+    _loanRoom.dispose();
+    _kycRoom.dispose();
     super.dispose();
   }
 

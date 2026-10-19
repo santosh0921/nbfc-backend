@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The backend is currently deployed without HTTPS (no domain/certificate
+  set up yet on the Elastic Beanstalk environment — see the deployment
+  notes). Android blocks all cleartext (plain HTTP) network traffic by
+  default for apps targeting API 28+, with no built-in exception for a
+  specific domain, so every request silently failed before this file
+  existed — surfacing in the app as a generic "could not reach the
+  server" error regardless of whether the backend was actually healthy.
+
+  Scoped to exactly the domains this app talks to (the deployed backend,
+  plus localhost/10.0.2.2 for local development) rather than a blanket
+  `usesCleartextTraffic="true"`, which would silently allow cleartext to
+  ANY domain — not appropriate for an app handling KYC/financial data.
+  Remove the elasticbeanstalk.com entry once the backend has a real
+  domain + TLS certificate.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">nbfc-prod-backend-env.eba-xsyxiipy.ap-south-1.elasticbeanstalk.com</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

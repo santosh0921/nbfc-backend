@@ -6,6 +6,8 @@ import '../../../../core/components/app_scaffold.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/router/route_names.dart';
+import '../../../../../core/widgets/premium_shine.dart';
+import '../../../../../core/widgets/auto_refresh_mixin.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../notifications/presentation/providers/notifications_provider.dart';
 import '../../domain/entities/recovery_case_entity.dart';
@@ -19,11 +21,24 @@ class RecoveryDashboardPage extends StatefulWidget {
   State<RecoveryDashboardPage> createState() => _RecoveryDashboardPageState();
 }
 
-class _RecoveryDashboardPageState extends State<RecoveryDashboardPage> {
+class _RecoveryDashboardPageState extends State<RecoveryDashboardPage> with AutoRefreshMixin {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => context.read<RecoveryDashboardProvider>().load());
+    startAutoRefresh();
+  }
+
+  @override
+  Future<void> onAutoRefresh() async {
+    if (!mounted) return;
+    await context.read<RecoveryDashboardProvider>().load(silent: true);
+  }
+
+  @override
+  void dispose() {
+    stopAutoRefresh();
+    super.dispose();
   }
 
   @override
@@ -37,12 +52,17 @@ class _RecoveryDashboardPageState extends State<RecoveryDashboardPage> {
     return AppScaffold(
       showAppBar: false,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      drawer: _RecoveryDrawer(name: employee?.name ?? 'Recovery Officer', designation: employee?.designation ?? ''),
       body: dashboard.isLoading || summary == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: () => context.read<RecoveryDashboardProvider>().load(),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
+                // See dashboard_home_page.dart — Clip.none stops the
+                // default hardEdge clip from chopping card shadows off at
+                // the list's own horizontal edge.
+                clipBehavior: Clip.none,
                 children: [
                   const SizedBox(height: AppSpacing.sm),
                   _TopBar(name: employee?.name ?? 'Recovery Officer', unreadCount: unread),
@@ -94,11 +114,15 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
-          child: const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
+        InkWell(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          onTap: () => Scaffold.of(context).openDrawer(),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
+            child: const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
+          ),
         ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
@@ -152,40 +176,48 @@ class _RecoveryHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: const LinearGradient(colors: AppColors.heroGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Row(
               children: [
-                const Text(
-                  'RECOVERY OFFICER',
-                  style: TextStyle(color: AppColors.secondary, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.4),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'COLLECTIONS,\nMADE EASY.',
-                  style: TextStyle(color: AppColors.secondary, fontSize: 20, fontWeight: FontWeight.w800, height: 1.15),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                InkWell(
-                  onTap: () => context.goNamed(RouteNames.recoveryCases),
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
-                    decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(AppSpacing.radiusFull)),
-                    child: const Text('View Cases', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'RECOVERY OFFICER',
+                        style: TextStyle(color: AppColors.secondary, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.4),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'COLLECTIONS,\nMADE EASY.',
+                        style: TextStyle(color: AppColors.secondary, fontSize: 20, fontWeight: FontWeight.w800, height: 1.15),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      InkWell(
+                        onTap: () => context.goNamed(RouteNames.recoveryCases),
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
+                          decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(AppSpacing.radiusFull)),
+                          child: const Text('View Cases', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const Icon(Icons.savings_rounded, color: AppColors.secondary, size: 56),
               ],
             ),
           ),
-          const Icon(Icons.savings_rounded, color: AppColors.secondary, size: 56),
+          const Positioned.fill(child: PremiumShine(opacity: 0.3)),
         ],
       ),
     );
@@ -439,6 +471,106 @@ class _QuickActionsGrid extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// The menu icon's drawer for the Recovery role shell — previously a
+/// purely decorative icon with no tap handler at all.
+class _RecoveryDrawer extends StatelessWidget {
+  const _RecoveryDrawer({required this.name, required this.designation});
+
+  final String name;
+  final String designation;
+
+  Future<void> _logout(BuildContext context) async {
+    Navigator.of(context).pop();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out of your ONEFIN employee account?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Sign Out')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await context.read<AuthProvider>().logout();
+    if (context.mounted) context.goNamed(RouteNames.login);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(color: AppColors.primary),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: Colors.white,
+                    child: Text(
+                      name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'R',
+                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 18),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+                  if (designation.isNotEmpty) Text(designation, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.dashboard_outlined),
+              title: const Text('Dashboard'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.goNamed(RouteNames.recoveryDashboard);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('Cases'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.goNamed(RouteNames.recoveryCases);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications_outlined),
+              title: const Text('Alerts'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.goNamed(RouteNames.recoveryAlerts);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Profile'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.goNamed(RouteNames.recoveryProfile);
+              },
+            ),
+            const Spacer(),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.logout, color: AppColors.danger),
+              title: const Text('Sign Out', style: TextStyle(color: AppColors.danger)),
+              onTap: () => _logout(context),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+        ),
+      ),
     );
   }
 }

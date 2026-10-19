@@ -46,6 +46,7 @@ class _CreditScoreCardState extends State<CreditScoreCard> with SingleTickerProv
 
     return PremiumCard(
       onTap: widget.onTap,
+      shine: true,
       child: Row(
         children: [
           SizedBox(
@@ -100,7 +101,7 @@ class _CreditScoreCardState extends State<CreditScoreCard> with SingleTickerProv
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondaryLight),
+          Icon(Icons.chevron_right_rounded, color: AppColors.textSecondaryOf(context)),
         ],
       ),
     );

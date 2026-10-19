@@ -54,6 +54,17 @@ class CasesRepositoryHttp implements CasesRepository {
   }
 
   @override
+  Future<CaseEntity> claimCase(String id) async {
+    final response = await _apiClient.dio.post('/employee/loans/$id/claim');
+    final updated = _fromLoanJson(response.data as Map<String, dynamic>);
+    final index = _cache.indexWhere((c) => c.id == id);
+    if (index != -1) {
+      _cache = List.of(_cache)..[index] = updated;
+    }
+    return updated;
+  }
+
+  @override
   Future<CaseEntity> verifyLoan(
     String id, {
     required String findings,

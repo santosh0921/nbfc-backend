@@ -5,26 +5,11 @@ import '../../../../core/components/app_scaffold.dart';
 import '../../../../core/components/app_snackbar.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
-import '../../../../core/constants/employee_app_module.dart';
-import '../../../../core/providers/agency_provider.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../domain/entities/employee_entity.dart';
 import '../providers/auth_provider.dart';
-
-// Branch cities the backend actually seeds employees under
-// (internal/seed/seed.go) — alphabetical, verification and recovery
-// cities combined since either module's employee can pick any of them.
-const _employeeCities = [
-  'Ahmedabad',
-  'Bengaluru',
-  'Chennai',
-  'Delhi',
-  'Hyderabad',
-  'Mumbai',
-  'Pune',
-  'Thane'
-];
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -38,8 +23,6 @@ class _LoginPageState extends State<LoginPage> {
   final _nameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _rememberMe = false;
-  bool _biometricAvailable = false;
-  String? _selectedCity;
 
   @override
   void initState() {
@@ -49,10 +32,6 @@ class _LoginPageState extends State<LoginPage> {
       _nameController.text = auth.rememberedIdentifier!;
       _rememberMe = true;
     }
-    auth.canUseBiometrics.then((value) {
-      if (mounted) setState(() => _biometricAvailable = value);
-    });
-    _selectedCity = context.read<AgencyProvider>().selectedAgency;
   }
 
   @override
@@ -62,9 +41,16 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  // Which dashboard route to land on is derived from the employee's own
+  // role (returned by the login response) — not asked of the user, since
+  // every employee has exactly one role/module. See
+  // AppRouter._homePathFor for the equivalent logic the redirect guard
+  // uses when a session is restored rather than freshly logged in.
   void _afterAuthenticated(AuthProvider auth) {
     if (auth.needsFirstTimeOnboarding) {
       context.goNamed(RouteNames.otpVerify);
+    } else if (auth.employee?.role == EmployeeRole.collectionAgent) {
+      context.goNamed(RouteNames.recoveryDashboard);
     } else {
       context.goNamed(RouteNames.dashboard);
     }
@@ -72,10 +58,6 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedCity != null) {
-      await context.read<AgencyProvider>().selectAgency(_selectedCity!);
-    }
-    if (!mounted) return;
     final auth = context.read<AuthProvider>();
     await auth.login(
       name: _nameController.text.trim(),
@@ -91,26 +73,12 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // Seeded demo employees from the backend (internal/seed/seed.go) — all
-  // share the password "onefin123". Login is name-based now, so these are
-  // the seeded employees' real names, not their old internal codes.
-  void _fillDemoAccount(EmployeeAppModule module) {
-    final name =
-        module == EmployeeAppModule.recovery ? 'Anita Rao' : 'Priya Deshmukh';
+  // share the password "onefin123".
+  void _fillDemoAccount(String name) {
     setState(() {
       _nameController.text = name;
       _passwordController.text = 'onefin123';
     });
-  }
-
-  Future<void> _submitBiometric() async {
-    final auth = context.read<AuthProvider>();
-    await auth.loginWithBiometrics();
-    if (!mounted) return;
-    if (auth.status == AuthStatus.authenticated) {
-      _afterAuthenticated(auth);
-    } else if (auth.errorMessage != null) {
-      AppSnackbar.danger(context, auth.errorMessage!);
-    }
   }
 
   @override
@@ -195,25 +163,6 @@ class _LoginPageState extends State<LoginPage> {
                           ? 'Enter a valid password'
                           : null,
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text('Branch City',
-                        style: Theme.of(context).textTheme.labelLarge),
-                    const SizedBox(height: AppSpacing.xs),
-                    DropdownButtonFormField<String>(
-                      initialValue: _selectedCity,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.location_city_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      hint: const Text('Select your branch city'),
-                      items: [
-                        for (final city in _employeeCities)
-                          DropdownMenuItem(value: city, child: Text(city)),
-                      ],
-                      onChanged: (v) => setState(() => _selectedCity = v),
-                      validator: (v) =>
-                          v == null ? 'Select your branch city' : null,
-                    ),
                     const SizedBox(height: AppSpacing.sm),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -257,46 +206,37 @@ class _LoginPageState extends State<LoginPage> {
                         child: const Text('New employee? Create an account'),
                       ),
                     ),
-                    if (_biometricAvailable) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: AppColors.divider)),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.sm),
-                            child: Text('or',
-                                style: Theme.of(context).textTheme.bodySmall),
-                          ),
-                          Expanded(child: Divider(color: AppColors.divider)),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      AppButton(
-                        label: 'Sign in with Biometrics',
-                        variant: AppButtonVariant.outline,
-                        icon: Icons.fingerprint,
-                        onPressed: isLoading ? null : _submitBiometric,
-                      ),
-                    ],
                     const SizedBox(height: AppSpacing.xl),
+                    // Two seeded demo accounts (internal/seed/seed.go), one
+                    // per role — a single "use demo account" shortcut can't
+                    // guess which module the tester wants to see now that
+                    // login no longer starts from a role choice.
                     Center(
-                      child: TextButton(
-                        onPressed: isLoading
-                            ? null
-                            : () => _fillDemoAccount(auth.module),
-                        style: TextButton.styleFrom(
-                            foregroundColor: AppColors.textSecondary),
-                        child: Text(
-                          auth.module == EmployeeAppModule.recovery
-                              ? 'Use demo Recovery account'
-                              : 'Use demo Verification account',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textSecondary,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                        ),
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 4,
+                        children: [
+                          TextButton(
+                            onPressed: isLoading
+                                ? null
+                                : () => _fillDemoAccount('Priya Deshmukh'),
+                            style: TextButton.styleFrom(
+                                foregroundColor: AppColors.textSecondary),
+                            child: const Text('Demo Verification account',
+                                style: TextStyle(
+                                    decoration: TextDecoration.underline)),
+                          ),
+                          TextButton(
+                            onPressed: isLoading
+                                ? null
+                                : () => _fillDemoAccount('Anita Rao'),
+                            style: TextButton.styleFrom(
+                                foregroundColor: AppColors.textSecondary),
+                            child: const Text('Demo Recovery account',
+                                style: TextStyle(
+                                    decoration: TextDecoration.underline)),
+                          ),
+                        ],
                       ),
                     ),
                   ],

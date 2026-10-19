@@ -1,0 +1,289 @@
+﻿================================================================================
+          NON-BANKING FINANCIAL COMPANY (NBFC) SYSTEM AUDIT REPORT
+       COMPREHENSIVE CODE REVIEW, TEST SUITE EXECUTION & LOGICAL ERROR AUDIT
+================================================================================
+Date: 2026-09-16
+Auditor: Senior Software Engineering & Financial Systems Review Team
+Target Project: C:\Users\Administrator\Desktop\NBFC
+Status: AUDIT COMPLETE - ISSUES IDENTIFIED (NO CODE WAS MODIFIED)
+
+================================================================================
+1. EXECUTIVE SUMMARY & TOTAL BUG / ERROR COUNT
+================================================================================
+Total Number of Defects / Bugs Identified: 33
+
+Summary Breakdown by Category:
+--------------------------------------------------------------------------------
+1. Automated Test Failures & Test-Harness Concurrency:        4
+2. Core Financial, Loan Management & Accounting Logic:       9
+3. Tax (TDS / GST) & Statutory Compliance Engines:           3
+4. Security, Authentication & Session Integrity:              6
+5. KYC, Underwriting & Credit Risk Decisioning:              5
+6. Client (Flutter) UI, State Management & Concurrency:      4
+7. Database Performance & Operational Workflow Logic:         2
+--------------------------------------------------------------------------------
+TOTAL COUNT OF DEFECTS / LOGICAL ERRORS:                     33
+
+Severity Distribution:
+- CRITICAL (Financial Loss / Security Bypass / Regulatory Non-compliance): 14
+- HIGH (State Corruption / Flawed Underwriting / Process Crash / Test Failures): 13
+- MEDIUM (Data Inconsistency / Suboptimal Architecture / N+1 Latency):      6
+
+================================================================================
+2. DETAILED DEFECT AUDIT & LOGICAL ERROR BREAKDOWN
+================================================================================
+
+--------------------------------------------------------------------------------
+CATEGORY 1: AUTOMATED TEST SUITE & CONCURRENCY FAILURES (4 ISSUES)
+--------------------------------------------------------------------------------
+
+[BUG-01] [CRITICAL] Maker-Checker Separation of Duties Broken in Loan Sanction Approval
+- File: internal/loans/maker_checker_handler.go (AdminApproveSanctionHandler: Lines 126-220)
+- Test Failures:
+  * internal/admin/security_test.go: TestMakerCannotApproveOwnRecommendation
+  * internal/security/security_test.go: TestMakerCannotApproveOwnSanctionRecommendation
+- Description: Code comments assert: "The acting admin MUST be a different person than
+  whoever recommended it (maker != checker, enforced here)". However, the handler lacks
+  any validation comparing loan.RecommendedByAdminID against the acting adminID. A maker
+  can recommend and immediately sanction their own loan. The automated test fails,
+  returning HTTP 200 OK instead of the mandatory HTTP 403 Forbidden.
+
+[BUG-02] [CRITICAL] Maker-Checker Separation of Duties Broken in Disbursement Approval
+- File: internal/loans/maker_checker_handler.go (AdminApproveDisbursementHandler: Lines 348-477)
+- Test Failures:
+  * internal/admin/security_test.go: TestMakerCannotApproveOwnDisbursementPreparation
+  * internal/loans/disbursement_security_test.go: TestDisbursementMakerCannotApproveOwn
+- Description: The disbursement approval handler does not verify whether
+  disb.PreparedByAdminID == adminID or loan.DisbursementPreparedByAdminID == adminID.
+  The same admin who prepared the payout can self-authorize the transfer, violating RBI
+  governance standards. The test fails returning HTTP 200 OK instead of HTTP 403 Forbidden.
+
+[BUG-03] [HIGH] Database Migration DDL Concurrency Race Condition in Multi-Package Tests
+- File: internal/admin/migration.go (Migrate: Line 12)
+- Test Failure: Multi-package test execution (go test ./...)
+  ERROR: duplicate key value violates unique constraint "pg_class_relname_nsp_index" (SQLSTATE 23505)
+- Description: When `go test ./...` executes in parallel, multiple test packages invoke
+  admin.Migrate() concurrently against the shared PostgreSQL database. Concurrent unlocked
+  AutoMigrate DDL statements attempt to create the same tables/indices simultaneously,
+  crashing PostgreSQL internal catalog constraints.
+
+[BUG-04] [HIGH] Inter-Package Database State Contamination in Parallel Execution
+- File: internal/integrity/integrity_test.go (TestReconciliationNeverMutates: Lines 256-275)
+- Description: The test suite runs against a single shared database (nbfc_db) without per-test
+  transaction rollbacks or schema isolation. Concurrently running loan and payment tests insert
+  journal entries and payments while TestReconciliationNeverMutates executes snapshot comparisons,
+  falsely failing the financial immutability assertions.
+
+--------------------------------------------------------------------------------
+CATEGORY 2: CORE FINANCIAL, LOAN MANAGEMENT & ACCOUNTING LOGIC (9 ISSUES)
+--------------------------------------------------------------------------------
+
+[BUG-05] [CRITICAL] Overdue Loan Principal Silently Erased During Restructuring
+- File: internal/loans/admin_handler.go (AdminRestructureLoanHandler: Lines 229-245)
+- Description: The restructuring loop only collects installments where
+  inst.Status == models.EmiStatusPending. If an installment is overdue (EmiStatusOverdue),
+  it is skipped from pendingIDs and omitted from remainingPrincipal, while advancing
+  maxPaidInstallmentNumber. The overdue principal balance is permanently erased from the
+  new amortization schedule without being collected or accounted for in the ledger.
+
+[BUG-06] [HIGH] Non-Transactional EMI Amortization Schedule Re-Generation
+- File: internal/loans/admin_handler.go (AdminRestructureLoanHandler: Lines 255-263)
+- Description: Pending installments are permanently deleted from the database before
+  invoking generateEmiInstallments outside of a database transaction. If schedule creation
+  fails (due to a math exception, DB error, or process crash), all future installments are
+  lost permanently with no rollback.
+
+[BUG-07] [CRITICAL] Defective Accounting Entry for Loan Payment Refunds
+- File: internal/accounting/postings.go (PostRefund: Lines 153-166)
+- Description: When an EMI is paid, it is credited between AcctLoanPrincipalReceivable
+  and AcctInterestReceivable. When PostRefund is triggered, it debits 100% of the refund
+  to AcctLoanPrincipalReceivable. This artificially inflates the Principal Receivable
+  ledger account by the interest component, distorting the balance sheet.
+
+[BUG-08] [HIGH] Post-Disbursement EMI Schedule Generation Loss Outside Transaction
+- File: internal/loans/confirm_disbursement.go (ConfirmDisbursement: Lines 87-104)
+- Description: The database transaction commits disb.Status = SUCCESS and
+  loan.Status = DISBURSED before invoking generateEmiSchedule. If generateEmiSchedule
+  fails, the function merely logs an error and returns nil. Money is marked disbursed to
+  the borrower, but no repayment schedule exists in the system.
+
+[BUG-09] [HIGH] Month-End Calendar Overflow in EMI Due Date Calculation
+- File: internal/loans/emi_service.go (generateEmiInstallments: Line 73)
+- Description: dueDate := baseDate.AddDate(0, i, 0) produces calendar overflow for month-end
+  dates. If a loan is disbursed on Jan 31, installment 1 is computed as March 3 (skipping
+  February entirely) and installment 2 is March 31, creating two EMIs in March and zero in February.
+
+[BUG-10] [MEDIUM] Binary Status Blindness in Delinquency & DPD Calculation
+- File: internal/risk/dpd.go (CalculateDPDForLoan: Lines 53-59)
+- Description: The DPD engine assumes installments are either 100% paid (EmiStatusPaid)
+  or 0% paid. It never inspects partial payments in models.Payment. If a borrower pays
+  90% of an EMI, the entire due amount is treated as outstanding and DPD accumulates on
+  the full sum.
+
+[BUG-11] [HIGH] Unbounded Proliferation of Stale Active Risk Provisions
+- File: internal/risk/provisioning.go (CalculateProvision: Lines 90-101)
+- Description: When daily risk calculation detects no change in exposure, it inserts
+  a new provision row with Status = ProvisionStatusActive without deactivating or superseding
+  the previous day's row. Over 30 days, 30 active provision rows exist for a single loan,
+  multiplying provision totals in aggregate reporting.
+
+[BUG-12] [HIGH] Premature NOC Certificate Generation for Undisbursed / Non-Disbursed Loans
+- File: internal/loans/noc.go (CheckAndGenerateNOC: Lines 47-64)
+- Description: CheckAndGenerateNOC queries models.EmiInstallment for any status != paid.
+  For an undisbursed, cancelled, or rejected loan with 0 installments created, remaining
+  evaluates to 0, causing the system to generate an official No Objection Certificate (NOC).
+
+[BUG-13] [HIGH] Write-Off Approval Does Not Update Loan Status or Cancel Future EMI Installments
+- File: internal/writeoff/service.go (ApproveWriteOff: Lines 53-105)
+- Description: When write-off is approved, only WriteOffRequest status is updated to WRITTEN_OFF
+  and accounting entries are posted. The LoanApplication record status remains DISBURSED, and
+  associated EmiInstallment rows remain pending/overdue. As a result, automated DPD calculation,
+  delinquency classification, collection jobs, and daily interest accrual continue running
+  against a loan that has already been written off.
+
+--------------------------------------------------------------------------------
+CATEGORY 3: TAX (TDS / GST) & STATUTORY COMPLIANCE ENGINES (3 ISSUES)
+--------------------------------------------------------------------------------
+
+[BUG-14] [CRITICAL] Single-Transaction vs. Annual Cumulative TDS Threshold Evasion
+- File: internal/tax/calculate.go (CalculateTDS: Lines 62-69)
+- Description: Under the Indian Income Tax Act (Sections 194C, 194J, etc.), deduction
+  thresholds are annual/financial year cumulative limits. The code only checks
+  grossAmountPaise < rule.ThresholdPaise on the current single transaction. Vendors
+  submitting multiple invoices below the single threshold completely evade TDS.
+
+[BUG-15] [HIGH] Fractional Timestamp Error in Daily Interest Accrual
+- File: internal/accounting/accrual.go (AccrueInterestForLoan: Line 60)
+- Description: days := periodEnd.Sub(periodStart).Hours()/24 + 1 calculates elapsed days
+  using floating-point hours. For end-of-day timestamps (e.g. 23:59:59) or daylight
+  shifts, it computes fractional/extra days, miscalculating interest recognized.
+
+[BUG-16] [CRITICAL] Missing RBI IRACP NPA Interest Derecognition & Suspense Handling
+- Files: internal/accounting/accrual.go & internal/risk/job.go
+- Description: Under RBI Master Direction - Prudential Norms on Income Recognition,
+  Asset Classification and Provisioning (IRACP), when an account turns NPA (>90 DPD),
+  unrealized interest must be reversed and further accrual diverted to Interest Suspense.
+  The engine continues standard accrual and income recognition.
+
+--------------------------------------------------------------------------------
+CATEGORY 4: SECURITY, AUTHENTICATION & SESSION INTEGRITY (6 ISSUES)
+--------------------------------------------------------------------------------
+
+[BUG-17] [CRITICAL] Indefinite Verified OTP Replay for MPIN Resets
+- File: internal/auth/forgot_mpin.go (ForgotMPINHandler: Lines 34-51)
+- Description: ForgotMPINHandler checks Where("mobile = ? AND verified = ?", mobile, true)
+  without checking ExpiresAt or limiting time window. An OTP verified hours or days ago
+  can be replayed to reset the customer's MPIN.
+
+[BUG-18] [HIGH] Unrestricted Brute Force on Current MPIN Verification
+- File: internal/auth/change_mpin.go (ChangeMPINHandler: Lines 55-60)
+- Description: When a user calls /auth/change-mpin, failed attempts on CurrentMPIN
+  have no rate limit, counter, or lockout. An attacker with a compromised session can
+  brute force the 4/6-digit MPIN.
+
+[BUG-19] [MEDIUM] Ineffective Client Logout (Token Revocation Absent)
+- File: internal/auth/logout.go (Logout: Lines 9-13)
+- Description: The Logout handler simply returns a static JSON message. It does not
+  add the JWT to a blocklist or revoke active sessions. Compromised tokens remain valid
+  until their 24-hour expiration.
+
+[BUG-20] [MEDIUM] Customer JWT Token Lacks Subject (UUID) Claim
+- File: internal/auth/jwt.go (GenerateToken: Lines 35-48)
+- Description: Customer tokens contain only mobile in their claims. Every request
+  requires an unnecessary database lookup to resolve the UUID, opening race conditions
+  if mobile ownership shifts.
+
+[BUG-21] [HIGH] Concurrent Race Condition Bypassing OTP Attempt Threshold
+- File: internal/otp/service.go (VerifyOTP: Lines 101-132)
+- Description: VerifyOTP performs a non-locking select, checks Attempts < 5, and
+  increments via an application-level update. Concurrent requests bypass the 5-attempt limit.
+
+[BUG-22] [CRITICAL] Reversible MPIN Stored Locally for Biometric Login
+- File: lib/core/providers/auth_provider.dart (unlockWithBiometric: Lines 212-222)
+- Description: Biometric login does not use hardware-backed asymmetric keypairs
+  (Keystore / Secure Enclave). Instead, it stores the customer's raw MPIN in storage,
+  reads it, and sends it to the server.
+
+--------------------------------------------------------------------------------
+CATEGORY 5: KYC, UNDERWRITING & CREDIT RISK DECISIONING (5 ISSUES)
+--------------------------------------------------------------------------------
+
+[BUG-23] [CRITICAL] FOIR Calculation Ignores Existing Active Loan Obligations
+- File: internal/loans/eligibility.go (evaluateEligibility: Lines 127-143)
+- Description: FOIR is calculated solely as proposed EMI / monthly income. It never
+  aggregates existing active loan EMIs the customer is already servicing, enabling
+  severe over-leveraging.
+
+[BUG-24] [HIGH] Permanent Stale CIBIL Score Caching
+- File: internal/loans/reference.go (getOrCreateCibilScore: Lines 66-68)
+- Description: if user.CibilScore > 0 { return user.CibilScore, nil } permanently
+  freezes the credit score on the user record. Subsequent loans taken months or years
+  later are approved using an obsolete credit score.
+
+[BUG-25] [HIGH] Customer Document Hijacking Across Multiple Applications
+- File: internal/loans/customer_handler.go (attachOrphanedDocuments: Lines 133-137)
+- Description: Upon applying for a new loan, attachOrphanedDocuments reassigns all
+  documents where loan_id IS NULL to the newly submitted loan, corrupting historical
+  document associations.
+
+[BUG-26] [HIGH] Admin Manual KYC Approvals Reverted by Automation
+- File: internal/kyc/service.go (Recompute: Lines 93-103)
+- Description: Recompute requires allProviderVerified to keep status VERIFIED.
+  If an admin manually approves a KYC record despite provider failures, subsequent
+  recomputation forces the status back to REQUIRES_REVIEW.
+
+[BUG-27] [HIGH] Premature Application Submission Prior to KYC Verification
+- File: internal/kyc/service.go (IsSubmissionEligible: Lines 147-150)
+- Description: IsSubmissionEligible permits loan application submission as soon as
+  documents are uploaded (KYCStatusVerificationPending), prior to any actual document
+  verification.
+
+--------------------------------------------------------------------------------
+CATEGORY 6: CLIENT (FLUTTER) UI, STATE MANAGEMENT & CONCURRENCY (4 ISSUES)
+--------------------------------------------------------------------------------
+
+[BUG-28] [CRITICAL] Plaintext Card Details Captured on Client (PCI-DSS Risk)
+- File: lib/features/payments/payment_screen.dart (Lines 63-68, 40-48)
+- Description: The payment form captures Card Number, Expiry, and CVV in plain Flutter
+  text controllers, while routing payments to a demoPay endpoint that returns 404
+  in production environments.
+
+[BUG-29] [HIGH] Null Pending Phone Number on Restored Sessions
+- File: lib/features/apply/quick_apply_screen.dart (_submitToBackend: Line 405)
+- Description: applicantPhone uses AuthProvider.instance.pendingPhoneNumber, which is
+  null when a user session is restored from secure storage, causing applications to
+  submit with empty contact numbers.
+
+[BUG-30] [MEDIUM] Absence of Global 401 Session Interceptor
+- File: lib/core/network/api_client.dart (Lines 61-118)
+- Description: The client lacks a 401 Unauthorized interceptor. When a token expires,
+  subsequent calls fail silently or show generic network errors instead of redirecting
+  to login.
+
+[BUG-31] [HIGH] Thread-Unsafe Package-Level Map in Risk Alert Processing
+- File: internal/risk/process.go (Lines 83-84)
+- Description: lastKnownBucket and lastKnownClassification are raw Go maps accessed
+  without mutexes across batch iterations, creating risk of concurrent map read and
+  map write fatal runtime panics.
+
+--------------------------------------------------------------------------------
+CATEGORY 7: DATABASE PERFORMANCE & OPERATIONAL WORKFLOW LOGIC (2 ISSUES)
+--------------------------------------------------------------------------------
+
+[BUG-32] [MEDIUM] High-Volume N+1 Query Cascade in Admin Support & Complaints Handlers
+- Files: internal/complaints/handler.go (Lines 94-105), internal/support/handler.go (Lines 118-140)
+- Description: Both AdminListComplaintsHandler and AdminListThreadsHandler execute multiple
+  individual SELECT queries inside loops per record (fetching User, Profile, count, and last message).
+  For 500 support threads or complaints, this issues over 2,000 queries per HTTP request,
+  causing severe DB connection pool exhaustion and elevated request latency.
+
+[BUG-33] [MEDIUM] Collection Case Curing Blindness on Delinquency Settlement
+- File: internal/collections/service.go (TouchCase: Lines 24-37)
+- Description: When a delinquent loan is cured (borrower pays full overdue amount and DPD drops to 0),
+  TouchCase only updates existing.Status if existing.Status == CollectionStatusCurrent. If the case
+  is currently in OVERDUE or ASSIGNED, the case remains permanently in that delinquent state,
+  never auto-resolving or closing despite zero overdue balance.
+
+================================================================================
+                              END OF AUDIT REPORT
+================================================================================

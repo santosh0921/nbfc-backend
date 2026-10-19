@@ -22,7 +22,7 @@ class StatementPdfGenerator {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('NBFC PREMIUM', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF0057FF))),
+              pw.Text('ONEFINANCE', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF0057FF))),
               pw.Text(_dateFmt.format(DateTime.now()), style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
             ],
           ),
@@ -35,7 +35,7 @@ class StatementPdfGenerator {
   static pw.Widget _footer() => pw.Padding(
         padding: const pw.EdgeInsets.only(top: 16),
         child: pw.Text(
-          'This is a system-generated document from NBFC Premium and does not require a physical signature.',
+          'This is a system-generated document from OneFinance and does not require a physical signature.',
           style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
         ),
       );

@@ -1,4 +1,4 @@
-# NBFC Premium — Frontend Prototype
+# OneFinance — Frontend Prototype
 
 A frontend-only, mock-data-driven Flutter app for a modern Indian NBFC (inspired
 by, not a copy of, apps like L&T Finance). No backend, no APIs, no Firebase,

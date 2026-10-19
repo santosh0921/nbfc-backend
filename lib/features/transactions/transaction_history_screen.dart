@@ -6,6 +6,7 @@ import '../../core/network/transaction_api_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/statement_pdf_generator.dart';
+import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../models/transaction.dart';
 import '../home/widgets/transaction_tile.dart';
@@ -136,7 +137,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                           onSelected: (_) => setState(() => _filter = type),
                           selectedColor: AppColors.primary.withValues(alpha: 0.16),
                           labelStyle: TextStyle(color: selected ? AppColors.primary : null, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
-                          side: BorderSide(color: selected ? AppColors.primary : AppColors.borderLight),
+                          side: BorderSide(color: selected ? AppColors.primary : AppColors.borderOf(context)),
                         );
                       },
                     ),
@@ -145,11 +146,12 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     child: filtered.isEmpty
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
-                            children: [
+                            children: const [
                               SizedBox(
                                 height: 320,
-                                child: Center(
-                                  child: Text('No transactions in this category.', style: theme.textTheme.bodyMedium),
+                                child: EmptyState(
+                                  title: 'No transactions in this category',
+                                  icon: Icons.receipt_long_outlined,
                                 ),
                               ),
                             ],
@@ -161,7 +163,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                               for (final entry in grouped.entries) ...[
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 8, top: 12),
-                                  child: Text(entry.key, style: theme.textTheme.titleSmall?.copyWith(color: AppColors.textSecondaryLight)),
+                                  child: Text(entry.key, style: theme.textTheme.titleSmall?.copyWith(color: AppColors.textSecondaryOf(context))),
                                 ),
                                 PremiumCard(
                                   padding: const EdgeInsets.symmetric(horizontal: 16),

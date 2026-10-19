@@ -16,8 +16,8 @@ class NotificationService {
   int _nextId = 1000;
 
   static const _channel = AndroidNotificationDetails(
-    'nbfc_premium_general',
-    'NBFC Premium',
+    'onefinance_general',
+    'OneFinance',
     channelDescription: 'Loan, payment, and application updates',
     importance: Importance.high,
     priority: Priority.high,

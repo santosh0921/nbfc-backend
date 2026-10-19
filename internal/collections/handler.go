@@ -7,10 +7,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/santosh0921/nbfc-backend/internal/customerinfo"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 	"github.com/santosh0921/nbfc-backend/internal/rbac"
 )
+
+// collectionCaseRow adds the customer's real name (batched lookup, never
+// fabricated — omitted when no CustomerProfile row exists) to the raw
+// CollectionCase row. CustomerID is stored as a plain string here (not
+// uuid.UUID), hence BatchNamesByStringID.
+type collectionCaseRow struct {
+	models.CollectionCase
+	CustomerName string `json:"customerName,omitempty"`
+}
 
 func currentAdmin(c *gin.Context) (uint, string) {
 	var id uint
@@ -43,7 +53,18 @@ func AdminListCasesHandler(c *gin.Context) {
 	}
 	var cases []models.CollectionCase
 	q.Order("next_action_date asc nulls last, id desc").Limit(200).Find(&cases)
-	c.JSON(http.StatusOK, cases)
+
+	ids := make([]string, len(cases))
+	for i, cs := range cases {
+		ids[i] = cs.CustomerID
+	}
+	names := customerinfo.BatchNamesByStringID(ids)
+
+	out := make([]collectionCaseRow, len(cases))
+	for i, cs := range cases {
+		out[i] = collectionCaseRow{CollectionCase: cs, CustomerName: names[cs.CustomerID]}
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 func AdminGetCaseHandler(c *gin.Context) {
@@ -93,6 +114,29 @@ func AdminEscalateCaseHandler(c *gin.Context) {
 	c.ShouldBindJSON(&body)
 	adminID, adminName := currentAdmin(c)
 	result, err := EscalateCase(uint(caseID), adminID, adminName, body.Reason)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// AdminResolveCaseHandler closes a case once the account is no longer
+// delinquent — requires CollectionManage, same as assignment, since
+// closing is as consequential a decision as opening/assigning: before
+// this handler existed, a CollectionCase had no way back to CLOSED/
+// RESOLVED once opened, even after the borrower paid the loan in full.
+func AdminResolveCaseHandler(c *gin.Context) {
+	caseID, _ := strconv.Atoi(c.Param("id"))
+	var body struct {
+		Resolution string `json:"resolution" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	adminID, adminName := currentAdmin(c)
+	result, err := ResolveCase(uint(caseID), adminID, adminName, body.Resolution)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return

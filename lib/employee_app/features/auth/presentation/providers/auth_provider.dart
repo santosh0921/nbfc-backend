@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:local_auth/local_auth.dart';
 import '../../../../core/constants/employee_app_module.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/storage/local_storage_service.dart';
 import '../../../../core/storage/mpin_service.dart';
 import '../../../../core/usecase/usecase.dart';
-import '../../../../../core/services/last_role_storage.dart';
 import '../../domain/entities/employee_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/usecases/login_usecase.dart';
@@ -16,7 +14,6 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider({
     required LoginUseCase loginUseCase,
     required RegisterUseCase registerUseCase,
-    required BiometricLoginUseCase biometricLoginUseCase,
     required LogoutUseCase logoutUseCase,
     required ForgotPasswordUseCase forgotPasswordUseCase,
     required AuthRepository authRepository,
@@ -25,7 +22,6 @@ class AuthProvider extends ChangeNotifier {
     this.module = EmployeeAppModule.verification,
   })  : _loginUseCase = loginUseCase,
         _registerUseCase = registerUseCase,
-        _biometricLoginUseCase = biometricLoginUseCase,
         _logoutUseCase = logoutUseCase,
         _forgotPasswordUseCase = forgotPasswordUseCase,
         _authRepository = authRepository,
@@ -36,43 +32,22 @@ class AuthProvider extends ChangeNotifier {
 
   final LoginUseCase _loginUseCase;
   final RegisterUseCase _registerUseCase;
-  final BiometricLoginUseCase _biometricLoginUseCase;
   final LogoutUseCase _logoutUseCase;
   final ForgotPasswordUseCase _forgotPasswordUseCase;
   final AuthRepository _authRepository;
   final LocalStorageService _localStorage;
   final MpinService _mpinService;
-  final _localAuth = LocalAuthentication();
 
-  /// Which employee module (Verification or Recovery) this login screen
-  /// was reached through — set once at construction time from the module
-  /// the user picked on the role-selection screen. Used to gate login by
-  /// the employee's actual [EmployeeRole] so e.g. a Collection Agent can't
-  /// sign in through the Verification module and vice versa.
+  /// Retained only so existing call sites/DI wiring compile unchanged.
+  /// No longer used to gate or reject a login: which dashboard an employee
+  /// lands on is derived from their actual [EmployeeEntity.role] (see
+  /// `AppRouter._homePathFor`), not a module the user had to guess before
+  /// authenticating. The old flow rejected a correct password if the
+  /// pre-picked module didn't match the account's real role — confusing,
+  /// and redundant once every employee's role already determines their one
+  /// module.
+  @Deprecated('No longer used for login gating — role from the backend is authoritative.')
   final EmployeeAppModule module;
-
-  /// The modules an employee with [role] is permitted to sign into.
-  /// Field verification officers and supervisors work the Verification
-  /// module (supervisors oversee verification officers); collection
-  /// agents work the Recovery module.
-  static bool _roleAllowedInModule(EmployeeRole role, EmployeeAppModule module) {
-    switch (role) {
-      case EmployeeRole.fieldVerificationOfficer:
-      case EmployeeRole.supervisor:
-        return module == EmployeeAppModule.verification;
-      case EmployeeRole.collectionAgent:
-        return module == EmployeeAppModule.recovery;
-    }
-  }
-
-  static String _moduleName(EmployeeAppModule module) =>
-      module == EmployeeAppModule.verification ? 'Verification' : 'Recovery';
-
-  static String _mismatchMessage(EmployeeRole role, EmployeeAppModule attemptedModule) {
-    final registeredModule = role == EmployeeRole.collectionAgent ? EmployeeAppModule.recovery : EmployeeAppModule.verification;
-    return 'This account is registered for ${_moduleName(registeredModule)}, not ${_moduleName(attemptedModule)}. '
-        'Please go back and select the correct role.';
-  }
 
   static const _kRememberedIdKey = 'remembered_employee_id';
   static const _kProfileCompletedPrefix = 'profile_completed_';
@@ -107,15 +82,6 @@ class AuthProvider extends ChangeNotifier {
     rememberMe = rememberedIdentifier != null;
     final session = await _authRepository.currentSession();
     if (session != null) {
-      if (!_roleAllowedInModule(session.role, module)) {
-        // A session from a different module's login is on this device
-        // (e.g. switched from Recovery to Verification role-select) —
-        // don't silently let it through the wrong shell.
-        await _authRepository.logout();
-        status = AuthStatus.unauthenticated;
-        notifyListeners();
-        return;
-      }
       employee = session;
       status = AuthStatus.authenticated;
       await _refreshProfileSetupFlag();
@@ -178,31 +144,17 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> get canUseBiometrics async {
-    try {
-      final supported = await _localAuth.isDeviceSupported();
-      final canCheck = await _localAuth.canCheckBiometrics;
-      return supported && canCheck;
-    } catch (_) {
-      return false;
-    }
-  }
-
   Future<void> login({required String name, required String password, bool remember = false}) async {
     status = AuthStatus.authenticating;
     errorMessage = null;
     notifyListeners();
 
-    final result = await _loginUseCase(LoginParams(name: name, password: password, module: module.name));
+    // `module` is no longer known before login — the backend no longer
+    // consults it either (see LoginHandler's doc comment), so a fixed
+    // placeholder is sent here purely for API-shape compatibility.
+    final result = await _loginUseCase(LoginParams(name: name, password: password, module: EmployeeAppModule.verification.name));
     await result.when(
       success: (data) async {
-        if (!_roleAllowedInModule(data.role, module)) {
-          await _authRepository.logout();
-          employee = null;
-          status = AuthStatus.error;
-          errorMessage = _mismatchMessage(data.role, module);
-          return;
-        }
         employee = data;
         status = AuthStatus.authenticated;
         rememberMe = remember;
@@ -211,62 +163,10 @@ class AuthProvider extends ChangeNotifier {
         } else {
           await _localStorage.remove(_kRememberedIdKey);
         }
-        await LastRoleStorage.saveEmployee(module.name);
         // A session freshly created by submitting the login form is never
         // MPIN-gated (that gate only guards a *restored* JWT session) — it
         // only needs the one-time onboarding sequence if this employee
         // hasn't completed it yet on this device.
-        needsMpinUnlock = false;
-      },
-      failure: (f) async {
-        status = AuthStatus.error;
-        errorMessage = f.message;
-      },
-    );
-    if (status == AuthStatus.authenticated) {
-      await _refreshProfileSetupFlag();
-      await _refreshOnboardingFlag();
-    }
-    notifyListeners();
-  }
-
-  Future<void> loginWithBiometrics() async {
-    status = AuthStatus.authenticating;
-    errorMessage = null;
-    notifyListeners();
-
-    try {
-      final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Authenticate to access your ONEFIN employee account',
-        options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
-      );
-      if (!authenticated) {
-        status = AuthStatus.unauthenticated;
-        notifyListeners();
-        return;
-      }
-    } catch (_) {
-      status = AuthStatus.error;
-      errorMessage = 'Biometric authentication is not available on this device.';
-      notifyListeners();
-      return;
-    }
-
-    final result = await _biometricLoginUseCase(const NoParams());
-    await result.when(
-      success: (data) async {
-        if (!_roleAllowedInModule(data.role, module)) {
-          await _authRepository.logout();
-          employee = null;
-          status = AuthStatus.error;
-          errorMessage = _mismatchMessage(data.role, module);
-          return;
-        }
-        employee = data;
-        status = AuthStatus.authenticated;
-        await LastRoleStorage.saveEmployee(module.name);
-        // Biometric unlock re-admits an already-password-authenticated
-        // session, so there is nothing left to gate behind the MPIN lock.
         needsMpinUnlock = false;
       },
       failure: (f) async {

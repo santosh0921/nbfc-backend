@@ -27,14 +27,11 @@ import '../../presentation/splash/splash_screen.dart';
 import '../../features/support/support_screen.dart';
 import '../../features/documents/documents_screen.dart';
 import '../../features/security/security_screen.dart';
-import '../../features/language/language_screen.dart';
 import '../../features/track_application/track_application_screen.dart';
 import '../../features/permissions/app_permissions_screen.dart';
 import '../../features/loans/emi_calculator_screen.dart';
 import '../../features/loans/emi_schedule_screen.dart';
-import '../../employee_app/core/constants/employee_app_module.dart';
 import '../../features/employee_gate/employee_gate_screen.dart';
-import '../../features/employee_gate/employee_role_selection_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/transactions/transaction_history_screen.dart';
 
@@ -88,20 +85,30 @@ class AppRouter {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const LoginPage(),
       ),
+      // "Login as Employee" goes straight to the employee login form —
+      // no role-select or agency-select before authentication. Which
+      // dashboard (Verification/Recovery) an employee lands on is derived
+      // post-login from their actual role
+      // (see employee_app/core/router/app_router.dart `_homePathFor`),
+      // since every employee has exactly one role/module today. The old
+      // multi-step paths are kept as redirects so any existing deep link
+      // still resolves.
       GoRoute(
         path: '/employee',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const EmployeeRoleSelectionScreen(),
+        builder: (context, state) => const EmployeeGateScreen(),
+      ),
+      GoRoute(
+        path: '/employee/agency-select',
+        redirect: (context, state) => '/employee',
       ),
       GoRoute(
         path: '/employee/verification',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const EmployeeGateScreen(module: EmployeeAppModule.verification),
+        redirect: (context, state) => '/employee',
       ),
       GoRoute(
         path: '/employee/recovery',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const EmployeeGateScreen(module: EmployeeAppModule.recovery),
+        redirect: (context, state) => '/employee',
       ),
       GoRoute(
         path: '/otp',
@@ -221,11 +228,6 @@ class AppRouter {
         path: '/security',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const SecurityScreen(),
-      ),
-      GoRoute(
-        path: '/language',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const LanguageScreen(),
       ),
       GoRoute(
         path: '/track-application',

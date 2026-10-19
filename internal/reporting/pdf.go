@@ -25,7 +25,7 @@ import (
 // primary / 0xFF1E2A78 primaryDark) so a downloaded report looks like it
 // came from the same product as the screen it was downloaded from.
 const (
-	brandName    = "Jayashri Capital"
+	brandName    = "OneFinance"
 	brandTagline = "NBFC Management Reporting"
 )
 

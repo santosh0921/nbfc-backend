@@ -64,7 +64,7 @@ class _NetBankingAuthScreenState extends State<NetBankingAuthScreen> {
     final isBusy = _stage == _Stage.authenticating || _stage == _Stage.authorizing;
 
     return Scaffold(
-      backgroundColor: AppColors.backgroundLight,
+      backgroundColor: AppColors.backgroundOf(context),
       appBar: AppBar(
         title: Text(widget.bankName),
         leading: IconButton(

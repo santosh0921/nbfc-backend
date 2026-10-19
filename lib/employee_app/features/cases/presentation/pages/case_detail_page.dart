@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/components/app_card.dart';
+import '../../../../core/components/app_snackbar.dart';
 import '../../../../core/components/gradient_header.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
@@ -37,6 +38,7 @@ class CaseDetailPage extends StatelessWidget {
           final timeline = snapshot.data![1] as List<CaseTimelineEvent>;
 
           return CustomScrollView(
+            clipBehavior: Clip.none,
             slivers: [
               SliverToBoxAdapter(
                 child: GradientHeader(
@@ -96,6 +98,7 @@ class _CustomerDetailsCard extends StatelessWidget {
               AppBadge(
                 label: caseItem.status.label,
                 variant: switch (caseItem.status) {
+                  CaseStatus.pendingClaim => AppBadgeVariant.gold,
                   CaseStatus.assigned => AppBadgeVariant.info,
                   CaseStatus.inProgress => AppBadgeVariant.warning,
                   CaseStatus.pendingReview => AppBadgeVariant.gold,
@@ -195,11 +198,18 @@ const _postCallScreenshotChecklist = ['Customer Photo', 'Aadhaar Card SS', 'PAN 
 /// initiated video call — never the individual employee's own name.
 /// Customers should recognize who's calling as "the company", not have
 /// to trust an unfamiliar personal name mid-KYC.
-const kCallerCompanyName = 'One Finance Jayashri Capital';
+const kCallerCompanyName = 'OneFinance';
 
 Future<void> _startVideoCall(BuildContext context, CaseEntity caseItem) async {
   final token = await ServiceLocator.instance.get<SecureStorageService>().read('auth_token');
-  if (token == null || !context.mounted) return;
+  if (!context.mounted) return;
+  if (token == null) {
+    // Previously a silent no-op — tapping the button appeared to do
+    // nothing at all, with no way to tell whether that was a missing
+    // session, a permission issue, or something else entirely.
+    AppSnackbar.danger(context, 'Could not start the call — your session appears to be signed out. Please log in again.');
+    return;
+  }
   final callService = CallService(wsBaseUrl: AppConfig.current.apiBaseUrl);
   await Navigator.of(context).push(
     MaterialPageRoute(

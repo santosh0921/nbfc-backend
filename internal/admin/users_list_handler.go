@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -21,6 +22,11 @@ type UserListItem struct {
 	IsActive             bool   `json:"is_active"`
 	CompletionPercentage int    `json:"completion_percentage"`
 	KYCReviewStatus      string `json:"kyc_review_status"`
+	// KYCStatus is the real pipeline position (internal/models.KYCStatus*
+	// state machine) — distinct from KYCReviewStatus above, which only
+	// reflects an admin decision and defaults to PENDING regardless of
+	// how far along the customer actually is.
+	KYCStatus string `json:"kyc_status"`
 	// City is the customer's current-residence city from their KYC
 	// address record (models.CustomerAddress), the only place a
 	// customer-level city is actually captured — neither User nor
@@ -56,20 +62,97 @@ type UserListItem struct {
 // batch) = 8, independent of N.
 func ListUsersHandler(c *gin.Context) {
 	p := pagination.FromQuery(c)
+	search := strings.TrimSpace(c.Query("search"))
 
 	var total int64
-	if err := database.DB.Model(&models.User{}).Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to count users"})
-		return
-	}
-
 	var users []models.User
-	if err := database.DB.
-		Order("created_at DESC").
-		Limit(p.Limit).Offset(p.Offset()).
-		Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch users"})
-		return
+
+	if search != "" {
+		// No single column covers "search" — mobile lives on User, name
+		// lives on CustomerProfile (only created once a customer reaches
+		// the profile step of KYC, so a customer who's only applied for a
+		// loan may have no profile row at all and is findable by mobile
+		// only). Resolve the matching id set from both, dedupe, then
+		// paginate over that in-memory set — the customer base is small
+		// enough (low thousands, per the Phase 15 note above) that this
+		// is simple and fast without needing a real search index or a
+		// SQL-level UNION.
+		like := "%" + search + "%"
+
+		var mobileIDs []uuid.UUID
+		database.DB.Model(&models.User{}).Where("mobile ILIKE ?", like).Pluck("id", &mobileIDs)
+
+		var nameIDs []uuid.UUID
+		database.DB.Model(&models.CustomerProfile{}).
+			Where("first_name ILIKE ? OR last_name ILIKE ? OR (first_name || ' ' || last_name) ILIKE ?", like, like, like).
+			Pluck("user_id", &nameIDs)
+
+		// LoanApplication.ApplicantName/ApplicantPhone are free-text fields
+		// typed on the loan form — entirely separate from User.Mobile (the
+		// authenticated login identity) and CustomerProfile's name. A
+		// customer can type a different contact number or a name spelling
+		// on their application than what they actually signed up/logged in
+		// with (confirmed real-world case: an admin searching the exact
+		// phone number shown on a customer's own loan detail page got zero
+		// matches, because that number was never the customer's User.Mobile
+		// to begin with). Searching loans too, and resolving to their
+		// CustomerID, closes that gap.
+		var loanCustomerIDs []uuid.UUID
+		database.DB.Model(&models.LoanApplication{}).
+			Where("applicant_name ILIKE ? OR applicant_phone ILIKE ?", like, like).
+			Pluck("customer_id", &loanCustomerIDs)
+
+		seen := make(map[uuid.UUID]bool, len(mobileIDs)+len(nameIDs)+len(loanCustomerIDs))
+		matchingIDs := make([]uuid.UUID, 0, len(mobileIDs)+len(nameIDs)+len(loanCustomerIDs))
+		for _, id := range mobileIDs {
+			if !seen[id] {
+				seen[id] = true
+				matchingIDs = append(matchingIDs, id)
+			}
+		}
+		for _, id := range nameIDs {
+			if !seen[id] {
+				seen[id] = true
+				matchingIDs = append(matchingIDs, id)
+			}
+		}
+		for _, id := range loanCustomerIDs {
+			if !seen[id] {
+				seen[id] = true
+				matchingIDs = append(matchingIDs, id)
+			}
+		}
+
+		total = int64(len(matchingIDs))
+		start := p.Offset()
+		if start > len(matchingIDs) {
+			start = len(matchingIDs)
+		}
+		end := start + p.Limit
+		if end > len(matchingIDs) {
+			end = len(matchingIDs)
+		}
+		pageIDs := matchingIDs[start:end]
+
+		if len(pageIDs) > 0 {
+			if err := database.DB.Where("id IN ?", pageIDs).Order("created_at DESC").Find(&users).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to search users"})
+				return
+			}
+		}
+	} else {
+		if err := database.DB.Model(&models.User{}).Count(&total).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to count users"})
+			return
+		}
+
+		if err := database.DB.
+			Order("created_at DESC").
+			Limit(p.Limit).Offset(p.Offset()).
+			Find(&users).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch users"})
+			return
+		}
 	}
 
 	ids := make([]uuid.UUID, 0, len(users))
@@ -82,6 +165,7 @@ func ListUsersHandler(c *gin.Context) {
 	profiles := map[uuid.UUID]models.CustomerProfile{}
 	addresses := map[uuid.UUID]models.CustomerAddress{}
 	reviews := map[uuid.UUID]models.CustomerKYCReview{}
+	kycRecords := map[uuid.UUID]models.CustomerKYC{}
 	// Verification flags feed the completion score; only the boolean
 	// matters here, so these carry just the user id and its flag.
 	panVerified := map[uuid.UUID]bool{}
@@ -105,6 +189,20 @@ func ListUsersHandler(c *gin.Context) {
 		database.DB.Where("user_id IN ?", ids).Find(&rs)
 		for _, x := range rs {
 			reviews[x.UserID] = x
+		}
+
+		// kyc_review_status (above) only reflects an admin's approve/reject
+		// decision and defaults to PENDING for every customer who hasn't
+		// been reviewed yet — including someone at 20% completion with no
+		// documents submitted. That reads as "ready for verification" to
+		// anyone glancing at the badge, which it is not. kycStatus is the
+		// real CustomerKYC state machine position (NOT_STARTED through
+		// VERIFIED) and is what actually answers "where is this customer
+		// in the pipeline".
+		var kycs []models.CustomerKYC
+		database.DB.Where("customer_id IN ?", ids).Find(&kycs)
+		for _, x := range kycs {
+			kycRecords[x.CustomerID] = x
 		}
 
 		var pans []models.CustomerPAN
@@ -135,6 +233,10 @@ func ListUsersHandler(c *gin.Context) {
 			IsActive:         user.IsActive,
 			CreatedAt:        user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			KYCReviewStatus:  constants.KYCPending,
+			KYCStatus:        models.KYCStatusNotStarted,
+		}
+		if k, ok := kycRecords[user.ID]; ok {
+			item.KYCStatus = k.Status
 		}
 		if pr, ok := profiles[user.ID]; ok {
 			item.FirstName = pr.FirstName

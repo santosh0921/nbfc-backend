@@ -50,7 +50,10 @@ func CustomerEsignLetterHandler(c *gin.Context) {
 		return
 	}
 
-	if req.LetterType == "Sanction Letter" && loan.Status != models.LoanStatusSanctioned && loan.Status != models.LoanStatusDisbursed {
+	if req.LetterType == "Sanction Letter" &&
+		loan.Status != models.LoanStatusSanctioned &&
+		loan.Status != models.LoanStatusDisbursementProcessing &&
+		loan.Status != models.LoanStatusDisbursed {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Loan has not been sanctioned yet"})
 		return
 	}

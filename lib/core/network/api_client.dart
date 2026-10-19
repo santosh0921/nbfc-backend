@@ -13,11 +13,17 @@ class ApiClient {
 
   // Overridable at build time with `--dart-define=API_BASE_URL=...` (same
   // pattern the admin panel's ApiClient already uses) — without this, no
-  // build flag could ever point the app at a local backend; it silently
-  // hit Render regardless of what was passed.
+  // build flag could ever point the app at a local backend. The default
+  // below MUST be the real production backend: the old Render URL that
+  // used to live here was long dead (backend moved to AWS), so any build
+  // that forgot to pass the override flag would silently talk to nothing —
+  // a very plausible cause of "calls/notifications stopped working" on
+  // whichever APK build didn't have the flag set. CloudFront (not the
+  // bare EB domain) because it's HTTPS — required for Razorpay webhooks
+  // and to avoid Android's cleartext-traffic block.
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://nbfc-backend-gr1t.onrender.com',
+    defaultValue: 'https://d2jg5nm4lwkwia.cloudfront.net',
   );
   // The backend runs on Render's free tier, which spins the service down
   // after inactivity and can take 30-50s to cold-start on the next
@@ -80,7 +86,15 @@ class ApiClient {
     }
 
     try {
-      return response.body.isEmpty ? [] : jsonDecode(response.body) as List<dynamic>;
+      if (response.body.isEmpty) return [];
+      final decoded = jsonDecode(response.body);
+      // A Go handler that returns a nil (never-appended-to) slice
+      // marshals it as the JSON literal `null`, not `[]` — that's a
+      // legitimate "no rows" response, not a malformed one, so treat it
+      // as an empty list rather than throwing "Unexpected response from
+      // server." for what's really just an empty-state screen.
+      if (decoded == null) return [];
+      return decoded as List<dynamic>;
     } catch (_) {
       throw ApiException('Unexpected response from server.', statusCode: response.statusCode);
     }

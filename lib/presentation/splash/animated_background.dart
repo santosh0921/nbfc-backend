@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'glow_widget.dart';
 import 'particle_painter.dart';
 
-/// Splash-only brand palette for the "Jayashri Capital" launch
+/// Splash-only brand palette for the "OneFinance" launch
 /// experience. Deliberately kept local to this feature (not merged into
 /// the app's global [AppColors]) — the rest of the app keeps its
 /// existing blue/gold theme untouched.

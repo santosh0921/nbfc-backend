@@ -4,15 +4,19 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/components/app_bottom_sheet.dart';
 import '../../../../core/components/app_card.dart';
+import '../../../../core/components/app_empty_state.dart';
+import '../../../../core/components/app_error_state.dart';
 import '../../../../core/components/app_filter_chips.dart';
 import '../../../../core/components/app_scaffold.dart';
 import '../../../../core/components/app_search_bar.dart';
+import '../../../../core/components/app_skeleton_card.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/utils/demo_call.dart';
 import '../../../../core/widgets/app_badge.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../../../core/widgets/auto_refresh_mixin.dart';
 import '../../domain/entities/recovery_case_entity.dart';
 import '../providers/recovery_cases_provider.dart';
 
@@ -23,11 +27,24 @@ class RecoveryCaseListPage extends StatefulWidget {
   State<RecoveryCaseListPage> createState() => _RecoveryCaseListPageState();
 }
 
-class _RecoveryCaseListPageState extends State<RecoveryCaseListPage> {
+class _RecoveryCaseListPageState extends State<RecoveryCaseListPage> with AutoRefreshMixin {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => context.read<RecoveryCasesProvider>().load());
+    startAutoRefresh();
+  }
+
+  @override
+  Future<void> onAutoRefresh() async {
+    if (!mounted) return;
+    await context.read<RecoveryCasesProvider>().load(silent: true);
+  }
+
+  @override
+  void dispose() {
+    stopAutoRefresh();
+    super.dispose();
   }
 
   bool get _hasActiveFilters {
@@ -140,26 +157,23 @@ class _RecoveryCaseListPageState extends State<RecoveryCaseListPage> {
           const SizedBox(height: AppSpacing.md),
           Expanded(
             child: provider.isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? ListView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: List.generate(5, (_) => const AppSkeletonCard()),
+                  )
                 : provider.errorMessage != null
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(provider.errorMessage!, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
-                            const SizedBox(height: AppSpacing.md),
-                            AppButton(label: 'Retry', onPressed: provider.load),
-                          ],
-                        ),
-                      )
+                    ? AppErrorState(message: provider.errorMessage!, onRetry: provider.load)
                     : provider.filtered.isEmpty
-                    ? Center(
-                        child: Text('No cases match your filters', style: Theme.of(context).textTheme.bodyMedium),
+                    ? const AppEmptyState(
+                        title: 'No cases match your filters',
+                        message: 'Try adjusting or clearing your filters.',
+                        icon: Icons.folder_off_outlined,
                       )
                     : RefreshIndicator(
                         onRefresh: provider.load,
                         child: ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
+                          clipBehavior: Clip.none,
                           itemCount: provider.filtered.length,
                           separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                           itemBuilder: (context, index) => _RecoveryCaseCard(caseItem: provider.filtered[index]),

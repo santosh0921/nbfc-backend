@@ -19,6 +19,7 @@ func Migrate() {
 		&models.RecoveryReport{},
 		&models.CaseNote{},
 		&models.Notification{},
+		&models.DeviceToken{},
 		&models.Document{},
 		&models.EmiInstallment{},
 		&models.AuditLog{},
@@ -37,8 +38,12 @@ func Migrate() {
 		&models.ReconciliationRecord{},
 		&models.ReconciliationException{},
 		&models.CustomerKYC{},
+		&models.KycVerificationRequest{},
 		&models.BureauConsent{},
 		&models.BureauRequest{},
+		&models.CorrectionCase{},
+		&models.LoanTranche{},
+		&models.GoldCollateral{},
 		&models.CreditDecision{},
 		&models.CKYCRequest{},
 		&models.ScreeningRequest{},
@@ -56,6 +61,7 @@ func Migrate() {
 		&models.BorrowingTransaction{},
 		&models.DPDRecord{},
 		&models.DelinquencyBucket{},
+		&models.LoanBucketState{},
 		&models.ClassificationRule{},
 		&models.LoanClassification{},
 		&models.LoanClassificationHistory{},
@@ -114,6 +120,13 @@ func Migrate() {
 
 		// Phase 16.1 — scheduled job execution records.
 		&models.JobExecution{},
+
+		// Field-officer quick actions — gold appraisal, property
+		// verification, attendance check-in/out.
+		&models.GoldAppraisal{},
+		&models.PropertyVerification{},
+		&models.EmployeeAttendance{},
+		&models.VerificationReport{},
 	)
 
 	if err != nil {

@@ -75,7 +75,7 @@ class _EmiCalendarViewState extends State<EmiCalendarView> {
               for (final w in _weekdayLabels)
                 Expanded(
                   child: Center(
-                    child: Text(w, style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryLight)),
+                    child: Text(w, style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryOf(context))),
                   ),
                 ),
             ],

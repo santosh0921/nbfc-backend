@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/notification_api_service.dart';
+import '../../core/network/video_verification_api_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/router/scale_fade_route.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
+import '../../core/widgets/app_snackbar.dart';
+import '../../core/widgets/auto_refresh_mixin.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/error_state.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../models/backend_notification.dart';
+import '../home/widgets/video_verification_request_page.dart';
 import '../my_loans/my_loans_screen.dart';
 
 /// Parses which loan (and which letter, if any) a "your letter is ready"
@@ -51,19 +57,40 @@ class NotificationsScreen extends StatefulWidget {
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
+class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefreshMixin {
   late Future<List<BackendNotification>> _future;
+
+  /// Locally mutable mirror of whatever `_future` last resolved to — reads
+  /// (individual or "mark all") remove a notification from this list
+  /// immediately rather than waiting for the next auto-refresh, so tapping
+  /// one makes it visibly disappear right away instead of just dimming.
+  List<BackendNotification>? _notifications;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    startAutoRefresh();
+  }
+
+  @override
+  Future<void> onAutoRefresh() async {
+    if (!mounted) return;
+    setState(() => _future = _load());
+  }
+
+  @override
+  void dispose() {
+    stopAutoRefresh();
+    super.dispose();
   }
 
   Future<List<BackendNotification>> _load() async {
     final token = AuthProvider.instance.token;
     if (token == null) return [];
-    return NotificationApiService.list(token);
+    final list = await NotificationApiService.list(token);
+    _notifications = list;
+    return list;
   }
 
   Future<void> _refresh() async {
@@ -76,17 +103,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  Future<void> _markAllRead() async {
+    final token = AuthProvider.instance.token;
+    if (token == null || _notifications == null || _notifications!.isEmpty) return;
+    final cleared = _notifications!;
+    setState(() => _notifications = []);
+    try {
+      await NotificationApiService.markAllRead(token);
+    } on ApiException {
+      if (mounted) setState(() => _notifications = cleared);
+    }
+  }
+
   Future<void> _onTapNotification(BackendNotification n) async {
-    if (!n.read) {
+    final wasUnread = !n.read;
+    if (wasUnread) {
       final token = AuthProvider.instance.token;
       if (token != null) {
-        setState(() => n.read = true);
+        setState(() {
+          n.read = true;
+          _notifications?.remove(n);
+        });
         try {
           await NotificationApiService.markRead(token, n.id);
         } on ApiException {
           // Non-fatal — the badge will simply reappear on next refresh.
         }
       }
+    }
+
+    if (!mounted) return;
+
+    if (n.title == 'Video verification requested') {
+      await _openVideoVerification();
+      return;
     }
 
     final letterInfo = LetterNotificationInfo.parse(n);
@@ -104,6 +154,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
+  /// Looks up the latest `pending` video-verification request and opens
+  /// the response screen for it. The notification itself carries no
+  /// structured request id (same limitation as the letter notifications
+  /// above), so this fetches the customer's requests and picks the
+  /// newest pending one — if it's already been responded to (e.g. from
+  /// another device, or the home banner), there's nothing to show.
+  Future<void> _openVideoVerification() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return;
+    try {
+      final requests = await VideoVerificationApiService.list(token);
+      final pending = requests.where((r) => r.isPending).toList();
+      if (pending.isEmpty || !mounted) {
+        if (mounted) AppSnackBar.showSuccess(context, "You're all caught up — no pending verification request.");
+        return;
+      }
+      Navigator.of(context, rootNavigator: true).push(
+        ScaleFadeRoute(builder: (_) => VideoVerificationRequestPage(request: pending.first)),
+      );
+    } on ApiException catch (e) {
+      if (mounted) AppSnackBar.showError(context, e.message);
+    } catch (_) {
+      if (mounted) AppSnackBar.showError(context, 'Could not load the verification request.');
+    }
+  }
+
   IconData _iconFor(String title) {
     final lower = title.toLowerCase();
     if (lower.contains('sanction')) return Icons.check_circle_rounded;
@@ -117,33 +193,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
+      appBar: AppBar(
+        title: const Text('Notifications'),
+        actions: [
+          if ((_notifications ?? const []).any((n) => !n.read))
+            TextButton(
+              onPressed: _markAllRead,
+              child: const Text('Mark all read'),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: FutureBuilder<List<BackendNotification>>(
           future: _future,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+            if (snapshot.connectionState == ConnectionState.waiting && _notifications == null) {
               return const Center(child: CircularProgressIndicator());
             }
-            if (snapshot.hasError) {
+            if (snapshot.hasError && _notifications == null) {
               final message = snapshot.error is ApiException ? (snapshot.error as ApiException).message : 'Could not load notifications.';
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
-                      const SizedBox(height: 12),
-                      Text(message, style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      OutlinedButton(onPressed: _refresh, child: const Text('Try Again')),
-                    ],
-                  ),
-                ),
-              );
+              return ErrorState(message: message, onRetry: _refresh);
             }
-            final notifications = snapshot.data ?? const [];
+            final notifications = _notifications ?? snapshot.data ?? const [];
             if (notifications.isEmpty) {
               return RefreshIndicator(
                 onRefresh: _refresh,
@@ -152,15 +223,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   children: [
                     SizedBox(
                       height: MediaQuery.of(context).size.height * 0.6,
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.notifications_none_rounded, size: 56, color: AppColors.textSecondaryLight),
-                            const SizedBox(height: 12),
-                            Text('No notifications yet', style: theme.textTheme.titleMedium),
-                          ],
-                        ),
+                      child: const EmptyState(
+                        title: 'No notifications yet',
+                        icon: Icons.notifications_none_rounded,
                       ),
                     ),
                   ],
@@ -192,10 +257,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             width: 42,
                             height: 42,
                             decoration: BoxDecoration(
-                              color: (n.read ? AppColors.textSecondaryLight : AppColors.primary).withValues(alpha: 0.12),
+                              color: (n.read ? AppColors.textSecondaryOf(context) : AppColors.primary).withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Icon(_iconFor(n.title), size: 20, color: n.read ? AppColors.textSecondaryLight : AppColors.primary),
+                            child: Icon(_iconFor(n.title), size: 20, color: n.read ? AppColors.textSecondaryOf(context) : AppColors.primary),
                           ),
                           const SizedBox(width: 12),
                           Expanded(

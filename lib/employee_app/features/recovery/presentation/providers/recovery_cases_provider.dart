@@ -22,16 +22,22 @@ class RecoveryCasesProvider extends ChangeNotifier {
   List<RecoveryTimelineEvent> timeline = const [];
   List<EmiHistoryEntry> emiHistory = const [];
 
-  Future<void> load() async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
+  /// [silent] skips the isLoading flip so the periodic auto-refresh timer
+  /// can pick up newly-assigned/updated cases without flashing the whole
+  /// list back to its loading skeleton every cycle.
+  Future<void> load({bool silent = false}) async {
+    if (!silent) {
+      isLoading = true;
+      errorMessage = null;
+      notifyListeners();
+    }
     try {
       _all = await _repository.fetchCases();
+      if (silent) errorMessage = null;
     } catch (e) {
-      errorMessage = 'Could not load cases. Pull down to retry.';
+      if (!silent) errorMessage = 'Could not load cases. Pull down to retry.';
     } finally {
-      isLoading = false;
+      if (!silent) isLoading = false;
       notifyListeners();
     }
   }

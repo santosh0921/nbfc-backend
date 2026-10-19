@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/santosh0921/nbfc-backend/internal/database"
+	"github.com/santosh0921/nbfc-backend/internal/kyc"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 	"github.com/santosh0921/nbfc-backend/internal/verification"
 
@@ -119,8 +120,14 @@ err = database.DB.
 	First(&customerAadhaar).Error
 
 if err == nil {
+	// Distinct wording from "Aadhaar already submitted" above is
+	// deliberate: that case is this customer's own record (safe for a
+	// client retry to treat as success); this one is a DIFFERENT
+	// customer already holding this number, which the client must
+	// surface as a real error rather than silently skip — see
+	// quick_apply_screen.dart's _submitOrSkipIfExists.
 	c.JSON(http.StatusConflict, gin.H{
-		"message": "Aadhaar already exists",
+		"message": "This Aadhaar number is already registered to a different account",
 	})
 	return
 }
@@ -164,6 +171,10 @@ if err := database.DB.Create(&customerAadhaar).Error; err != nil {
 		"message": "Unable to save Aadhaar",
 	})
 	return
+}
+
+if _, err := kyc.Recompute(user.ID, "customer", mobile); err != nil {
+	log.Println("kyc.Recompute after Aadhaar submission failed:", err)
 }
 
 c.JSON(http.StatusOK, gin.H{

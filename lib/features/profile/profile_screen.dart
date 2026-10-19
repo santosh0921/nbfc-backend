@@ -156,7 +156,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _ProfileTile(icon: Icons.description_rounded, label: 'Documents', onTap: () => context.push('/documents')),
                 _ProfileTile(icon: Icons.security_rounded, label: 'Security', onTap: () => context.push('/security')),
                 _ProfileTile(icon: Icons.notifications_none_rounded, label: 'Notifications', onTap: () => context.push('/notifications')),
-                _ProfileTile(icon: Icons.language_rounded, label: 'Language', onTap: () => context.push('/language')),
               ],
             ),
             const SizedBox(height: 16),

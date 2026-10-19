@@ -23,14 +23,6 @@ class LoginUseCase implements UseCase<EmployeeEntity, LoginParams> {
       _repository.login(name: params.name, password: params.password, module: params.module);
 }
 
-class BiometricLoginUseCase implements UseCase<EmployeeEntity, NoParams> {
-  BiometricLoginUseCase(this._repository);
-  final AuthRepository _repository;
-
-  @override
-  Future<Result<EmployeeEntity>> call(NoParams params) => _repository.loginWithBiometrics();
-}
-
 class RegisterParams {
   const RegisterParams({required this.name, required this.password, required this.role, required this.branchCity});
   final String name;

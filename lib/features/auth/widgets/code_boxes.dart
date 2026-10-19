@@ -203,7 +203,7 @@ class _BoxState extends State<_Box> {
   Color get _borderColor {
     if (widget.hasError) return AppColors.error;
     if (widget.focusNode.hasFocus) return AppColors.primary;
-    return AppColors.borderLight;
+    return AppColors.borderOf(context);
   }
 
   @override
@@ -219,7 +219,7 @@ class _BoxState extends State<_Box> {
         duration: const Duration(milliseconds: 160),
         height: 56,
         decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceOf(context),
           borderRadius: BorderRadius.circular(AppRadius.md),
           border: Border.all(
             color: _borderColor,
@@ -248,7 +248,7 @@ class _BoxState extends State<_Box> {
                 keyboardType: TextInputType.number,
                 maxLength: widget.obscure ? 1 : 6,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimaryLight),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimaryOf(context)),
                 decoration: const InputDecoration(
                   counterText: '',
                   contentPadding: EdgeInsets.zero,
@@ -274,7 +274,7 @@ class _Dot extends StatelessWidget {
     return Container(
       width: 11,
       height: 11,
-      decoration: const BoxDecoration(color: AppColors.textPrimaryLight, shape: BoxShape.circle),
+      decoration: BoxDecoration(color: AppColors.textPrimaryOf(context), shape: BoxShape.circle),
     );
   }
 }

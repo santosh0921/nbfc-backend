@@ -44,11 +44,27 @@ func TouchCase(loanID uint, customerID string, dpd int, overdueAmountPaise int64
 		return nil, err
 	}
 	audit.RecordDetailed(nil, audit.Entry{
-		ActorType: "system", ActorRef: "risk-job",
+		ActorType: "system", ActorRef: systemActorRiskJob,
 		Action: "collection.case.opened", TargetType: "collection_case", TargetID: itoa(newCase.ID),
 		Result: audit.ResultSuccess, Details: "loan #" + itoa(loanID) + ", DPD " + itoaInt(dpd),
 	})
 	return &newCase, nil
+}
+
+// AutoResolveIfCaughtUp closes a loan's open case when the daily risk job
+// finds its DPD has returned to 0 — the counterpart to TouchCase, which
+// only ever opens/updates a case while DPD > 0 and never runs once the
+// borrower catches up. Silent no-op when there's no open case to resolve
+// (the common case — most loans never have one).
+func AutoResolveIfCaughtUp(loanID uint) {
+	var existing models.CollectionCase
+	err := database.DB.Where("loan_id = ? AND status NOT IN ?", loanID,
+		[]string{models.CollectionStatusClosed, models.CollectionStatusResolved}).
+		Order("id desc").First(&existing).Error
+	if err != nil {
+		return
+	}
+	ResolveCase(existing.ID, 0, "", "Account caught up — DPD returned to 0")
 }
 
 // statusForDPD is a simple, explicitly operational (not regulatory)
@@ -120,6 +136,55 @@ func EscalateCase(caseID uint, actorAdminID uint, actorName, reason string) (*mo
 		Result: audit.ResultSuccess, Reason: reason,
 	})
 	CreateEscalationAlert(c.LoanID, caseID)
+	return &c, nil
+}
+
+// systemActorRiskJob is the ActorRef/actor name recorded when the daily
+// risk job (not a human admin) drives a collections state change.
+const systemActorRiskJob = "risk-job"
+
+// ErrCaseAlreadyClosed guards both ResolveCase and the auto-resolve path in
+// internal/risk's daily job against double-resolving (or resolving an
+// already-written-off) case.
+var ErrCaseAlreadyClosed = errors.New("collections: case is already closed")
+
+// ResolveCase closes a case once the account is no longer delinquent —
+// either a collection manager doing it explicitly (actorAdminID > 0,
+// resolution text required) or the daily risk job doing it automatically
+// when a loan's DPD returns to 0 (actorAdminID == 0, "system" actor). This
+// is the only path that can ever move a CollectionCase into CLOSED/
+// RESOLVED — before this existed, a case had no way back out of OVERDUE/
+// ASSIGNED/ESCALATED once opened, even after the borrower paid in full.
+func ResolveCase(caseID uint, actorAdminID uint, actorName, resolution string) (*models.CollectionCase, error) {
+	var c models.CollectionCase
+	if err := database.DB.First(&c, caseID).Error; err != nil {
+		return nil, err
+	}
+	if c.Status == models.CollectionStatusClosed || c.Status == models.CollectionStatusResolved {
+		return nil, ErrCaseAlreadyClosed
+	}
+	now := time.Now()
+	c.Status = models.CollectionStatusResolved
+	c.Resolution = resolution
+	c.ResolvedAt = &now
+	if err := database.DB.Save(&c).Error; err != nil {
+		return nil, err
+	}
+	actorType := "admin"
+	if actorAdminID == 0 {
+		actorType = "system"
+		actorName = systemActorRiskJob
+	} else {
+		database.DB.Create(&models.CollectionAction{
+			CaseID: caseID, ActorAdminID: actorAdminID, ActorName: actorName,
+			ActionType: models.ActionTypeResolution, Result: "resolved", Notes: resolution,
+		})
+	}
+	audit.RecordDetailed(nil, audit.Entry{
+		ActorType: actorType, ActorID: actorAdminID, ActorRef: actorName,
+		Action: "collection.resolved", TargetType: "collection_case", TargetID: itoa(caseID),
+		Result: audit.ResultSuccess, Reason: resolution,
+	})
 	return &c, nil
 }
 
@@ -212,7 +277,7 @@ func MarkBrokenPromises(asOf time.Time) int {
 		p.ResolvedAt = &now
 		database.DB.Save(&p)
 		audit.RecordDetailed(nil, audit.Entry{
-			ActorType: "system", ActorRef: "risk-job",
+			ActorType: "system", ActorRef: systemActorRiskJob,
 			Action: "collection.ptp.broken", TargetType: "collection_promise", TargetID: itoa(p.ID),
 			Result: audit.ResultSuccess, Details: "loan #" + itoa(p.LoanID),
 		})

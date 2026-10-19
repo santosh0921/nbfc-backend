@@ -2,6 +2,7 @@ package routes
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/santosh0921/nbfc-backend/internal/accounting"
 	"github.com/santosh0921/nbfc-backend/internal/admin"
@@ -14,6 +15,7 @@ import (
 	"github.com/santosh0921/nbfc-backend/internal/ckyc"
 	"github.com/santosh0921/nbfc-backend/internal/collections"
 	"github.com/santosh0921/nbfc-backend/internal/compliance"
+	"github.com/santosh0921/nbfc-backend/internal/corrections"
 	"github.com/santosh0921/nbfc-backend/internal/documents"
 	"github.com/santosh0921/nbfc-backend/internal/employee"
 	"github.com/santosh0921/nbfc-backend/internal/finance"
@@ -49,6 +51,13 @@ func perm(p rbac.Permission) gin.HandlerFunc {
 }
 
 func RegisterRoutes(router *gin.Engine) {
+	// Break the kyc<->corrections import cycle (see corrections/service.go)
+	// by wiring the real Recompute function in here, the one place that
+	// already imports both packages.
+	corrections.RecomputeKYC = func(customerID uuid.UUID, actorType, actorRef string) error {
+		_, err := kyc.Recompute(customerID, actorType, actorRef)
+		return err
+	}
 
 	// Rate limiters (Phase 7 item E): endpoint-specific, not one shared
 	// global bucket — a burst of OTP requests should never eat into a
@@ -127,6 +136,11 @@ func RegisterRoutes(router *gin.Engine) {
 	// Admin auth routes — no shared credential anymore, see internal/admin.
 	router.POST("/admin/login", adminLoginLimit, admin.LoginHandler)
 	router.POST("/admin/refresh", adminLoginLimit, admin.RefreshHandler)
+	// Portal self-registration (new admin picks username/password/role);
+	// rate-limited the same as login since it's also a public,
+	// no-auth-required endpoint. The account it creates cannot log in
+	// until a SUPER_ADMIN approves it — see RegisterHandler.
+	router.POST("/admin/register", adminLoginLimit, admin.RegisterHandler)
 
 	// General admin-API ceiling (item E: "Admin APIs") — a much higher
 	// limit than the auth-specific ones above, since legitimate admin
@@ -147,7 +161,18 @@ func RegisterRoutes(router *gin.Engine) {
 	adminGroup.POST("/admin-users", perm(rbac.AdminManage), admin.AdminCreateAdminUserHandler)
 	adminGroup.PUT("/admin-users/:id/role", perm(rbac.RoleManage), admin.AdminUpdateAdminUserRoleHandler)
 	adminGroup.PUT("/admin-users/:id/status", perm(rbac.AdminManage), admin.AdminSetAdminUserStatusHandler)
+	adminGroup.PUT("/admin-users/:id/approve", perm(rbac.AdminManage), admin.AdminApproveAdminUserHandler)
+	adminGroup.DELETE("/admin-users/:id/reject", perm(rbac.AdminManage), admin.AdminRejectAdminUserHandler)
 	adminGroup.GET("/roles", perm(rbac.AdminManage), admin.AdminListRolesHandler)
+
+	adminGroup.POST("/notifications/broadcast", perm(rbac.AdminManage), notifications.AdminBroadcastHandler)
+	// Own-inbox notifications (Phase 7): any authenticated admin can read
+	// and mark read their own notifications — same as the customer/employee
+	// equivalents below, which also carry no extra RBAC permission beyond
+	// being authenticated as that actor.
+	adminGroup.GET("/notifications", notifications.AdminListHandler)
+	adminGroup.POST("/notifications/:id/read", notifications.AdminMarkReadHandler)
+	adminGroup.POST("/notifications/mark-all-read", notifications.AdminMarkAllReadHandler)
 
 	adminGroup.GET("/dashboard", perm(rbac.ReportView), admin.DashboardHandler)
 	adminGroup.GET("/users", perm(rbac.CustomerView), admin.ListUsersHandler)
@@ -160,13 +185,31 @@ func RegisterRoutes(router *gin.Engine) {
 	// same write with Recompute so internal/kyc.CustomerKYC never drifts
 	// out of sync with the review table.
 	adminGroup.GET("/kyc/queue", perm(rbac.KYCView), kyc.AdminQueueHandler)
+	adminGroup.POST("/kyc/backfill-recompute", perm(rbac.KYCApprove), kyc.AdminBackfillRecomputeHandler)
 	adminGroup.GET("/kyc/:customerId", perm(rbac.KYCView), kyc.AdminDetailHandler)
 	adminGroup.POST("/kyc/:customerId/approve", perm(rbac.KYCApprove), kyc.AdminApproveHandler)
 	adminGroup.POST("/kyc/:customerId/reject", perm(rbac.KYCApprove), kyc.AdminRejectHandler)
 	adminGroup.POST("/kyc/:customerId/require-review", perm(rbac.KYCApprove), kyc.AdminRequireReviewHandler)
+	adminGroup.POST("/kyc/customers/:customerId/verification-requests", perm(rbac.KYCView), kyc.AdminSendVerificationRequestHandler)
+	adminGroup.GET("/kyc/customers/:customerId/verification-requests", perm(rbac.KYCView), kyc.AdminListVerificationRequestsHandler)
+
+	// Two-stage per-loan KYC review (document review before field
+	// verification is released, final review of the field report before
+	// the loan proceeds) — see internal/loans/kyc_review_handler.go.
+	adminGroup.POST("/loans/:id/kyc-documents/approve", perm(rbac.KYCApprove), loans.AdminApproveLoanKYCDocumentsHandler)
+	adminGroup.POST("/loans/:id/kyc-documents/reject", perm(rbac.KYCApprove), loans.AdminRejectLoanKYCDocumentsHandler)
+	adminGroup.POST("/loans/:id/kyc-final/approve", perm(rbac.KYCApprove), loans.AdminApproveLoanFinalKYCHandler)
+	adminGroup.POST("/loans/:id/kyc-final/reject", perm(rbac.KYCApprove), loans.AdminRejectLoanFinalKYCHandler)
 
 	// Credit bureau (read-only admin visibility over BureauRequest rows).
 	adminGroup.GET("/bureau/requests", perm(rbac.BureauView), bureau.AdminListHandler)
+	adminGroup.POST("/bureau/requests/:id/approve", perm(rbac.BureauApprove), bureau.AdminApproveHandler)
+	adminGroup.POST("/bureau/requests/:id/flag", perm(rbac.BureauApprove), bureau.AdminFlagHandler)
+
+	adminGroup.GET("/corrections", perm(rbac.CorrectionView), corrections.AdminListHandler)
+	adminGroup.GET("/corrections/:id", perm(rbac.CorrectionView), corrections.AdminDetailHandler)
+	adminGroup.POST("/corrections/:id/claim", perm(rbac.CorrectionManage), corrections.AdminClaimHandler)
+	adminGroup.POST("/corrections/:id/resolve", perm(rbac.CorrectionManage), corrections.AdminResolveHandler)
 
 	// CKYC/CERSAI — see internal/ckyc's doc comment: no provider is
 	// configured, so search always resolves to a BLOCKED CKYCRequest today.
@@ -387,6 +430,7 @@ func RegisterRoutes(router *gin.Engine) {
 	adminGroup.GET("/collections/cases", collView, collections.AdminListCasesHandler)
 	adminGroup.GET("/collections/cases/:id", collView, collections.AdminGetCaseHandler)
 	adminGroup.POST("/collections/cases/:id/assign", collManage, collections.AdminAssignCaseHandler)
+	adminGroup.POST("/collections/cases/:id/resolve", collManage, collections.AdminResolveCaseHandler)
 	adminGroup.POST("/collections/cases/:id/escalate", collRecord, collections.AdminEscalateCaseHandler)
 	adminGroup.POST("/collections/cases/:id/actions", collRecord, collections.AdminRecordActionHandler)
 	adminGroup.POST("/collections/cases/:id/notes", collRecord, collections.AdminAddNoteHandler)
@@ -524,6 +568,9 @@ func RegisterRoutes(router *gin.Engine) {
 	adminGroup.GET("/loans", perm(rbac.LoanView), loans.AdminListLoansHandler)
 	adminGroup.GET("/loans/:id", perm(rbac.LoanView), loans.AdminGetLoanHandler)
 	adminGroup.GET("/loans/pending-approvals", perm(rbac.LoanView), loans.AdminListPendingApprovalsHandler)
+	adminGroup.GET("/credit-decisions", perm(rbac.LoanView), loans.AdminListCreditDecisionsHandler)
+	adminGroup.GET("/loans/noc-pending", perm(rbac.LoanView), loans.AdminListNOCPendingHandler)
+	adminGroup.POST("/loans/:id/noc/send", perm(rbac.LoanDisburse), loans.AdminSendNOCHandler)
 
 	// Maker-checker: sanction. LoanReview (maker) != LoanSanction (checker)
 	// as PERMISSIONS, and the handlers additionally enforce that the two
@@ -536,16 +583,39 @@ func RegisterRoutes(router *gin.Engine) {
 	// Maker-checker: disbursement.
 	adminGroup.POST("/loans/:id/prepare-disbursement", perm(rbac.LoanDisbursePrep), loans.AdminPrepareDisbursementHandler)
 	adminGroup.POST("/loans/:id/approve-disbursement", perm(rbac.LoanDisburse), loans.AdminApproveDisbursementHandler)
+	adminGroup.POST("/loans/:id/demo-confirm-disbursement", perm(rbac.LoanDisburse), loans.AdminDemoConfirmDisbursementHandler)
 	adminGroup.POST("/loans/:id/disburse", perm(rbac.LoanDisburse), loans.AdminDisburseHandler) // disabled — returns 410
 
-	adminGroup.POST("/loans/:id/reassign", perm(rbac.LoanReview), loans.AdminReassignLoanHandler)
+	// Home Loan tranches — a parallel, self-contained release cycle for
+	// construction-linked demand letters (see models.LoanTranche's own
+	// comment for why this isn't just reused Disbursement rows).
+	adminGroup.GET("/loans/:id/tranches", perm(rbac.LoanView), loans.AdminListTranchesHandler)
+	adminGroup.POST("/loans/:id/tranches", perm(rbac.LoanDisbursePrep), loans.AdminRaiseTrancheHandler)
+	adminGroup.POST("/tranches/:id/site-visit", perm(rbac.LoanView), loans.AdminTrancheSiteVisitHandler)
+	adminGroup.POST("/tranches/:id/prepare", perm(rbac.LoanDisbursePrep), loans.AdminPrepareTrancheHandler)
+	adminGroup.POST("/tranches/:id/approve", perm(rbac.LoanDisburse), loans.AdminApproveTrancheHandler)
+
+	// Gold Loan collateral — appraisal + vault custody (see
+	// models.GoldCollateral's own comment: the one place this system
+	// tracks a physical object instead of a document).
+	adminGroup.GET("/loans/:id/gold-collateral", perm(rbac.LoanView), loans.AdminGetGoldCollateralHandler)
+	adminGroup.POST("/loans/:id/gold-collateral/appraise", perm(rbac.LoanDisbursePrep), loans.AdminAppraiseGoldHandler)
+	adminGroup.POST("/gold-collateral/:id/approve", perm(rbac.LoanDisburse), loans.AdminApproveGoldAppraisalHandler)
+	adminGroup.POST("/gold-collateral/:id/release", perm(rbac.LoanDisburse), loans.AdminReleaseGoldHandler)
+	adminGroup.POST("/gold-collateral/:id/auction", perm(rbac.LoanDisburse), loans.AdminAuctionGoldHandler)
+
 	adminGroup.POST("/loans/:id/restructure", perm(rbac.LoanRestructure), loans.AdminRestructureLoanHandler)
 	adminGroup.GET("/loans/:id/documents", perm(rbac.LoanView), documents.AdminListLoanDocumentsHandler)
 	adminGroup.GET("/loans/:id/emi-schedule", perm(rbac.LoanView), loans.AdminEmiScheduleHandler)
 	adminGroup.GET("/customers/:id/documents", perm(rbac.CustomerView), documents.AdminListCustomerDocumentsHandler)
+	adminGroup.GET("/verification-reports", perm(rbac.LoanView), documents.AdminListVerificationReportsHandler)
 
 	adminGroup.GET("/recovery-reports", perm(rbac.CollectionView), recovery.AdminListReportsHandler)
 	adminGroup.POST("/recovery-reports/:id/action", perm(rbac.CollectionRecord), recovery.AdminActionHandler)
+	adminGroup.POST("/loans/:id/assign-recovery", perm(rbac.CollectionRecord), recovery.AdminAssignRecoveryHandler)
+	adminGroup.GET("/recovery/cases", perm(rbac.CollectionView), recovery.AdminListCasesHandler)
+	adminGroup.GET("/recovery/employees", perm(rbac.CollectionView), recovery.AdminListRecoveryEmployeesHandler)
+	adminGroup.POST("/recovery/cases/:id/assign", perm(rbac.CollectionManage), recovery.AdminManualAssignCaseHandler)
 
 	adminGroup.GET("/agencies", perm(rbac.AdminManage), agency.ListHandler)
 	adminGroup.POST("/agencies", perm(rbac.AdminManage), agency.CreateHandler)
@@ -586,6 +656,7 @@ func RegisterRoutes(router *gin.Engine) {
 	adminGroup.PUT("/complaints/:id", perm(rbac.CustomerView), complaints.AdminUpdateComplaintHandler)
 
 	// Customer loan routes (reuse existing customer JWT middleware)
+	authorized.GET("/branches", loans.ListBranchesHandler)
 	authorized.POST("/loans/apply", loanSubmitLimit, loans.SubmitLoanHandler)
 	authorized.GET("/loans/mine", loans.ListMyLoansHandler)
 	authorized.GET("/loans/:id", loans.GetMyLoanHandler)
@@ -620,16 +691,39 @@ func RegisterRoutes(router *gin.Engine) {
 
 	employeeGroup.GET("/tasks/today", loans.EmployeeTasksTodayHandler)
 	employeeGroup.POST("/loans/:id/verify", loans.EmployeeVerifyLoanHandler)
+	employeeGroup.POST("/loans/:id/claim", loans.EmployeeClaimLoanHandler)
 	employeeGroup.POST("/loans/:id/documents", documents.UploadEmployeeLoanDocumentHandler)
+	employeeGroup.POST("/loans/:id/verification-report", documents.UploadVerificationReportHandler)
+	employeeGroup.POST("/loans/:id/gold-appraisal", loans.EmployeeGoldAppraisalHandler)
+	employeeGroup.POST("/loans/:id/property-verification", loans.EmployeePropertyVerificationHandler)
+	employeeGroup.POST("/attendance", loans.EmployeeAttendanceHandler)
+	employeeGroup.POST("/change-password", employee.ChangePasswordHandler)
 	employeeGroup.GET("/recovery/cases/today", recovery.CasesTodayHandler)
 	employeeGroup.POST("/recovery/cases/:id/report", recovery.SubmitReportHandler)
 
 	// Notifications: accepts either a customer JWT or an employee JWT,
 	// inferring the recipient (role + id) from whichever token validates.
 	router.GET("/notifications", middleware.CustomerOrEmployeeAuthMiddleware(), notifications.ListHandler)
-	// WebRTC signaling relay for employee<->customer video calls — see
+	// WebRTC signaling relay for employee<->customer (and, for KYC video
+	// verification, admin-portal<->customer) video calls — see
 	// internal/signaling/handler.go's doc comment for what this endpoint
-	// does and doesn't do.
-	router.GET("/ws/call/:loanId", middleware.CustomerOrEmployeeAuthMiddleware(), signaling.CallSignalHandler)
+	// does and doesn't do. Uses its own dedicated auth middleware (accepts
+	// an admin JWT, and a token via ?token= for browser WebSocket clients)
+	// rather than CustomerOrEmployeeAuthMiddleware — see that middleware's
+	// doc comment for why this is deliberately NOT shared with
+	// /notifications, /device-token, etc.
+	router.GET("/ws/call/:loanId", middleware.CallSignalingAuthMiddleware(), signaling.CallSignalHandler)
 	router.POST("/notifications/:id/read", middleware.CustomerOrEmployeeAuthMiddleware(), notifications.MarkReadHandler)
+	router.POST("/notifications/mark-all-read", middleware.CustomerOrEmployeeAuthMiddleware(), notifications.MarkAllReadHandler)
+	// FCM device-token registration — same handler for both roles since
+	// it infers role/userID from whichever auth middleware ran, exactly
+	// like the notifications endpoints above.
+	router.POST("/device-token", middleware.CustomerOrEmployeeAuthMiddleware(), notifications.RegisterTokenHandler)
+
+	// KYC video-verification scheduling: customer-only endpoints (own
+	// identity resolved from the customer JWT set by AuthMiddleware, the
+	// same middleware "authorized" above uses, just without its /auth
+	// prefix so these sit at the exact paths the customer app expects).
+	router.GET("/kyc/verification-requests", middleware.AuthMiddleware(), kyc.CustomerListVerificationRequestsHandler)
+	router.POST("/kyc/verification-requests/:id/respond", middleware.AuthMiddleware(), kyc.CustomerRespondVerificationRequestHandler)
 }

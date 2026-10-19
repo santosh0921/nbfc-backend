@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
     "github.com/santosh0921/nbfc-backend/internal/database"
+    "github.com/santosh0921/nbfc-backend/internal/kyc"
     "github.com/santosh0921/nbfc-backend/internal/models"
 )
 
@@ -131,6 +133,10 @@ if err := database.DB.Create(&profile).Error; err != nil {
 		"message": "Unable to create profile",
 	})
 	return
+}
+
+if _, err := kyc.Recompute(user.ID, "customer", mobile); err != nil {
+	log.Println("kyc.Recompute after profile creation failed:", err)
 }
 
 c.JSON(http.StatusOK, gin.H{

@@ -181,6 +181,7 @@ class LoanStatusInfo {
   static const _map = <String, LoanStatusInfo>{
     'submitted': LoanStatusInfo('Submitted', 'Your application has been received.'),
     'auto_verified': LoanStatusInfo('Under Review', 'Auto-verified — awaiting final approval.'),
+    'pending_claim': LoanStatusInfo('Submitted', 'Your application has been received and is being routed to our local verification team.'),
     'assigned': LoanStatusInfo('Under Verification', 'Assigned to our verification team.'),
     'verified': LoanStatusInfo('Verified', 'Verification complete — awaiting sanction decision.'),
     'sanctioned': LoanStatusInfo('Sanctioned', 'Sanctioned — ready for disbursement.'),

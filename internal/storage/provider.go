@@ -28,10 +28,19 @@ type Provider interface {
 var active Provider
 
 // Initialize wires up the configured provider. Called once from
-// cmd/api/main.go. Falls back to a same-behavior-as-before failure mode
-// (nil provider, document upload endpoints return a clear 503) if
-// DOCUMENT_ENCRYPTION_KEY is missing — never silently stores unencrypted.
+// cmd/api/main.go. Prefers S3 (survives deploys/instance replacement —
+// see s3.go's doc comment for why local disk silently lost every document
+// on the first redeploy after upload) whenever DOCUMENT_STORAGE_BUCKET is
+// set; falls back to local-disk storage otherwise (fine for local dev,
+// never for production — see config.ValidateProductionSafety). Falls back
+// further to a same-behavior-as-before failure mode (nil provider,
+// document upload endpoints return a clear 503) if DOCUMENT_ENCRYPTION_KEY
+// is missing entirely — never silently stores unencrypted.
 func Initialize() {
+	if p := newS3Provider(); p != nil {
+		active = p
+		return
+	}
 	if p := newLocalEncryptedProvider(); p != nil {
 		active = p
 	}

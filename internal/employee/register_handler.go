@@ -85,6 +85,21 @@ func RegisterHandler(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not create account"})
 			return
 		}
+		// GORM's Create treats a zero-value field (Approved: false) as
+		// "unset" and lets the column's `gorm:"default:true"` tag apply
+		// instead — even with an explicit .Select() naming the field, which
+		// was tried first and still didn't work. That silently created
+		// every self-registered employee pre-approved regardless of what
+		// the struct literal above set, completely defeating the approval
+		// gate this handler exists to enforce — a real bug found by testing
+		// the actual register -> login flow end-to-end, not just reading
+		// the code. Update() has no such default-skipping behavior (that
+		// logic only exists on Create's INSERT path), so forcing it here
+		// with a second statement is the reliable fix.
+		if err := database.DB.Model(&emp).Update("approved", false).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not finalize account"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

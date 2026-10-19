@@ -13,9 +13,10 @@ class PreApprovedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final formatted = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(amount);
     return GradientContainer(
-      colors: AppColors.gradientBluePrimary,
+      colors: AppColors.gradientGold,
       radius: 24,
       padding: const EdgeInsets.all(22),
+      shine: true,
       child: Row(
         children: [
           Expanded(
@@ -24,22 +25,28 @@ class PreApprovedCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 18),
+                    const Icon(Icons.workspace_premium_rounded, color: AppColors.onPrimary, size: 18),
                     const SizedBox(width: 6),
                     Text(
                       'Congratulations!',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Colors.white),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppColors.onPrimary),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(
                   'You\'re pre-approved for',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.9)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: AppColors.onPrimary.withValues(alpha: 0.75)),
                 ),
                 Text(
                   formatted,
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+                  style: Theme.of(context)
+                      .textTheme
+                      .displaySmall
+                      ?.copyWith(color: AppColors.onPrimary, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 14),
                 ElevatedButton(

@@ -23,6 +23,7 @@ class ApplyFormField extends StatelessWidget {
     this.textInputAction,
     this.onFieldSubmitted,
     this.nextFocusNode,
+    this.helperText,
   });
 
   final String label;
@@ -31,6 +32,10 @@ class ApplyFormField extends StatelessWidget {
   final String? Function(String?)? validator;
   final String? hint;
   final int? maxLength;
+
+  /// Shown below the field, e.g. a min/max guideline — unlike [hint],
+  /// which disappears once the user starts typing, this stays visible.
+  final String? helperText;
   final bool obscureText;
   final List<TextInputFormatter>? inputFormatters;
   final bool readOnly;
@@ -74,17 +79,18 @@ class ApplyFormField extends StatelessWidget {
               (nextFocusNode != null ? (_) => FocusScope.of(context).requestFocus(nextFocusNode) : null),
           decoration: InputDecoration(
             hintText: hint,
+            helperText: helperText,
             counterText: '',
             filled: true,
-            fillColor: Theme.of(context).brightness == Brightness.dark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            fillColor: Theme.of(context).brightness == Brightness.dark ? AppColors.surfaceDark : AppColors.surfaceOf(context),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),
-              borderSide: const BorderSide(color: AppColors.borderLight),
+              borderSide: BorderSide(color: AppColors.borderOf(context)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),
-              borderSide: const BorderSide(color: AppColors.borderLight),
+              borderSide: BorderSide(color: AppColors.borderOf(context)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -136,15 +142,15 @@ class ApplyFormDropdown<T> extends StatelessWidget {
           onChanged: onChanged,
           decoration: InputDecoration(
             filled: true,
-            fillColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            fillColor: isDark ? AppColors.surfaceDark : AppColors.surfaceOf(context),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),
-              borderSide: const BorderSide(color: AppColors.borderLight),
+              borderSide: BorderSide(color: AppColors.borderOf(context)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),
-              borderSide: const BorderSide(color: AppColors.borderLight),
+              borderSide: BorderSide(color: AppColors.borderOf(context)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),

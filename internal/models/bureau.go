@@ -73,7 +73,24 @@ type BureauRequest struct {
 
 	RequestedAt time.Time  `json:"requestedAt"`
 	CompletedAt *time.Time `json:"completedAt,omitempty"`
+
+	// ReviewStatus is the credit officer's own sign-off on this bureau
+	// result, separate from Status (which only reflects whether the pull
+	// itself succeeded/failed). A completed pull with a real score still
+	// needs a human (BUREAU_APPROVE) to review and approve it before
+	// underwriting may act on the loan — see
+	// loans.requireApprovedBureauRequest, the gate that enforces this.
+	ReviewStatus       string     `gorm:"not null;default:'PENDING_REVIEW'" json:"reviewStatus"`
+	ReviewedByAdminID  uint       `json:"reviewedByAdminId,omitempty"`
+	ReviewedByUsername string     `json:"reviewedByUsername,omitempty"`
+	ReviewedAt         *time.Time `json:"reviewedAt,omitempty"`
 }
+
+const (
+	BureauReviewStatusPending  = "PENDING_REVIEW"
+	BureauReviewStatusApproved = "APPROVED"
+	BureauReviewStatusFlagged  = "FLAGGED"
+)
 
 // CreditDecision separates the bureau data from the underwriting rules
 // that consumed it (Phase 3, item H) — a decision record independent of

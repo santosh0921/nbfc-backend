@@ -12,10 +12,16 @@ type CustomerSelfie struct {
 
 	UserID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex"`
 
-	// TEXT rather than varchar(255): this currently stores the raw
-	// base64-encoded selfie image inline (no object storage/upload step
-	// wired up yet), which is far larger than a typical file path.
+	// ImagePath: legacy column — pre-encryption rows have the raw
+	// base64-encoded image inline here. New uploads leave this empty and
+	// use StorageReference instead (see internal/storage), matching the
+	// pattern already used for Document.DataBase64/StorageReference.
 	ImagePath string `gorm:"type:text"`
+
+	// StorageReference is the opaque reference into internal/storage's
+	// encrypted-at-rest provider — never a raw filesystem path. Empty for
+	// rows uploaded before this field existed (ImagePath holds those).
+	StorageReference string `gorm:"size:255"`
 
 	VerificationStatus string `gorm:"size:30;default:'PENDING'"`
 

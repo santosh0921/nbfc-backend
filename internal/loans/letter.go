@@ -14,15 +14,15 @@ import (
 )
 
 const (
-	lenderName        = "Jayashri Capital"
-	lenderFullName    = "Jayashri Capital Private Limited"
-	lenderOfficeLine  = "Registered Office: Jayashri Capital, Mumbai, Maharashtra, India"
+	lenderName        = "OneFinance"
+	lenderFullName    = "OneFinance Private Limited"
+	lenderOfficeLine  = "Registered Office: OneFinance, Mumbai, Maharashtra, India"
 	grievanceName     = "Customer Support"
 	grievancePhone    = "+91 8657823643"
-	grievanceEmailStr = "support@jayashricapital.com"
+	grievanceEmailStr = "support@onefinance.in"
 )
 
-// generateLoanLetter builds the initial (unsigned) Jayashri Capital-branded
+// generateLoanLetter builds the initial (unsigned) OneFinance-branded
 // letterhead PDF for the given loan and stores it as a system-generated
 // Document row, so it shows up in GET /admin/loans/:id/documents alongside
 // customer/employee uploads. docType is exactly "Sanction Letter" or

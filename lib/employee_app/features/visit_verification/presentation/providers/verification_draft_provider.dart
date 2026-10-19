@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import '../../../../core/di/service_locator.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/utils/pdf_generator.dart';
 import '../../../cases/domain/repositories/cases_repository.dart';
 import '../../data/repositories/visit_history_repository.dart';
@@ -36,6 +38,12 @@ class VerificationDraftProvider extends ChangeNotifier {
 
   bool isSubmitting = false;
   VisitRecord? lastSubmitted;
+
+  /// True if the signed PDF was generated and saved on-device successfully
+  /// but the upload to the backend (so it shows up in the admin panel)
+  /// failed — the visit itself is still a success (local PDF/history are
+  /// unaffected), but the officer should know admin won't see it yet.
+  bool reportUploadFailed = false;
 
   void startVisit({required String caseId, required String customerName, required String loanType}) {
     this.caseId = caseId;
@@ -216,6 +224,27 @@ class VerificationDraftProvider extends ChangeNotifier {
       riskAssessment: riskAssessment,
       recommendation: recommendation,
     );
+
+    // Upload the signed PDF itself (customer + officer signatures already
+    // embedded by PdfGenerator) so it's visible in the admin panel instead
+    // of staying only on this device — previously nothing did this, so a
+    // fully completed, signed report existed but admin could never see it.
+    reportUploadFailed = false;
+    try {
+      final bytes = await pdfFile.readAsBytes();
+      final apiClient = ServiceLocator.instance.get<ApiClient>();
+      await apiClient.dio.post('/employee/loans/$caseId/verification-report', data: {
+        'customerName': customerName,
+        'loanType': loanType,
+        'recommendation': recommendation,
+        'riskAssessment': riskAssessment,
+        'fileName': 'visit_report_${record.id}.pdf',
+        'mimeType': 'application/pdf',
+        'dataBase64': base64Encode(bytes),
+      });
+    } catch (_) {
+      reportUploadFailed = true;
+    }
 
     lastSubmitted = record;
     isSubmitting = false;

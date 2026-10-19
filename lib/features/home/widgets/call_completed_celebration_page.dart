@@ -35,7 +35,7 @@ class _CallCompletedCelebrationPageState extends State<CallCompletedCelebrationP
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.backgroundLight,
+      backgroundColor: AppColors.backgroundOf(context),
       body: SafeArea(
         child: GestureDetector(
           onTap: () => Navigator.of(context).maybePop(),
@@ -53,7 +53,7 @@ class _CallCompletedCelebrationPageState extends State<CallCompletedCelebrationP
                   Text(
                     "Your video verification call is complete. We'll keep you posted on the next step.",
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondaryLight),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondaryOf(context)),
                   ),
                 ],
               ),

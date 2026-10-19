@@ -94,11 +94,11 @@ class _SignaturePreview extends StatelessWidget {
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.draw_outlined, color: AppColors.textSecondaryLight.withValues(alpha: 0.6), size: 28),
+                  Icon(Icons.draw_outlined, color: AppColors.textSecondaryOf(context).withValues(alpha: 0.6), size: 28),
                   const SizedBox(height: 6),
                   Text(
                     'Tap to sign',
-                    style: TextStyle(color: AppColors.textSecondaryLight.withValues(alpha: 0.8), fontSize: 13),
+                    style: TextStyle(color: AppColors.textSecondaryOf(context).withValues(alpha: 0.8), fontSize: 13),
                   ),
                 ],
               ),

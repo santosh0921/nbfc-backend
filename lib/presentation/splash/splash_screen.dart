@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
-import '../../core/services/last_role_storage.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import 'animated_background.dart';
 import 'glass_logo.dart';
 import 'loading_bar.dart';
 
-/// Premium fintech launch experience for Jayashri Capital — a fully
+/// Premium fintech launch experience for OneFinance — a fully
 /// custom splash screen: layered moving navy/royal-blue/gold gradient
 /// background with ambient glows and floating particles, a breathing
 /// glassmorphism logo card, gradient brand wordmark, animated golden
@@ -92,19 +91,14 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       return;
     }
 
-    // Route back into whichever "side" of the app (customer vs. a specific
-    // employee module) was last actively used, instead of always defaulting
-    // to the customer login screen. If that side's own session has expired,
-    // its own router/login screen takes over from here as normal — this
-    // only decides which entry point to land on first.
-    final lastRole = await LastRoleStorage.read();
-    if (!mounted) return;
-    if (lastRole.role == 'employee' && lastRole.module != null) {
-      context.go('/employee/${lastRole.module}');
-      return;
-    }
-
-    // Customer path: a fresh app process has no in-memory session, but if
+    // Always land on the customer entry point first — auto-jumping
+    // straight into the employee login on relaunch (based on whichever
+    // side was last used) replaced the entire navigation stack with just
+    // that one screen, so the back button had nowhere to go and appeared
+    // stuck. "Login as Employee" on the customer login screen is always
+    // one tap away regardless.
+    //
+    // A fresh app process has no in-memory session, but if
     // this device already completed the full phone+OTP+MPIN flow before
     // (a token+mobile are still saved), skip straight to the lightweight
     // MPIN-unlock screen instead of forcing that whole flow again. The

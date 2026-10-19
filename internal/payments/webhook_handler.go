@@ -209,6 +209,9 @@ func processPaymentSuccess(c *gin.Context, gateway string, payment models.Paymen
 			log.Println("payment webhook: receipt generation failed:", err)
 		}
 	}
+	if err := loans.CheckAndGenerateNOC(lockedPayment.LoanID); err != nil {
+		log.Println("payment webhook: NOC generation failed:", err)
+	}
 
 	// A promise-to-pay is only ever settled by a verified payment reaching
 	// this point — never by the mere passage of time (item K).

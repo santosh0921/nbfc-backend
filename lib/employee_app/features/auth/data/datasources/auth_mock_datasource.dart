@@ -60,23 +60,6 @@ class AuthMockDataSource {
     return match.employee;
   }
 
-  /// Re-authenticates whichever employee last logged in with a password on
-  /// this device — [lastEmployeeCode] is persisted by the repository at the
-  /// end of a successful [login]. There is no "current biometric user"
-  /// concept in a mock directory, so without a prior password login there
-  /// is nothing to resolve to.
-  Future<EmployeeModel> biometricLogin(String? lastEmployeeCode) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (lastEmployeeCode == null) {
-      throw const UnauthorizedFailure('No previous session found. Please log in with your employee ID.');
-    }
-    final match = _directory[lastEmployeeCode.trim().toUpperCase()];
-    if (match == null) {
-      throw const UnauthorizedFailure('No previous session found. Please log in with your employee ID.');
-    }
-    return match.employee;
-  }
-
   Future<void> forgotPassword(String identifier) async {
     await Future.delayed(const Duration(milliseconds: 600));
   }

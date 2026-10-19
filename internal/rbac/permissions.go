@@ -57,6 +57,24 @@ const (
 	CKYCView        Permission = "CKYC_VIEW"
 	ScreeningView   Permission = "SCREENING_VIEW"
 	ScreeningDecide Permission = "SCREENING_DECIDE"
+	// BureauApprove is the credit-officer sign-off gate added after Phase
+	// 3: a completed bureau pull isn't enough on its own for underwriting
+	// to act on a loan — someone holding this permission must explicitly
+	// approve the result first (internal/loans.requireApprovedBureauRequest
+	// enforces this at the recommend-sanction step). Held by CREDIT_MANAGER/
+	// SUPER_ADMIN, not CREDIT_OFFICER, mirroring the maker!=checker split
+	// already used for LoanReview/LoanSanction.
+	BureauApprove Permission = "BUREAU_APPROVE"
+
+	// CorrectionView/CorrectionManage back the Correction Portal: when a
+	// KYC reviewer rejects a customer, or a credit officer flags a bureau
+	// result, with a reason that needs a human follow-up (document not
+	// visible, customer didn't cooperate, bureau mismatch, etc.), a
+	// CorrectionCase is raised. CorrectionView is read-only (list/detail);
+	// CorrectionManage is claiming and resolving a case — resolving
+	// re-opens the original KYC/Credit review automatically.
+	CorrectionView   Permission = "CORRECTION_VIEW"
+	CorrectionManage Permission = "CORRECTION_MANAGE"
 
 	// Phase 4 — accounting. AccountingView (Phase 1/2) stays read-only;
 	// AccountingPost is the new permission actually allowed to call
@@ -175,7 +193,8 @@ var RolePermissions = map[string]map[Permission]bool{
 		AccountingView: true, ReportView: true, AuditView: true,
 		AdminManage: true, RoleManage: true,
 		PaymentView: true, DisbursementView: true, ReconciliationView: true, ReconciliationManage: true,
-		BureauView: true, CKYCView: true, ScreeningView: true, ScreeningDecide: true,
+		BureauView: true, CKYCView: true, ScreeningView: true, ScreeningDecide: true, BureauApprove: true,
+		CorrectionView: true, CorrectionManage: true,
 		AccountingPost: true, PeriodManage: true,
 		RiskView: true, RiskRuleManage: true, RiskRuleApprove: true, ClassificationOverride: true,
 		CollectionManage: true, WriteOffRequest: true, WriteOffApprove: true,
@@ -190,7 +209,7 @@ var RolePermissions = map[string]map[Permission]bool{
 		CustomerView: true, KYCView: true,
 		LoanView: true, LoanReview: true, LoanReject: true,
 		ReportView: true,
-		BureauView:  true, ScreeningView: true,
+		BureauView: true, ScreeningView: true, BureauApprove: true,
 		RiskView: true,
 		MISView: true, // item O: "CREDIT -> credit/risk reports"
 	},
@@ -198,7 +217,7 @@ var RolePermissions = map[string]map[Permission]bool{
 		CustomerView: true, KYCView: true, KYCApprove: true,
 		LoanView: true, LoanReview: true, LoanSanction: true, LoanReject: true, LoanRestructure: true,
 		ReportView: true, AuditView: true,
-		BureauView: true, ScreeningView: true,
+		BureauView: true, ScreeningView: true, BureauApprove: true,
 		RiskView: true, RiskRuleManage: true, ClassificationOverride: true,
 		WriteOffRequest: true,
 		MISView: true, ReportExport: true,
@@ -208,7 +227,17 @@ var RolePermissions = map[string]map[Permission]bool{
 		LoanView: true, CollectionView: true,
 		ReportView:  true,
 		PaymentView: true, DisbursementView: true,
-		MISView: true, // item O: "OPERATIONS -> operational reports"
+		// LoanDisburse (Phase 8): before this, LoanDisburse — the checker
+		// half of disbursement release — was held only by SUPER_ADMIN. Once
+		// AdminApproveDisbursementHandler started enforcing maker != checker
+		// (Phase 2), a deployment with a single SUPER_ADMIN could prepare a
+		// disbursement but never have a distinct, qualified admin to release
+		// it. OPERATIONS already has read-only disbursement/payment
+		// visibility and no sanction-side authority, so it's the natural
+		// release/oversight role, kept separate from DISBURSEMENT_OFFICER's
+		// prep-only authority above.
+		LoanDisburse: true,
+		MISView:      true, // item O: "OPERATIONS -> operational reports"
 	},
 	"DISBURSEMENT_OFFICER": {
 		CustomerView: true, LoanView: true,
@@ -282,6 +311,18 @@ var RolePermissions = map[string]map[Permission]bool{
 		// the handler).
 		ComplianceView: true, ComplianceManage: true, ComplianceApprove: true,
 		AuditModuleAccess: true,
+		CorrectionView: true, CorrectionManage: true,
+	},
+	// CORRECTION_OFFICER is the Correction Portal's own role: follows up
+	// with customers on KYC/credit cases that were rejected/flagged for a
+	// fixable reason (document unclear, customer didn't cooperate, etc.).
+	// CustomerView/LoanView let it fetch the same customer info, loan
+	// details and documents (GET /admin/customers/:id/documents, already
+	// gated on CustomerView) the KYC/Credit portals show — never a
+	// duplicated data source, just read access to the real one.
+	"CORRECTION_OFFICER": {
+		CustomerView: true, LoanView: true,
+		CorrectionView: true, CorrectionManage: true,
 	},
 	"AUDITOR": {
 		CustomerView: true, KYCView: true,

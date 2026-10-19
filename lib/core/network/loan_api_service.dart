@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import '../../models/branch.dart';
 import '../../models/loan_application.dart';
 import '../../models/uploaded_document.dart';
 
@@ -26,6 +27,36 @@ class LoanApiService {
     String? timingPreference,
     DateTime? visitDate,
     String? visitTimeSlot,
+    // Home Loan only — real-world builder/property details a
+    // construction-linked purchase needs (internal/loans/customer_handler.go).
+    String? builderName,
+    String? projectName,
+    String? propertyAddress,
+    double? agreementValue,
+    String? constructionStage,
+    // Gold Loan only — the customer's own estimate; the branch's physical
+    // appraisal is what actually sets the loan amount.
+    String? goldOrnamentType,
+    double? goldApproxWeightGrams,
+    int? goldApproxPurityKarat,
+    bool? goldAlreadyPledged,
+    String? goldLoanBranch,
+    // Business Loan and MSME Loan — msmeUdyamNumber only means anything
+    // for MSME, left null for Business Loan.
+    String? businessName,
+    String? businessRegistrationType,
+    String? businessAddress,
+    int? businessYearsInOperation,
+    double? businessMonthlyTurnover,
+    String? businessGstNumber,
+    String? msmeUdyamNumber,
+    // Farmer Loan only.
+    String? farmerLandRecordType,
+    String? farmerLandRecordNumber,
+    double? farmerLandAreaAcres,
+    String? farmerLandLocation,
+    String? farmerCropOrPurpose,
+    String? farmerKccNumber,
   }) async {
     // A non-2xx response here throws ApiException with the backend's
     // eligibility-engine message (internal/loans/eligibility.go) already
@@ -45,8 +76,38 @@ class LoanApiService {
       if (timingPreference != null) 'timingPreference': timingPreference,
       if (visitDate != null) 'visitDate': '${visitDate.year.toString().padLeft(4, '0')}-${visitDate.month.toString().padLeft(2, '0')}-${visitDate.day.toString().padLeft(2, '0')}',
       if (visitTimeSlot != null) 'visitTimeSlot': visitTimeSlot,
+      if (builderName != null) 'builderName': builderName,
+      if (projectName != null) 'projectName': projectName,
+      if (propertyAddress != null) 'propertyAddress': propertyAddress,
+      if (agreementValue != null) 'agreementValue': agreementValue,
+      if (constructionStage != null) 'constructionStage': constructionStage,
+      if (goldOrnamentType != null) 'goldOrnamentType': goldOrnamentType,
+      if (goldApproxWeightGrams != null) 'goldApproxWeightGrams': goldApproxWeightGrams,
+      if (goldApproxPurityKarat != null) 'goldApproxPurityKarat': goldApproxPurityKarat,
+      if (goldAlreadyPledged != null) 'goldAlreadyPledged': goldAlreadyPledged,
+      if (goldLoanBranch != null) 'goldLoanBranch': goldLoanBranch,
+      if (businessName != null) 'businessName': businessName,
+      if (businessRegistrationType != null) 'businessRegistrationType': businessRegistrationType,
+      if (businessAddress != null) 'businessAddress': businessAddress,
+      if (businessYearsInOperation != null) 'businessYearsInOperation': businessYearsInOperation,
+      if (businessMonthlyTurnover != null) 'businessMonthlyTurnover': businessMonthlyTurnover,
+      if (businessGstNumber != null) 'businessGstNumber': businessGstNumber,
+      if (msmeUdyamNumber != null) 'msmeUdyamNumber': msmeUdyamNumber,
+      if (farmerLandRecordType != null) 'farmerLandRecordType': farmerLandRecordType,
+      if (farmerLandRecordNumber != null) 'farmerLandRecordNumber': farmerLandRecordNumber,
+      if (farmerLandAreaAcres != null) 'farmerLandAreaAcres': farmerLandAreaAcres,
+      if (farmerLandLocation != null) 'farmerLandLocation': farmerLandLocation,
+      if (farmerCropOrPurpose != null) 'farmerCropOrPurpose': farmerCropOrPurpose,
+      if (farmerKccNumber != null) 'farmerKccNumber': farmerKccNumber,
     }, token: token);
     return LoanApplication.fromJson(res);
+  }
+
+  /// GET /auth/branches — physical locations for Gold Loan, where the
+  /// collateral itself has to be brought in and appraised in person.
+  static Future<List<Branch>> branches(String token) async {
+    final res = await ApiClient.getList('/auth/branches', token: token);
+    return res.map((e) => Branch.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   static Future<List<LoanApplication>> mine(String token) async {

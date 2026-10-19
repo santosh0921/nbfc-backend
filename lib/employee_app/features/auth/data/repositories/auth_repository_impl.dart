@@ -1,6 +1,5 @@
 import 'dart:convert';
 import '../../../../core/error/error_mapper.dart';
-import '../../../../core/error/failure.dart';
 import '../../../../core/error/result.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../domain/entities/employee_entity.dart';
@@ -38,25 +37,6 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       await _remoteDataSource.register(name: name, password: password, role: role, branchCity: branchCity);
       return const Success(null);
-    } catch (e) {
-      return ResultFailure(ErrorMapper.map(e));
-    }
-  }
-
-  /// There is no biometric-specific backend endpoint — biometric unlock
-  /// simply re-admits the employee whose password-authenticated session
-  /// (including its still-valid JWT, good for 12h) is already persisted on
-  /// this device from a prior [login]. If no session was ever persisted,
-  /// or it was cleared by [logout], there is nothing to resolve to.
-  @override
-  Future<Result<EmployeeEntity>> loginWithBiometrics() async {
-    try {
-      final session = await currentSession();
-      final token = await _secureStorage.read(_kTokenKey);
-      if (session == null || token == null) {
-        throw const UnauthorizedFailure('No previous session found. Please log in with your employee ID.');
-      }
-      return Success(session);
     } catch (e) {
       return ResultFailure(ErrorMapper.map(e));
     }

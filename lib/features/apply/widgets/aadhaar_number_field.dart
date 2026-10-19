@@ -130,11 +130,11 @@ class _AadhaarCardPreview extends StatelessWidget {
                         width: 46,
                         height: 46,
                         decoration: BoxDecoration(
-                          color: AppColors.borderLight,
+                          color: AppColors.borderOf(context),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.borderLight),
+                          border: Border.all(color: AppColors.borderOf(context)),
                         ),
-                        child: const Icon(Icons.person_rounded, color: AppColors.textSecondaryLight, size: 30),
+                        child: Icon(Icons.person_rounded, color: AppColors.textSecondaryOf(context), size: 30),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -160,7 +160,7 @@ class _AadhaarCardPreview extends StatelessWidget {
                                               fontSize: 15,
                                               fontWeight: FontWeight.w800,
                                               letterSpacing: 1,
-                                              color: i < g.length ? const Color(0xFF1E3A8A) : AppColors.borderLight,
+                                              color: i < g.length ? const Color(0xFF1E3A8A) : AppColors.borderOf(context),
                                             ),
                                           ),
                                         ),

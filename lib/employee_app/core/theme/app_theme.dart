@@ -65,10 +65,17 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.secondary,
           foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.secondary.withValues(alpha: 0.35),
           minimumSize: const Size.fromHeight(52),
-          elevation: 0,
+          // A flat elevation:0 CTA on every screen read as inert/unfinished
+          // next to the rest of the app's cards, which now carry a real
+          // shadow — a small lift plus a tinted (not plain grey) shadow
+          // makes the primary action on each screen read as the clear,
+          // tappable focal point instead of blending into the layout.
+          elevation: 3,
+          shadowColor: AppColors.secondary.withValues(alpha: 0.35),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusButton)),
-          textStyle: textTheme.labelLarge,
+          textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.2),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(

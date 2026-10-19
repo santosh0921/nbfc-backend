@@ -68,6 +68,7 @@ const (
 	ActionTypePTP         = "PROMISE_TO_PAY"
 	ActionTypeFollowUp    = "FOLLOW_UP"
 	ActionTypeEscalation  = "ESCALATION"
+	ActionTypeResolution  = "RESOLUTION"
 )
 
 // CollectionAction is one logged interaction against a case. Notes are

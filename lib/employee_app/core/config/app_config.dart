@@ -24,7 +24,7 @@ class AppConfig {
     env: AppEnv.development,
     apiBaseUrl: String.fromEnvironment(
       'API_BASE_URL',
-      defaultValue: 'https://nbfc-backend-gr1t.onrender.com',
+      defaultValue: 'https://d2jg5nm4lwkwia.cloudfront.net',
     ),
     useMockData: false,
   );

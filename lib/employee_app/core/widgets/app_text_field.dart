@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_spacing.dart';
 
@@ -15,6 +16,8 @@ class AppTextField extends StatefulWidget {
     this.textInputAction,
     this.enabled = true,
     this.autofillHints,
+    this.maxLength,
+    this.inputFormatters,
   });
 
   final String label;
@@ -27,6 +30,12 @@ class AppTextField extends StatefulWidget {
   final TextInputAction? textInputAction;
   final bool enabled;
   final Iterable<String>? autofillHints;
+
+  /// Caps the field's character count (e.g. 10 for an Indian mobile
+  /// number) — without this, nothing stopped a phone-number field from
+  /// accepting an arbitrarily long string of digits.
+  final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   State<AppTextField> createState() => _AppTextFieldState();
@@ -67,9 +76,12 @@ class _AppTextFieldState extends State<AppTextField> {
         textInputAction: widget.textInputAction,
         enabled: widget.enabled,
         autofillHints: widget.autofillHints,
+        maxLength: widget.maxLength,
+        inputFormatters: widget.inputFormatters,
         decoration: InputDecoration(
           labelText: widget.label,
           hintText: widget.hint,
+          counterText: widget.maxLength != null ? '' : null,
           prefixIcon: widget.prefixIcon != null
               ? Icon(widget.prefixIcon, size: 20, color: _focused ? AppColors.secondary : AppColors.textSecondary)
               : null,

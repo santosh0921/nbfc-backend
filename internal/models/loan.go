@@ -34,6 +34,30 @@ const (
 	// (internal/loans.ConfirmDisbursement) — a real bank/payout
 	// confirmation, or a matched bank-statement line during reconciliation.
 	LoanStatusDisbursementProcessing = "disbursement_processing"
+
+	// LoanStatusPendingClaim — a freshly submitted loan whose city has at
+	// least one approved verification employee is broadcast to ALL of
+	// them (AssignedEmployeeID stays nil) rather than auto-assigned to
+	// one, first-come-first-served: whichever employee calls
+	// POST /employee/loans/:id/claim first gets it, atomically, and it
+	// disappears from every other matching employee's task list. Falls
+	// back to the old single-employee least-loaded assignment
+	// (LoanStatusAssigned immediately) only when no employee in that
+	// city exists at all — see findVerificationEmployeesInCity.
+	LoanStatusPendingClaim = "pending_claim"
+
+	// Two-stage KYC review (Phase: document-first review). A freshly
+	// submitted loan now sits here — visible to KYC with every uploaded
+	// document, but not yet broadcast to any field employee — until a KYC
+	// officer explicitly approves the documents (which is what flips it to
+	// LoanStatusPendingClaim and triggers the employee broadcast that used
+	// to happen immediately on submission). Symmetrically, once a field
+	// employee submits their verification report the loan lands at
+	// LoanStatusPendingKYCFinalReview rather than going straight to
+	// LoanStatusVerified — a second, final KYC decision is required before
+	// the loan is allowed to proceed to Credit Bureau/Underwriting.
+	LoanStatusPendingKYCDocReview   = "pending_kyc_doc_review"
+	LoanStatusPendingKYCFinalReview = "pending_kyc_final_review"
 )
 
 type LoanApplication struct {
@@ -57,6 +81,18 @@ type LoanApplication struct {
 	DecisionRemarks            string     `json:"decisionRemarks,omitempty"`
 	DecidedBy                  string     `json:"decidedBy,omitempty"`
 	DecidedAt                  *time.Time `json:"decidedAt,omitempty"`
+
+	// Two-stage KYC review — see LoanStatusPendingKYCDocReview /
+	// LoanStatusPendingKYCFinalReview above. KYCDocApproved* is the first
+	// decision (documents reviewed, loan released to field employees);
+	// KYCFinalApproved* is the second (field report reviewed, loan
+	// released to LoanStatusVerified and the rest of the pipeline).
+	KYCDocApprovedByAdminID   *uint      `json:"kycDocApprovedByAdminId,omitempty"`
+	KYCDocApprovedBy          string     `json:"kycDocApprovedBy,omitempty"`
+	KYCDocApprovedAt          *time.Time `json:"kycDocApprovedAt,omitempty"`
+	KYCFinalApprovedByAdminID *uint      `json:"kycFinalApprovedByAdminId,omitempty"`
+	KYCFinalApprovedBy        string     `json:"kycFinalApprovedBy,omitempty"`
+	KYCFinalApprovedAt        *time.Time `json:"kycFinalApprovedAt,omitempty"`
 	DisbursedAmount            float64    `json:"disbursedAmount,omitempty"`
 	DisbursedAt                *time.Time `json:"disbursedAt,omitempty"`
 	TenureMonths               *int       `json:"tenureMonths,omitempty"`
@@ -80,6 +116,61 @@ type LoanApplication struct {
 	TimingPreference string     `json:"timingPreference,omitempty"`
 	VisitDate        *time.Time `json:"visitDate,omitempty"`
 	VisitTimeSlot    string     `json:"visitTimeSlot,omitempty"`
+
+	// Home Loan only — the real-world builder/property details a
+	// construction-linked property purchase actually needs, collected on
+	// apply (see internal/loans/customer_handler.go SubmitLoanHandler).
+	// Disbursement itself stays single-shot like every other category —
+	// this is data collection only, not a tranche/demand-letter
+	// disbursement workflow.
+	BuilderName       string  `json:"builderName,omitempty"`
+	ProjectName       string  `json:"projectName,omitempty"`
+	PropertyAddress   string  `json:"propertyAddress,omitempty"`
+	AgreementValue    float64 `json:"agreementValue,omitempty"`
+	ConstructionStage string  `json:"constructionStage,omitempty"`
+
+	// Gold Loan only — collected on apply so the branch an appraiser
+	// works at knows what to expect before the customer physically
+	// brings the gold in; VisitDate/VisitTimeSlot above double as the
+	// appointment for this (same fields the Housing Loan flow already
+	// uses for a field-verification visit). Purity/weight here are the
+	// customer's own estimate — the branch's physical appraisal (not
+	// modeled in this backend) is what actually sets the loan amount.
+	GoldOrnamentType      string  `json:"goldOrnamentType,omitempty"`
+	GoldApproxWeightGrams float64 `json:"goldApproxWeightGrams,omitempty"`
+	GoldApproxPurityKarat int     `json:"goldApproxPurityKarat,omitempty"`
+	GoldAlreadyPledged    bool    `json:"goldAlreadyPledged,omitempty"`
+	GoldLoanBranch        string  `json:"goldLoanBranch,omitempty"`
+
+	// Business Loan and MSME Loan — the business's own identity, separate
+	// from the applicant's personal KYC. Real underwriting for either
+	// product reads this (plus the already-existing GST Certificate /
+	// Business Premises documents) instead of a salary slip. Both
+	// categories share every field here except UdyamNumber, which only
+	// means something for MSME (it's what qualifies a loan for
+	// CGTMSE collateral-free processing) — left empty for Business Loan.
+	BusinessName             string  `json:"businessName,omitempty"`
+	BusinessRegistrationType string  `json:"businessRegistrationType,omitempty"`
+	BusinessAddress          string  `json:"businessAddress,omitempty"`
+	BusinessYearsInOperation int     `json:"businessYearsInOperation,omitempty"`
+	BusinessMonthlyTurnover  float64 `json:"businessMonthlyTurnover,omitempty"`
+	BusinessGSTNumber        string  `json:"businessGstNumber,omitempty"`
+	// MSME Loan only.
+	MSMEUdyamNumber string `json:"msmeUdyamNumber,omitempty"`
+
+	// Farmer Loan only — land record details, the equivalent of a
+	// property document for agricultural lending. State-specific record
+	// type (7/12 extract, Patta/Chitta, Khasra-Khatauni, etc.) since
+	// there's no unified national land registry to validate against.
+	// KCCNumber is optional: an existing Kisan Credit Card ties this loan
+	// to that government scheme's subsidized terms, same role
+	// MSMEUdyamNumber plays for MSME.
+	FarmerLandRecordType   string  `json:"farmerLandRecordType,omitempty"`
+	FarmerLandRecordNumber string  `json:"farmerLandRecordNumber,omitempty"`
+	FarmerLandAreaAcres    float64 `json:"farmerLandAreaAcres,omitempty"`
+	FarmerLandLocation     string  `json:"farmerLandLocation,omitempty"`
+	FarmerCropOrPurpose    string  `json:"farmerCropOrPurpose,omitempty"`
+	FarmerKCCNumber        string  `json:"farmerKccNumber,omitempty"`
 
 	// GST on the NBFC processing fee — computed once at sanction time (see
 	// internal/loans/gst.go) and kept as its own line items throughout:

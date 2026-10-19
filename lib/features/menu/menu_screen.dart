@@ -245,7 +245,7 @@ class _MenuRow extends StatelessWidget {
             Expanded(
               child: Text(label, style: Theme.of(context).textTheme.titleSmall),
             ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondaryLight),
+            Icon(Icons.chevron_right_rounded, color: AppColors.textSecondaryOf(context)),
           ],
         ),
       ),

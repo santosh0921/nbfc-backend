@@ -20,9 +20,9 @@ class AppTheme {
     final ColorScheme colorScheme = ColorScheme(
       brightness: brightness,
       primary: AppColors.primary,
-      onPrimary: Colors.white,
+      onPrimary: AppColors.onPrimary,
       secondary: AppColors.secondary,
-      onSecondary: const Color(0xFF2A2100),
+      onSecondary: Colors.white,
       error: AppColors.error,
       onError: Colors.white,
       surface: surface,
@@ -60,26 +60,30 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
           disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.pill)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
           textStyle: textTheme.labelLarge,
           elevation: 0,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: BorderSide(color: isDark ? AppColors.primaryLight : AppColors.primary, width: 1.4),
+          // Gold text on a white/transparent surface reads poorly (low
+          // contrast) — secondary buttons use dark text with a gold-toned
+          // border instead, per the "white/transparent, thin gold border"
+          // secondary-button spec.
+          foregroundColor: textPrimary,
+          side: const BorderSide(color: AppColors.primaryDark, width: 1.4),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.pill)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
           textStyle: textTheme.labelLarge,
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.primary,
+          foregroundColor: AppColors.primaryDark,
           textStyle: textTheme.labelLarge,
         ),
       ),
@@ -104,7 +108,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.6),
+          borderSide: const BorderSide(color: AppColors.primaryDark, width: 1.6),
         ),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
@@ -117,7 +121,7 @@ class AppTheme {
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,

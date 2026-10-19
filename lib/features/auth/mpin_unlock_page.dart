@@ -96,7 +96,7 @@ class _MpinUnlockPageState extends State<MpinUnlockPage> {
     });
     try {
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Unlock NBFC Premium',
+        localizedReason: 'Unlock OneFinance',
         options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
       );
       if (!authenticated) {
@@ -143,7 +143,7 @@ class _MpinUnlockPageState extends State<MpinUnlockPage> {
     if (enable == true) {
       try {
         final authenticated = await _localAuth.authenticate(
-          localizedReason: 'Enable fingerprint login for NBFC Premium',
+          localizedReason: 'Enable fingerprint login for OneFinance',
           options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
         );
         if (authenticated) {

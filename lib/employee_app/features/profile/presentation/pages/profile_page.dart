@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/components/app_bottom_sheet.dart';
 import '../../../../core/components/app_card.dart';
 import '../../../../core/components/app_scaffold.dart';
 import '../../../../core/components/gradient_header.dart';
@@ -9,6 +11,7 @@ import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import 'change_password_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -30,6 +33,32 @@ class ProfilePage extends StatelessWidget {
     if (context.mounted) context.goNamed(RouteNames.login);
   }
 
+  void _showHelp(BuildContext context) {
+    AppBottomSheet.show(
+      context,
+      title: 'Help & Support',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.call_outlined, color: AppColors.secondary),
+            title: Text('Support Helpline'),
+            subtitle: Text('+91 1800 123 456'),
+          ),
+          const ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.email_outlined, color: AppColors.secondary),
+            title: Text('Email Support'),
+            subtitle: Text('support@onefin.com'),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          AppButton(label: 'Close', variant: AppButtonVariant.outline, onPressed: () => Navigator.of(context).pop()),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final employee = context.watch<AuthProvider>().employee;
@@ -37,6 +66,7 @@ class ProfilePage extends StatelessWidget {
     return AppScaffold(
       showAppBar: false,
       body: CustomScrollView(
+        clipBehavior: Clip.none,
         slivers: [
           SliverToBoxAdapter(
             child: GradientHeader(
@@ -78,26 +108,29 @@ class ProfilePage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                const AppCard(
+                AppCard(
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
                       ListTile(
-                        leading: Icon(Icons.notifications_outlined, color: AppColors.primary),
-                        title: Text('Notification Preferences'),
-                        trailing: Icon(Icons.chevron_right),
+                        leading: const Icon(Icons.notifications_outlined, color: AppColors.primary),
+                        title: const Text('Notification Preferences'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => openAppSettings(),
                       ),
-                      Divider(height: 1),
+                      const Divider(height: 1),
                       ListTile(
-                        leading: Icon(Icons.lock_outline, color: AppColors.primary),
-                        title: Text('Change Password'),
-                        trailing: Icon(Icons.chevron_right),
+                        leading: const Icon(Icons.lock_outline, color: AppColors.primary),
+                        title: const Text('Change Password'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChangePasswordPage())),
                       ),
-                      Divider(height: 1),
+                      const Divider(height: 1),
                       ListTile(
-                        leading: Icon(Icons.help_outline, color: AppColors.primary),
-                        title: Text('Help & Support'),
-                        trailing: Icon(Icons.chevron_right),
+                        leading: const Icon(Icons.help_outline, color: AppColors.primary),
+                        title: const Text('Help & Support'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _showHelp(context),
                       ),
                     ],
                   ),

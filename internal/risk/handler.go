@@ -7,9 +7,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/santosh0921/nbfc-backend/internal/customerinfo"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 )
+
+// riskAlertRow adds the loan applicant's real name to the raw RiskAlert
+// row. RiskAlert only references a LoanID (not a customer ID directly), so
+// this looks up LoanApplication.ApplicantName — already a plain stored
+// field, no further join needed. Omitted when LoanID is nil (a
+// non-loan-specific alert, e.g. a job-failure alert) or the loan can't be
+// found — never fabricated.
+type riskAlertRow struct {
+	models.RiskAlert
+	ApplicantName string `json:"applicantName,omitempty"`
+}
 
 func adminActor(c *gin.Context) string {
 	if v := c.GetString("admin_username"); v != "" {
@@ -279,7 +291,24 @@ func AdminListAlertsHandler(c *gin.Context) {
 	}
 	var alerts []models.RiskAlert
 	q.Order("id desc").Limit(200).Find(&alerts)
-	c.JSON(http.StatusOK, alerts)
+
+	loanIDs := make([]uint, 0, len(alerts))
+	for _, a := range alerts {
+		if a.LoanID != nil {
+			loanIDs = append(loanIDs, *a.LoanID)
+		}
+	}
+	names := customerinfo.LoanApplicantNames(loanIDs)
+
+	out := make([]riskAlertRow, len(alerts))
+	for i, a := range alerts {
+		row := riskAlertRow{RiskAlert: a}
+		if a.LoanID != nil {
+			row.ApplicantName = names[*a.LoanID]
+		}
+		out[i] = row
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 func AdminAcknowledgeAlertHandler(c *gin.Context) {

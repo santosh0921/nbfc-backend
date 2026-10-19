@@ -70,7 +70,9 @@ func ListMyComplaintsHandler(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var complaints []models.Complaint
+	// Non-nil start — see loans.ListMyLoansHandler's fix note: a nil slice
+	// marshals to JSON `null`, which the client's list decoder throws on.
+	complaints := []models.Complaint{}
 	database.DB.Where("customer_id = ?", customerID).Order("created_at desc").Find(&complaints)
 	c.JSON(http.StatusOK, complaints)
 }

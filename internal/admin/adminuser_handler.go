@@ -68,6 +68,10 @@ func AdminCreateAdminUserHandler(c *gin.Context) {
 		Role:         req.Role,
 		Status:       models.AdminStatusActive,
 		CreatedBy:    actingUsername,
+		// A SUPER_ADMIN creating this account directly is itself the
+		// vetting step — pre-approved, unlike a self-registered account
+		// from POST /admin/register.
+		Approved: true,
 	}
 	if err := database.DB.Create(&adminUser).Error; err != nil {
 		if isUniqueViolation(err) {
@@ -85,6 +89,87 @@ func AdminCreateAdminUserHandler(c *gin.Context) {
 	})
 
 	c.JSON(http.StatusCreated, adminUser)
+}
+
+type registerAdminUserRequest struct {
+	Username string `json:"username" binding:"required"`
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	Role     string `json:"role" binding:"required"`
+}
+
+// RegisterHandler handles POST /admin/register — the six portals' new
+// self-service signup (pick a username/password and a role from the
+// portal's login screen). Unlike AdminCreateAdminUserHandler this needs no
+// auth, since there is by definition no admin session yet — but the
+// account it creates is inert: Approved is explicitly false, and
+// LoginHandler refuses any unapproved account. A SUPER_ADMIN must approve
+// it once (PUT /admin/admin-users/:id/approve) before it can ever log in;
+// after that one approval, no further gate applies to this account.
+//
+// SUPER_ADMIN itself is deliberately not a self-registerable role — the
+// account that can manage every other admin account and approve new ones
+// must always be provisioned directly by an existing SUPER_ADMIN via
+// AdminCreateAdminUserHandler, never by public self-signup.
+func RegisterHandler(c *gin.Context) {
+	var req registerAdminUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	req.Email = strings.TrimSpace(req.Email)
+	if len(req.Password) < minAdminPasswordLength {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Password must be at least 12 characters"})
+		return
+	}
+	if !rbac.IsValidRole(req.Role) || req.Role == models.AdminRoleSuperAdmin {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid role"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to hash password"})
+		return
+	}
+
+	adminUser := models.AdminUser{
+		Username:     req.Username,
+		Email:        req.Email,
+		PasswordHash: string(hash),
+		Role:         req.Role,
+		Status:       models.AdminStatusActive,
+		CreatedBy:    "self-registration",
+	}
+	if err := database.DB.Create(&adminUser).Error; err != nil {
+		if isUniqueViolation(err) {
+			c.JSON(http.StatusConflict, gin.H{"message": "Username or email already in use"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create account"})
+		return
+	}
+	// Approved's `gorm:"default:true"` tag means Create above silently
+	// omitted Approved:false (GORM skips zero-value fields when a column
+	// default is set, since it can't tell "explicitly false" from "unset")
+	// and the row landed as approved=true via the DB default instead. A
+	// separate single-column Update forces the real value.
+	if err := database.DB.Model(&adminUser).Update("approved", false).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create account"})
+		return
+	}
+	adminUser.Approved = false
+
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "admin", ActorRef: adminUser.Username,
+		Action: "admin_user.self_register", TargetType: "admin_user", TargetID: itoa(adminUser.ID),
+		Result: audit.ResultSuccess, Reason: "role=" + adminUser.Role, After: adminUser,
+	})
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Account created. A Super Admin must approve it before you can log in.",
+	})
 }
 
 type updateAdminUserRoleRequest struct {
@@ -193,6 +278,80 @@ func AdminSetAdminUserStatusHandler(c *gin.Context) {
 	})
 
 	c.JSON(http.StatusOK, target)
+}
+
+// AdminApproveAdminUserHandler handles PUT /admin/admin-users/:id/approve —
+// requires ADMIN_MANAGE (SUPER_ADMIN only). The one-time gate for a
+// self-registered account (see RegisterHandler): flips Approved to true
+// permanently. There is no un-approve here — disabling an already-approved
+// account that needs to be locked out again is what
+// AdminSetAdminUserStatusHandler's status="disabled" is for; this endpoint
+// only ever moves an account from "cannot log in yet" to "can log in from
+// now on."
+func AdminApproveAdminUserHandler(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var target models.AdminUser
+	if err := database.DB.First(&target, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
+		return
+	}
+	if target.Approved {
+		c.JSON(http.StatusConflict, gin.H{"message": "Account is already approved"})
+		return
+	}
+
+	before := audit.Snapshot(target)
+	target.Approved = true
+	database.DB.Save(&target)
+
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "admin", ActorID: toAdminIDCtx(c), ActorRef: c.GetString("admin_username"), ActorRole: c.GetString("admin_role"),
+		Action: "admin_user.approve", TargetType: "admin_user", TargetID: itoa(target.ID),
+		Result: audit.ResultSuccess, Details: before, After: target,
+	})
+
+	c.JSON(http.StatusOK, target)
+}
+
+// AdminRejectAdminUserHandler handles DELETE /admin/admin-users/:id/reject
+// — requires ADMIN_MANAGE (SUPER_ADMIN only). The counterpart to
+// AdminApproveAdminUserHandler for a self-registered account (Approved ==
+// false): the account never held real access, so rejection deletes the row
+// outright rather than merely disabling it — there's nothing to preserve
+// beyond the audit trail, which lives independently in audit_logs (an
+// append-only table, unaffected by this delete) and still records who
+// registered under what role and who rejected them.
+//
+// This only ever applies to a still-pending account. An already-approved
+// admin who needs to be locked out is handled by
+// AdminSetAdminUserStatusHandler's status="disabled" instead — that path
+// preserves the account (and its own audit history of real actions taken)
+// rather than deleting it.
+func AdminRejectAdminUserHandler(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var target models.AdminUser
+	if err := database.DB.First(&target, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
+		return
+	}
+	if target.Approved {
+		c.JSON(http.StatusConflict, gin.H{"message": "Account is already approved; use the disable action instead"})
+		return
+	}
+
+	before := audit.Snapshot(target)
+	if err := database.DB.Delete(&target).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to reject account"})
+		return
+	}
+
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "admin", ActorID: toAdminIDCtx(c), ActorRef: c.GetString("admin_username"), ActorRole: c.GetString("admin_role"),
+		Action: "admin_user.reject", TargetType: "admin_user", TargetID: itoa(target.ID),
+		Result: audit.ResultSuccess, Details: before,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "Registration rejected"})
 }
 
 // AdminListRolesHandler handles GET /admin/roles — the "Roles &

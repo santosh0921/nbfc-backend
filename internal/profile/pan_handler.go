@@ -14,6 +14,7 @@ import (
 	"log"
 	"github.com/santosh0921/nbfc-backend/internal/config"
 	"github.com/santosh0921/nbfc-backend/internal/database"
+	"github.com/santosh0921/nbfc-backend/internal/kyc"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 	"github.com/santosh0921/nbfc-backend/internal/security"
 	"github.com/santosh0921/nbfc-backend/internal/surepass"
@@ -115,8 +116,14 @@ err = database.DB.
 	First(&customerPAN).Error
 
 if err == nil {
+	// Distinct wording from "PAN already submitted" above is deliberate:
+	// that case is this customer's own record (safe for a client retry
+	// to treat as success); this one is a DIFFERENT customer already
+	// holding this number, which the client must surface as a real
+	// error rather than silently skip — see
+	// quick_apply_screen.dart's _submitOrSkipIfExists.
 	c.JSON(http.StatusConflict, gin.H{
-		"message": "PAN already exists",
+		"message": "This PAN number is already registered to a different account",
 	})
 	return
 }
@@ -227,6 +234,17 @@ if err := database.DB.Create(&customerPAN).Error; err != nil {
 		"message": "Unable to save PAN",
 	})
 	return
+}
+
+// Keep CustomerKYC's pipeline status live as documents come in, rather
+// than only updating it the next time the customer attempts to submit a
+// loan (checkKYCEligibility was previously the only caller) — otherwise
+// an admin-facing queue built on CustomerKYC.Status shows a customer as
+// NOT_STARTED/stale for however long it takes them to apply for a loan,
+// even though they've actually already submitted documents. Best-effort:
+// never fails this request.
+if _, err := kyc.Recompute(user.ID, "customer", mobile); err != nil {
+	log.Println("kyc.Recompute after PAN submission failed:", err)
 }
 
 c.JSON(http.StatusOK, gin.H{

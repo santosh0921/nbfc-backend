@@ -251,6 +251,13 @@ func CustomerDemoPayEmiHandler(c *gin.Context) {
 			Result: audit.ResultFailure, Reason: err.Error(),
 		})
 	}
+	if err := CheckAndGenerateNOC(loan.ID); err != nil {
+		audit.RecordDetailed(c, audit.Entry{
+			ActorType: "system", ActorRef: "demo_settlement",
+			Action: "noc.generate.failed", TargetType: "loan", TargetID: strconv.Itoa(int(loan.ID)),
+			Result: audit.ResultFailure, Reason: err.Error(),
+		})
+	}
 
 	audit.RecordDetailed(c, audit.Entry{
 		ActorType: "customer", ActorRef: user.Mobile,

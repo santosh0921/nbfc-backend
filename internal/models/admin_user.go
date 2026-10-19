@@ -42,6 +42,20 @@ type AdminUser struct {
 
 	CreatedBy string `json:"createdBy,omitempty"` // username of the admin who created this account ("bootstrap" for the seeded super-admin)
 
+	// Approved gates login for self-registered portal accounts (POST
+	// /admin/register): a self-registered account is created with
+	// Approved=false and cannot log in (LoginHandler rejects it) until a
+	// SUPER_ADMIN approves it via PUT /admin/admin-users/:id/approve. This
+	// is a ONE-TIME gate — approval is a durable field flip, not a
+	// per-login check, so once approved an account logs in freely forever
+	// after with no further Super Admin involvement. `default:true` exists
+	// purely so this column backfills every pre-existing row (all of which
+	// were already trusted, created directly by an existing admin via
+	// AdminCreateAdminUserHandler, which still always sets Approved=true
+	// explicitly) as approved, rather than locking every current admin out
+	// the moment this column is added — mirrors models.Employee.Approved.
+	Approved bool `gorm:"default:true" json:"approved"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

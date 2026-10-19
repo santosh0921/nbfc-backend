@@ -25,9 +25,9 @@ class AuthIllustration extends StatelessWidget {
       height: 232,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceOf(context),
         borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+        border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderOf(context)),
         boxShadow: const [BoxShadow(color: Color(0x1410131A), blurRadius: 24, offset: Offset(0, 10))],
       ),
       clipBehavior: Clip.antiAlias,
@@ -73,9 +73,9 @@ class _PhoneMockup extends StatelessWidget {
       height: 196,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
+        color: AppColors.surfaceOf(context),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.textPrimaryLight, width: 2.4),
+        border: Border.all(color: AppColors.textPrimaryOf(context), width: 2.4),
         boxShadow: [
           BoxShadow(color: AppColors.primary.withValues(alpha: 0.16), blurRadius: 20, offset: const Offset(0, 10)),
         ],
@@ -122,7 +122,7 @@ class _ScreenContent extends StatelessWidget {
             (_) => Container(
               width: 8,
               height: 8,
-              decoration: const BoxDecoration(color: AppColors.borderLight, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: AppColors.borderOf(context), shape: BoxShape.circle),
             ),
           ),
         );
@@ -176,9 +176,9 @@ class _PersonFigure extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(width: 16, height: 46, decoration: BoxDecoration(color: AppColors.textPrimaryLight, borderRadius: BorderRadius.circular(8))),
+              Container(width: 16, height: 46, decoration: BoxDecoration(color: AppColors.textPrimaryOf(context), borderRadius: BorderRadius.circular(8))),
               const SizedBox(width: 6),
-              Container(width: 16, height: 46, decoration: BoxDecoration(color: AppColors.textPrimaryLight, borderRadius: BorderRadius.circular(8))),
+              Container(width: 16, height: 46, decoration: BoxDecoration(color: AppColors.textPrimaryOf(context), borderRadius: BorderRadius.circular(8))),
             ],
           ),
         ],

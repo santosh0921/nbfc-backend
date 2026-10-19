@@ -162,6 +162,48 @@ func TestDisbursementMakerCannotApproveOwn(t *testing.T) {
 	}
 }
 
+// --- Phase 8: OPERATIONS can act as checker; DISBURSEMENT_OFFICER (prep-only) cannot ---
+
+func TestOperationsCanApproveDisbursementPreparedByDisbursementOfficer(t *testing.T) {
+	r := setupDisbursementTestApp(t)
+	makerU, checkerU := "disb_prep_"+t.Name(), "disb_ops_"+t.Name()
+	_, makerPw := createDisbTestAdmin(t, makerU, models.AdminRoleDisbursementOfficer)
+	_, checkerPw := createDisbTestAdmin(t, checkerU, models.AdminRoleOperations)
+	makerToken := disbLoginAs(t, r, makerU, makerPw)
+	checkerToken := disbLoginAs(t, r, checkerU, checkerPw)
+
+	loan := createSanctionedLoan(t, 20000)
+	w0 := disbDoJSON(r, "POST", "/admin/loans/"+idStr(loan.ID)+"/prepare-disbursement", makerToken, gin.H{"amount": 20000})
+	if w0.Code != http.StatusOK {
+		t.Fatalf("prepare failed: %d %s", w0.Code, w0.Body.String())
+	}
+
+	w := disbDoJSON(r, "POST", "/admin/loans/"+idStr(loan.ID)+"/approve-disbursement", checkerToken, gin.H{"approve": true})
+	if w.Code != http.StatusOK {
+		t.Fatalf("OPERATIONS should now be able to act as checker for a disbursement it did not prepare, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestDisbursementOfficerCannotApproveAnyDisbursement(t *testing.T) {
+	r := setupDisbursementTestApp(t)
+	makerU, otherU := "disb_prep2_"+t.Name(), "disb_off2_"+t.Name()
+	_, makerPw := createDisbTestAdmin(t, makerU, models.AdminRoleDisbursementOfficer)
+	_, otherPw := createDisbTestAdmin(t, otherU, models.AdminRoleDisbursementOfficer)
+	makerToken := disbLoginAs(t, r, makerU, makerPw)
+	otherToken := disbLoginAs(t, r, otherU, otherPw)
+
+	loan := createSanctionedLoan(t, 20000)
+	disbDoJSON(r, "POST", "/admin/loans/"+idStr(loan.ID)+"/prepare-disbursement", makerToken, gin.H{"amount": 20000})
+
+	// A second DISBURSEMENT_OFFICER (not the same person, so maker!=checker
+	// is satisfied) must still be rejected — DISBURSEMENT_OFFICER only ever
+	// holds LoanDisbursePrep, never LoanDisburse, by RBAC design.
+	w := disbDoJSON(r, "POST", "/admin/loans/"+idStr(loan.ID)+"/approve-disbursement", otherToken, gin.H{"approve": true})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("DISBURSEMENT_OFFICER lacks LoanDisburse and must be denied regardless of identity, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 // --- Approval only moves to DISBURSEMENT_PROCESSING, not DISBURSED ---
 
 func TestApprovalAloneDoesNotFinalizeDisbursement(t *testing.T) {

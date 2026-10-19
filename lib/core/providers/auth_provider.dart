@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../config/app_config.dart';
+import '../network/api_client.dart';
 import '../network/api_exception.dart';
 import '../network/auth_api_service.dart';
 import '../network/kyc_api_service.dart';
 import '../services/biometric_credential_storage.dart';
 import '../services/last_role_storage.dart';
+import '../services/push_notification_service.dart';
 import '../services/token_storage.dart';
 import '../services/unlock_count_storage.dart';
 
@@ -28,6 +32,14 @@ class AuthProvider extends ChangeNotifier {
   String? pendingPhoneNumber;
   String? token;
   bool biometricEnabled = false;
+
+  /// This customer's own backend user id (models.User.ID / Customer UUID)
+  /// — set on every real login path via [_loginAndPersist], since
+  /// `/auth/login`'s response already includes it. Needed so the app can
+  /// listen for an employee/admin-initiated video call on this customer's
+  /// own `kyc-<customerId>` signaling room (see IncomingCallListener),
+  /// distinct from the loan-id-keyed room used for loan-verification calls.
+  String? customerId;
 
   /// Set by [verifyOtp] — whether [pendingPhoneNumber] already has an
   /// account with an MPIN set. The OTP screen uses this to route a
@@ -108,11 +120,19 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _loginAndPersist(String mobile, String mpin) async {
     final result = await AuthApiService.login(mobile, mpin);
     token = result.token;
+    customerId = result.userId;
     biometricEnabled = result.biometricEnabled;
     hasSession = true;
     await TokenStorage.save(token: result.token, mobile: mobile);
     await LastRoleStorage.saveCustomer();
     notifyListeners();
+    PushNotificationService.instance.setRegisterCallback(
+      (fcmToken) => ApiClient.post('/device-token', {'token': fcmToken, 'platform': 'android'}, token: token),
+    );
+    // Fire-and-forget — a customer who's already inside the app matters
+    // more than this completing first, and it's harmless if it fails
+    // (retried on next login or the next onTokenRefresh).
+    unawaited(PushNotificationService.instance.registerTokenForCurrentUser());
     // Deliberately awaited (not fire-and-forget) so a 400 — most notably
     // the name-collision guard on `POST /auth/profile` — propagates back
     // up through [createMpinAndLogin] to the Create MPIN screen, which is
@@ -128,10 +148,18 @@ class AuthProvider extends ChangeNotifier {
   /// the backend profile now that we have a JWT.
   ///
   /// Rethrows on HTTP 400 (invalid input, or the name-collision guard —
-  /// "An account with this exact name already exists...") since those are
-  /// actionable by the user right now. Swallows everything else (e.g. 409
-  /// profile-already-exists on a repeat login) — best-effort, shouldn't
-  /// block getting into the app.
+  /// "An account with this exact name already exists...") and on 409
+  /// (profile already exists) since both are actionable/worth surfacing.
+  /// The 409 case matters: `pendingAccountExists` (set from `/verify-otp`)
+  /// only checks whether an MPIN was ever set — a mobile number that
+  /// already has a real profile but was never fully self-registered (e.g.
+  /// an employee captured it while filing a loan on the customer's
+  /// behalf) still reports `accountExists = false`, routes through the
+  /// full Registration screen, and accepts *any* typed name there. Before
+  /// this fix, that mismatched name was silently discarded here and the
+  /// customer was logged straight into the pre-existing account with no
+  /// indication anything was off — "I typed a different name and it still
+  /// let me in" was a real, reproducible report, not user error.
   Future<void> _saveRegisteredProfile() async {
     final t = token;
     final first = pendingFirstName?.trim();
@@ -150,8 +178,9 @@ class AuthProvider extends ChangeNotifier {
         occupation: 'Not specified',
       );
     } on ApiException catch (e) {
-      if (e.statusCode == 400) rethrow;
-      // Non-fatal — e.g. profile already exists on a repeat login.
+      if (e.statusCode == 400 || e.statusCode == 409) rethrow;
+      // Genuinely non-fatal for any other status — shouldn't block
+      // getting into the app.
     }
   }
 
@@ -265,6 +294,7 @@ class AuthProvider extends ChangeNotifier {
     hasSession = false;
     pendingPhoneNumber = null;
     token = null;
+    customerId = null;
     biometricEnabled = false;
     TokenStorage.clear();
     notifyListeners();

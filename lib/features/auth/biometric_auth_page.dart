@@ -32,7 +32,7 @@ class _BiometricAuthPageState extends State<BiometricAuthPage> {
         message = 'No biometrics available on this device.';
       } else {
         final authenticated = await _localAuth.authenticate(
-          localizedReason: 'Enable fingerprint login for NBFC Premium',
+          localizedReason: 'Enable fingerprint login for OneFinance',
           options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
         );
         if (authenticated) {
@@ -56,9 +56,18 @@ class _BiometricAuthPageState extends State<BiometricAuthPage> {
       if (!granted) return;
       await NotificationService.instance.init();
       NotificationService.instance.show(
-        title: 'Welcome to NBFC Premium!',
+        title: 'Welcome to OneFinance!',
         body: 'You\'re logged in successfully. Let\'s get you started.',
       );
+      // Notification permission alone doesn't guarantee delivery while
+      // the app is closed — on Vivo/Oppo/Xiaomi and similar OEMs, an app
+      // not exempted from battery optimization gets frozen in the
+      // background and FCM pushes never arrive, so notifications only
+      // ever show up while the app happens to be open. Ask for the
+      // exemption right here, in the same onboarding moment the user is
+      // already granting permissions — it's skippable, same as the rest
+      // of this screen.
+      await PermissionService.requestIgnoreBatteryOptimizations();
     });
     context.go('/');
   }

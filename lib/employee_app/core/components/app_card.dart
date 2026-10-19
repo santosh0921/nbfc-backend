@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_spacing.dart';
 
-/// Flat, thin-bordered card in the L&T-style design language — no heavy
-/// drop shadow, just a 1px hairline border with a quick press-scale for
-/// tactile feedback.
+/// Card in the L&T-style design language — a soft ambient shadow plus a
+/// hairline border for real depth, with a quick press-scale for tactile
+/// feedback. `withShadow` layers in a stronger shadow on top for cards
+/// that should read as elevated above their neighbors (e.g. a selected
+/// state); the base shadow is always present now — a bare hairline border
+/// with zero elevation read as flat/unfinished on every screen that uses
+/// this card, which is nearly all of them.
 class AppCard extends StatefulWidget {
   const AppCard({
     super.key,
@@ -41,9 +45,10 @@ class _AppCardState extends State<AppCard> {
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
           border: widget.withBorder ? Border.all(color: AppColors.border) : null,
-          boxShadow: widget.withShadow
-              ? [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: const Offset(0, 6))]
-              : null,
+          boxShadow: [
+            BoxShadow(color: AppColors.shadow, blurRadius: 10, offset: const Offset(0, 3)),
+            if (widget.withShadow) BoxShadow(color: AppColors.shadow, blurRadius: 22, offset: const Offset(0, 10)),
+          ],
         ),
         child: widget.child,
       ),

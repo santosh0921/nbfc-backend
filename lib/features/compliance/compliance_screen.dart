@@ -108,11 +108,11 @@ class ComplianceScreen extends StatelessWidget {
                 children: [
                   Text('Principal Nodal Officer', style: theme.textTheme.titleSmall),
                   const SizedBox(height: 4),
-                  Text('Ms. Anjali Rao · nodalofficer@nbfcpremium.in · 1800-266-4545', style: theme.textTheme.bodySmall),
+                  Text('Ms. Anjali Rao · nodalofficer@onefinance.in · 1800-266-4545', style: theme.textTheme.bodySmall),
                   const SizedBox(height: 16),
                   Text('Grievance Redressal Officer', style: theme.textTheme.titleSmall),
                   const SizedBox(height: 4),
-                  Text('Mr. Rohan Mehta · grievance@nbfcpremium.in · 1800-266-4546', style: theme.textTheme.bodySmall),
+                  Text('Mr. Rohan Mehta · grievance@onefinance.in · 1800-266-4546', style: theme.textTheme.bodySmall),
                   const SizedBox(height: 16),
                   Text(
                     'If your complaint is not resolved within 30 days, you may escalate it to the RBI Ombudsman via cms.rbi.org.in.',
@@ -191,7 +191,7 @@ class _MiniStat extends StatelessWidget {
       TextSpan(
         children: [
           TextSpan(text: '$label: ', style: theme.textTheme.labelSmall),
-          TextSpan(text: value, style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textPrimaryLight, fontWeight: FontWeight.w700)),
+          TextSpan(text: value, style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textPrimaryOf(context), fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -267,9 +267,9 @@ class _DocumentTile extends StatelessWidget {
           maxChildSize: 0.9,
           expand: false,
           builder: (context, controller) => Container(
-            decoration: const BoxDecoration(
-              color: AppColors.surfaceLight,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceOf(context),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
             ),
             padding: const EdgeInsets.all(20),
             child: ListView(

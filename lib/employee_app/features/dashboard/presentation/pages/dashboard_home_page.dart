@@ -10,6 +10,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/utils/demo_call.dart';
+import '../../../../../core/widgets/premium_shine.dart';
+import '../../../../../core/widgets/auto_refresh_mixin.dart';
 import '../../../../core/widgets/app_badge.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -26,11 +28,24 @@ class DashboardHomePage extends StatefulWidget {
   State<DashboardHomePage> createState() => _DashboardHomePageState();
 }
 
-class _DashboardHomePageState extends State<DashboardHomePage> {
+class _DashboardHomePageState extends State<DashboardHomePage> with AutoRefreshMixin {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => context.read<DashboardProvider>().load());
+    startAutoRefresh();
+  }
+
+  @override
+  Future<void> onAutoRefresh() async {
+    if (!mounted) return;
+    await context.read<DashboardProvider>().load(silent: true);
+  }
+
+  @override
+  void dispose() {
+    stopAutoRefresh();
+    super.dispose();
   }
 
   void _openTaskDetail(TaskItem task) {
@@ -51,12 +66,20 @@ class _DashboardHomePageState extends State<DashboardHomePage> {
     return AppScaffold(
       showAppBar: false,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      drawer: _AppDrawer(name: employee?.name ?? 'Employee', designation: employee?.designation ?? ''),
       body: dashboard.isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: () => context.read<DashboardProvider>().load(),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
+                // Cards now carry a real shadow (see AppCard) — ListView's
+                // default Clip.hardEdge clips that shadow off in a flat
+                // line right at the list's own edge, which reads as the
+                // card's left/right corners being chopped since the
+                // horizontal page padding gave the shadow nowhere to
+                // bleed into.
+                clipBehavior: Clip.none,
                 children: [
                   const SizedBox(height: AppSpacing.sm),
                   _TopBar(name: employee?.name ?? 'Employee', unreadCount: unread),
@@ -153,11 +176,15 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
-          child: const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
+        InkWell(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          onTap: () => Scaffold.of(context).openDrawer(),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
+            child: const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
+          ),
         ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
@@ -218,37 +245,52 @@ class _PromoBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: AppColors.heroGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        boxShadow: [BoxShadow(color: AppColors.primaryDark.withValues(alpha: 0.22), blurRadius: 20, offset: const Offset(0, 8))],
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  designation.toUpperCase(),
-                  style: const TextStyle(color: AppColors.secondary, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.4),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'FIELD OPS,\nMADE SIMPLE.',
-                  style: TextStyle(color: AppColors.secondary, fontSize: 20, fontWeight: FontWeight.w800, height: 1.15),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
-                  decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(AppSpacing.radiusFull)),
-                  child: const Text('View Cases', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-                ),
-              ],
-            ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: AppColors.heroGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
           ),
-          const Icon(Icons.badge_rounded, color: AppColors.secondary, size: 56),
-        ],
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            designation.toUpperCase(),
+                            style: const TextStyle(color: AppColors.secondary, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.4),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'FIELD OPS,\nMADE SIMPLE.',
+                            style: TextStyle(color: AppColors.secondary, fontSize: 20, fontWeight: FontWeight.w800, height: 1.15),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
+                            decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(AppSpacing.radiusFull)),
+                            child: const Text('View Cases', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.badge_rounded, color: AppColors.secondary, size: 56),
+                  ],
+                ),
+              ),
+              const Positioned.fill(child: PremiumShine(opacity: 0.3)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -279,6 +321,13 @@ class _TaskStatusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
         border: Border.all(color: selected ? color : AppColors.border, width: selected ? 1.5 : 1),
         color: selected ? color.withValues(alpha: 0.08) : Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: (selected ? color : AppColors.shadow).withValues(alpha: selected ? 0.18 : 1),
+            blurRadius: selected ? 16 : 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
@@ -287,7 +336,13 @@ class _TaskStatusCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.md, horizontal: AppSpacing.sm),
           child: Column(
             children: [
-              Icon(icon, color: color, size: 20),
+              Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.14), shape: BoxShape.circle),
+                child: Icon(icon, color: color, size: 18),
+              ),
               const SizedBox(height: 6),
               FittedBox(
                 fit: BoxFit.scaleDown,
@@ -412,9 +467,11 @@ class _TaskDetailContent extends StatelessWidget {
                 label: 'Share',
                 icon: Icons.share_outlined,
                 variant: AppButtonVariant.outline,
-                onPressed: () => Share.share(
-                  '${task.title}\nCustomer: ${task.customerName}\nPhone: ${task.customerPhone}\n'
-                  '${DateFormat('EEE, d MMM yyyy').format(task.date)} · ${task.time}',
+                onPressed: () => SharePlus.instance.share(
+                  ShareParams(
+                    text: '${task.title}\nCustomer: ${task.customerName}\nPhone: ${task.customerPhone}\n'
+                        '${DateFormat('EEE, d MMM yyyy').format(task.date)} · ${task.time}',
+                  ),
                 ),
               ),
             ),
@@ -464,6 +521,114 @@ class _QuickActionsGrid extends StatelessWidget {
         childAspectRatio: 1.0,
       ),
       itemBuilder: (context, index) => QuickActionCard(action: quickActions[index]),
+    );
+  }
+}
+
+/// The menu ("three lines") icon's drawer — previously a purely decorative
+/// icon with no tap handler at all, so nothing happened when tapped.
+class _AppDrawer extends StatelessWidget {
+  const _AppDrawer({required this.name, required this.designation});
+
+  final String name;
+  final String designation;
+
+  Future<void> _logout(BuildContext context) async {
+    Navigator.of(context).pop();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out of your ONEFIN employee account?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Sign Out')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await context.read<AuthProvider>().logout();
+    if (context.mounted) context.goNamed(RouteNames.login);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(color: AppColors.primary),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: Colors.white,
+                    child: Text(
+                      name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'E',
+                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 18),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+                  if (designation.isNotEmpty) Text(designation, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.dashboard_outlined),
+              title: const Text('Dashboard'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.goNamed(RouteNames.dashboard);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('Cases'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.goNamed(RouteNames.cases);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.payments_outlined),
+              title: const Text('Collections'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.goNamed(RouteNames.collections);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications_outlined),
+              title: const Text('Notifications'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.goNamed(RouteNames.notifications);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Profile'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.goNamed(RouteNames.profile);
+              },
+            ),
+            const Spacer(),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.logout, color: AppColors.danger),
+              title: const Text('Sign Out', style: TextStyle(color: AppColors.danger)),
+              onTap: () => _logout(context),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+        ),
+      ),
     );
   }
 }

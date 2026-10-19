@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -200,6 +201,7 @@ func UploadCustomerDocumentHandler(c *gin.Context) {
 		CreatedBy:      user.Mobile,
 	}
 	if err := persistDocument(&doc, decoded); err != nil {
+		log.Println("document upload: persistDocument failed:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Unable to store document"})
 		return
 	}
@@ -286,6 +288,7 @@ func UploadEmployeeLoanDocumentHandler(c *gin.Context) {
 		CreatedBy:      emp.Code,
 	}
 	if err := persistDocument(&doc, decoded); err != nil {
+		log.Println("document upload: persistDocument failed:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Unable to store document"})
 		return
 	}
@@ -337,8 +340,27 @@ func AdminListLoanDocumentsHandler(c *gin.Context) {
 func AdminListCustomerDocumentsHandler(c *gin.Context) {
 	customerID := c.Param("id")
 
+	// Unlike every sibling customer-lookup handler (GetUserDetailHandler,
+	// the KYC verification-request handlers), this one never validated
+	// customerID was a real UUID before — a malformed id (e.g. a name
+	// typed into a stale UI, or a direct URL edit) went straight into
+	// `WHERE customer_id = ?` against a uuid-typed column, which Postgres
+	// rejects at the SQL level ("invalid input syntax for type uuid").
+	// That error was then silently ignored (Find()'s return value was
+	// never checked), so the handler still replied 200 with whatever
+	// `docs` happened to be left as — an inconsistent, hard-to-debug
+	// response shape instead of a clean 400 like every other handler on
+	// this same case-detail page gives for the same bad input.
+	if _, err := uuid.Parse(customerID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid customer id"})
+		return
+	}
+
 	var docs []models.Document
-	database.DB.Where("customer_id = ?", customerID).Order("created_at asc").Find(&docs)
+	if err := database.DB.Where("customer_id = ?", customerID).Order("created_at asc").Find(&docs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch documents"})
+		return
+	}
 
 	recordDocumentAccess(c, "customer", customerID, len(docs))
 	c.JSON(http.StatusOK, hydrateDocuments(docs))

@@ -17,4 +17,8 @@ class NotificationApiService {
   static Future<void> markRead(String token, int id) async {
     await ApiClient.post('/notifications/$id/read', const {}, token: token);
   }
+
+  static Future<void> markAllRead(String token) async {
+    await ApiClient.post('/notifications/mark-all-read', const {}, token: token);
+  }
 }

@@ -56,7 +56,7 @@ class _SupportScreenState extends State<SupportScreen> with SingleTickerProvider
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondaryLight,
+          unselectedLabelColor: AppColors.textSecondaryOf(context),
           indicatorColor: AppColors.primary,
           isScrollable: true,
           tabs: const [Tab(text: 'FAQs'), Tab(text: 'Contact'), Tab(text: 'My Complaints'), Tab(text: 'Chat with Us')],
@@ -225,9 +225,9 @@ class _ContactTabState extends State<_ContactTab> {
               const Divider(height: 1, indent: 16),
               ListTile(
                 leading: const Icon(Icons.email_rounded, color: AppColors.primary),
-                title: const Text('support@nbfcpremium.in'),
+                title: const Text('support@onefinance.in'),
                 trailing: const Icon(Icons.copy_rounded, size: 18),
-                onTap: () => _copy('support@nbfcpremium.in', 'Email address'),
+                onTap: () => _copy('support@onefinance.in', 'Email address'),
               ),
               const Divider(height: 1, indent: 16),
               ListTile(
@@ -257,10 +257,10 @@ class _ContactTabState extends State<_ContactTab> {
                   onChanged: (v) => setState(() => _category = v ?? _category),
                   decoration: InputDecoration(
                     filled: true,
-                    fillColor: AppColors.backgroundLight,
+                    fillColor: AppColors.backgroundOf(context),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.borderLight)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.borderLight)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.primary, width: 1.6)),
                   ),
                 ),
@@ -274,10 +274,10 @@ class _ContactTabState extends State<_ContactTab> {
                   decoration: InputDecoration(
                     hintText: 'Describe your issue in detail…',
                     filled: true,
-                    fillColor: AppColors.backgroundLight,
+                    fillColor: AppColors.backgroundOf(context),
                     contentPadding: const EdgeInsets.all(14),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.borderLight)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.borderLight)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.primary, width: 1.6)),
                   ),
                 ),
@@ -351,7 +351,7 @@ class _ComplaintsTabState extends State<_ComplaintsTab> {
 
   Color _statusColor(String status) => switch (status) {
         'resolved' => AppColors.success,
-        'closed' => AppColors.textSecondaryLight,
+        'closed' => AppColors.textSecondaryOf(context),
         'in_progress' => AppColors.warning,
         _ => AppColors.primary,
       };
@@ -409,7 +409,7 @@ class _ComplaintsTabState extends State<_ComplaintsTab> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.inbox_rounded, size: 48, color: AppColors.textSecondaryLight),
+                          Icon(Icons.inbox_rounded, size: 48, color: AppColors.textSecondaryOf(context)),
                           const SizedBox(height: 12),
                           Text('No complaints raised yet.', style: theme.textTheme.bodyMedium),
                         ],
@@ -457,7 +457,7 @@ class _ComplaintsTabState extends State<_ComplaintsTab> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.backgroundLight,
+                          color: AppColors.backgroundOf(context),
                           borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Column(
@@ -624,7 +624,7 @@ class _SupportChatTabState extends State<_SupportChatTab> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.chat_bubble_outline_rounded, size: 48, color: AppColors.textSecondaryLight),
+                                Icon(Icons.chat_bubble_outline_rounded, size: 48, color: AppColors.textSecondaryOf(context)),
                                 const SizedBox(height: 12),
                                 Text(
                                   'No messages yet — send one to get help',
@@ -670,15 +670,15 @@ class _SupportChatTabState extends State<_SupportChatTab> {
                     decoration: InputDecoration(
                       hintText: 'Type a message…',
                       filled: true,
-                      fillColor: AppColors.backgroundLight,
+                      fillColor: AppColors.backgroundOf(context),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(AppRadius.pill),
-                        borderSide: const BorderSide(color: AppColors.borderLight),
+                        borderSide: BorderSide(color: AppColors.borderOf(context)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(AppRadius.pill),
-                        borderSide: const BorderSide(color: AppColors.borderLight),
+                        borderSide: BorderSide(color: AppColors.borderOf(context)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -725,8 +725,8 @@ class _ChatBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isCustomer = message.isCustomer;
-    final bubbleColor = isCustomer ? AppColors.primary : AppColors.backgroundLight;
-    final textColor = isCustomer ? Colors.white : AppColors.textPrimaryLight;
+    final bubbleColor = isCustomer ? AppColors.primary : AppColors.backgroundOf(context);
+    final textColor = isCustomer ? Colors.white : AppColors.textPrimaryOf(context);
 
     return Align(
       alignment: isCustomer ? Alignment.centerRight : Alignment.centerLeft,
@@ -739,7 +739,7 @@ class _ChatBubble extends StatelessWidget {
             if (!isCustomer)
               Padding(
                 padding: const EdgeInsets.only(left: 4, bottom: 2),
-                child: Text('Support Team', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryLight)),
+                child: Text('Support Team', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryOf(context))),
               ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -761,7 +761,7 @@ class _ChatBubble extends StatelessWidget {
               padding: const EdgeInsets.only(top: 3, left: 4, right: 4),
               child: Text(
                 DateFormat('d MMM, h:mm a').format(message.createdAt),
-                style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryLight),
+                style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryOf(context)),
               ),
             ),
           ],

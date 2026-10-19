@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
@@ -7,9 +8,13 @@ import '../../../../core/components/app_card.dart';
 import '../../../../core/components/app_snackbar.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
+import '../../../../core/di/service_locator.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../cases/domain/entities/case_entity.dart';
+import '../../../cases/domain/repositories/cases_repository.dart';
 import '../../../visit_verification/presentation/pages/route_map_page.dart';
 import '../../../visit_verification/presentation/pages/visit_history_page.dart';
 
@@ -41,12 +46,64 @@ void _pushHistory(BuildContext context) {
   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VisitHistoryPage()));
 }
 
+/// Lets the field officer pick which loan case a Scan Doc / Gold
+/// Appraisal / Property Verify action belongs to — every backend endpoint
+/// for these requires a loan id, so the action is meaningless without one.
+/// Returns null if the officer has no assigned cases, or cancels.
+Future<CaseEntity?> _pickCase(BuildContext context) async {
+  final repo = ServiceLocator.instance.get<CasesRepository>();
+  List<CaseEntity> cases;
+  try {
+    cases = await repo.fetchCases();
+  } catch (_) {
+    if (context.mounted) AppSnackbar.danger(context, 'Could not load your cases.');
+    return null;
+  }
+  if (cases.isEmpty) {
+    if (context.mounted) AppSnackbar.danger(context, 'You have no assigned cases to attach this to.');
+    return null;
+  }
+  if (!context.mounted) return null;
+  return AppBottomSheet.show<CaseEntity>(
+    context,
+    title: 'Select Case',
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 360),
+      child: ListView.builder(
+        shrinkWrap: true,
+        itemCount: cases.length,
+        itemBuilder: (context, index) {
+          final c = cases[index];
+          return ListTile(
+            title: Text(c.customerName),
+            subtitle: Text('${c.caseNumber} · ₹${c.loanAmount.toStringAsFixed(0)}'),
+            onTap: () => Navigator.of(context).pop(c),
+          );
+        },
+      ),
+    ),
+  );
+}
+
 Future<void> _scanDocument(BuildContext context) async {
+  final selectedCase = await _pickCase(context);
+  if (selectedCase == null || !context.mounted) return;
+
   try {
     final photo = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 70);
-    if (photo != null && context.mounted) AppSnackbar.success(context, 'Document captured and queued for upload.');
+    if (photo == null) return;
+    final bytes = await photo.readAsBytes();
+    final repo = ServiceLocator.instance.get<CasesRepository>();
+    await repo.uploadLoanDocument(
+      selectedCase.id,
+      docType: 'field_scan',
+      fileName: photo.name,
+      mimeType: 'image/jpeg',
+      dataBase64: base64Encode(bytes),
+    );
+    if (context.mounted) AppSnackbar.success(context, 'Document uploaded to ${selectedCase.customerName}\'s case.');
   } catch (_) {
-    if (context.mounted) AppSnackbar.danger(context, 'Could not open camera.');
+    if (context.mounted) AppSnackbar.danger(context, 'Could not upload the document.');
   }
 }
 
@@ -69,12 +126,18 @@ Future<void> _markAttendance(BuildContext context) async {
   if (action == null || !context.mounted) return;
 
   try {
-    await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium));
+    final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium));
+    final apiClient = ServiceLocator.instance.get<ApiClient>();
+    await apiClient.dio.post('/employee/attendance', data: {
+      'action': action,
+      'latitude': position.latitude,
+      'longitude': position.longitude,
+    });
     if (context.mounted) {
       AppSnackbar.success(context, action == 'checkin' ? 'Checked in successfully.' : 'Checked out successfully.');
     }
   } catch (_) {
-    if (context.mounted) AppSnackbar.danger(context, 'Could not fetch your location.');
+    if (context.mounted) AppSnackbar.danger(context, 'Could not record your attendance.');
   }
 }
 
@@ -104,12 +167,15 @@ void _showHelp(BuildContext context) {
   );
 }
 
-void _showGoldAppraisalForm(BuildContext context) {
+Future<void> _showGoldAppraisalForm(BuildContext context) async {
+  final selectedCase = await _pickCase(context);
+  if (selectedCase == null || !context.mounted) return;
+
   final weightController = TextEditingController();
   final purityController = TextEditingController();
-  AppBottomSheet.show(
+  await AppBottomSheet.show(
     context,
-    title: 'Gold Appraisal',
+    title: 'Gold Appraisal — ${selectedCase.customerName}',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -119,9 +185,19 @@ void _showGoldAppraisalForm(BuildContext context) {
         const SizedBox(height: AppSpacing.md),
         AppButton(
           label: 'Save Appraisal',
-          onPressed: () {
-            Navigator.of(context).pop();
-            AppSnackbar.success(context, 'Gold appraisal saved.');
+          onPressed: () async {
+            final navigator = Navigator.of(context);
+            try {
+              final apiClient = ServiceLocator.instance.get<ApiClient>();
+              await apiClient.dio.post('/employee/loans/${selectedCase.id}/gold-appraisal', data: {
+                'weightGrams': double.tryParse(weightController.text.trim()) ?? 0,
+                'purityKarat': double.tryParse(purityController.text.trim()) ?? 0,
+              });
+              navigator.pop();
+              if (context.mounted) AppSnackbar.success(context, 'Gold appraisal saved.');
+            } catch (_) {
+              if (context.mounted) AppSnackbar.danger(context, 'Could not save the appraisal.');
+            }
           },
         ),
       ],
@@ -129,12 +205,15 @@ void _showGoldAppraisalForm(BuildContext context) {
   );
 }
 
-void _showPropertyForm(BuildContext context) {
+Future<void> _showPropertyForm(BuildContext context) async {
+  final selectedCase = await _pickCase(context);
+  if (selectedCase == null || !context.mounted) return;
+
   final conditionController = TextEditingController();
   final valueController = TextEditingController();
-  AppBottomSheet.show(
+  await AppBottomSheet.show(
     context,
-    title: 'Property Verification',
+    title: 'Property Verification — ${selectedCase.customerName}',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -144,9 +223,19 @@ void _showPropertyForm(BuildContext context) {
         const SizedBox(height: AppSpacing.md),
         AppButton(
           label: 'Save Details',
-          onPressed: () {
-            Navigator.of(context).pop();
-            AppSnackbar.success(context, 'Property verification details saved.');
+          onPressed: () async {
+            final navigator = Navigator.of(context);
+            try {
+              final apiClient = ServiceLocator.instance.get<ApiClient>();
+              await apiClient.dio.post('/employee/loans/${selectedCase.id}/property-verification', data: {
+                'condition': conditionController.text.trim(),
+                'estimatedValue': double.tryParse(valueController.text.trim()) ?? 0,
+              });
+              navigator.pop();
+              if (context.mounted) AppSnackbar.success(context, 'Property verification details saved.');
+            } catch (_) {
+              if (context.mounted) AppSnackbar.danger(context, 'Could not save the details.');
+            }
           },
         ),
       ],
@@ -164,16 +253,22 @@ class QuickActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs, horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: 4),
       onTap: () => action.onTap(context),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(action.icon, color: AppColors.secondary, size: 22),
-          const SizedBox(height: 6),
+          Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.16), shape: BoxShape.circle),
+            child: Icon(action.icon, color: AppColors.secondary, size: 19),
+          ),
+          const SizedBox(height: 8),
           Text(
             action.label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10.5),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10.5, fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,

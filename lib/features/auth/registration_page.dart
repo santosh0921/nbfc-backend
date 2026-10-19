@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/widgets/premium_button.dart';
 import '../apply/widgets/apply_form_field.dart';
 import 'widgets/auth_illustration.dart';
 
@@ -147,11 +148,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   validator: (v) => (v == null || v.isEmpty) ? 'Select your date of birth' : null,
                 ),
                 const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _continue,
-                  style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-                  child: const Text('Continue'),
-                ),
+                PremiumButton(label: 'Continue', onPressed: _continue),
               ],
             ),
           ),

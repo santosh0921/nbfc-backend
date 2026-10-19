@@ -70,6 +70,37 @@ func SubmitLoanHandler(c *gin.Context) {
 		TimingPreference string  `json:"timingPreference"`
 		VisitDate        string  `json:"visitDate"` // "2006-01-02", optional
 		VisitTimeSlot    string  `json:"visitTimeSlot"`
+
+		// Home Loan only.
+		BuilderName       string  `json:"builderName"`
+		ProjectName       string  `json:"projectName"`
+		PropertyAddress   string  `json:"propertyAddress"`
+		AgreementValue    float64 `json:"agreementValue"`
+		ConstructionStage string  `json:"constructionStage"`
+
+		// Gold Loan only.
+		GoldOrnamentType      string  `json:"goldOrnamentType"`
+		GoldApproxWeightGrams float64 `json:"goldApproxWeightGrams"`
+		GoldApproxPurityKarat int     `json:"goldApproxPurityKarat"`
+		GoldAlreadyPledged    bool    `json:"goldAlreadyPledged"`
+		GoldLoanBranch        string  `json:"goldLoanBranch"`
+
+		// Business Loan and MSME Loan.
+		BusinessName             string  `json:"businessName"`
+		BusinessRegistrationType string  `json:"businessRegistrationType"`
+		BusinessAddress          string  `json:"businessAddress"`
+		BusinessYearsInOperation int     `json:"businessYearsInOperation"`
+		BusinessMonthlyTurnover  float64 `json:"businessMonthlyTurnover"`
+		BusinessGSTNumber        string  `json:"businessGstNumber"`
+		MSMEUdyamNumber          string  `json:"msmeUdyamNumber"`
+
+		// Farmer Loan only.
+		FarmerLandRecordType   string  `json:"farmerLandRecordType"`
+		FarmerLandRecordNumber string  `json:"farmerLandRecordNumber"`
+		FarmerLandAreaAcres    float64 `json:"farmerLandAreaAcres"`
+		FarmerLandLocation     string  `json:"farmerLandLocation"`
+		FarmerCropOrPurpose    string  `json:"farmerCropOrPurpose"`
+		FarmerKCCNumber        string  `json:"farmerKccNumber"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -81,37 +112,98 @@ func SubmitLoanHandler(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "Unable to complete a required credit bureau check right now — please try again shortly."})
 		return
 	}
-	eligibility := evaluateEligibility(body.AmountRequested, body.TenureMonths, body.MonthlyIncome, cibil)
-	recordEligibilityDecision(0, eligibility, cibil, body.AmountRequested, body.MonthlyIncome)
-	if !eligibility.Eligible {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"message":           eligibility.Message,
-			"maxEligibleAmount": eligibility.MaxEligibleAmount,
-		})
-		return
-	}
 
-	loan := models.LoanApplication{
-		CustomerID:                   user.ID,
-		Category:                     body.Category,
-		AmountRequested:              body.AmountRequested,
-		Purpose:                      body.Purpose,
-		ApplicantName:                body.ApplicantName,
-		ApplicantPhone:               body.ApplicantPhone,
-		AddressLine:                  body.AddressLine,
-		City:                         body.City,
-		CibilScore:                   cibil,
-		TimingPreference:             body.TimingPreference,
-		VisitTimeSlot:                body.VisitTimeSlot,
-		RequestedTenureMonths:        &body.TenureMonths,
-		EstimatedInterestRatePercent: &eligibility.RatePercent,
-		EstimatedMonthlyEmi:          &eligibility.MonthlyEmi,
+	var loan models.LoanApplication
+	if isInstantLoanCategory(body.Category) {
+		// Instant Loan: flat-fee, 35-day lump-sum product — evaluated
+		// against its own amount band, not the regular 12-60 month EMI
+		// eligibility rules. tenureMonths is still accepted (required by
+		// this same endpoint's contract for every other category) but
+		// deliberately ignored here — the 35-day term is fixed, not
+		// customer-chosen, see evaluateInstantLoanEligibility.
+		instantEligibility := evaluateInstantLoanEligibility(body.AmountRequested, cibil)
+		recordInstantLoanEligibilityDecision(user.ID, 0, instantEligibility, cibil, body.AmountRequested)
+		if !instantEligibility.Eligible {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"message": instantEligibility.Message})
+			return
+		}
+		loan = models.LoanApplication{
+			CustomerID:       user.ID,
+			Category:         body.Category,
+			AmountRequested:  body.AmountRequested,
+			Purpose:          body.Purpose,
+			ApplicantName:    body.ApplicantName,
+			ApplicantPhone:   body.ApplicantPhone,
+			AddressLine:      body.AddressLine,
+			City:             body.City,
+			CibilScore:       cibil,
+			TimingPreference: body.TimingPreference,
+			VisitTimeSlot:    body.VisitTimeSlot,
+			// No RequestedTenureMonths/EstimatedInterestRatePercent/
+			// EstimatedMonthlyEmi — those describe the EMI product;
+			// generateEmiSchedule computes the real single due date/amount
+			// from Category + DisbursedAt at disbursement time regardless
+			// of what's stored here.
+		}
+	} else {
+		eligibility := evaluateEligibility(body.AmountRequested, body.TenureMonths, body.MonthlyIncome, cibil)
+		recordEligibilityDecision(0, eligibility, cibil, body.AmountRequested, body.MonthlyIncome)
+		if !eligibility.Eligible {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"message":           eligibility.Message,
+				"maxEligibleAmount": eligibility.MaxEligibleAmount,
+			})
+			return
+		}
+		loan = models.LoanApplication{
+			CustomerID:                   user.ID,
+			Category:                     body.Category,
+			AmountRequested:              body.AmountRequested,
+			Purpose:                      body.Purpose,
+			ApplicantName:                body.ApplicantName,
+			ApplicantPhone:               body.ApplicantPhone,
+			AddressLine:                  body.AddressLine,
+			City:                         body.City,
+			CibilScore:                   cibil,
+			TimingPreference:             body.TimingPreference,
+			VisitTimeSlot:                body.VisitTimeSlot,
+			RequestedTenureMonths:        &body.TenureMonths,
+			EstimatedInterestRatePercent: &eligibility.RatePercent,
+			EstimatedMonthlyEmi:          &eligibility.MonthlyEmi,
+		}
 	}
 	if body.VisitDate != "" {
 		if parsed, err := time.Parse("2006-01-02", body.VisitDate); err == nil {
 			loan.VisitDate = &parsed
 		}
 	}
+
+	// Category-specific fields — harmless to set regardless of Category,
+	// since a non-Home-Loan/non-Gold-Loan application simply submits them
+	// empty/zero and they're never read by anything else.
+	loan.BuilderName = body.BuilderName
+	loan.ProjectName = body.ProjectName
+	loan.PropertyAddress = body.PropertyAddress
+	loan.AgreementValue = body.AgreementValue
+	loan.ConstructionStage = body.ConstructionStage
+	loan.GoldOrnamentType = body.GoldOrnamentType
+	loan.GoldApproxWeightGrams = body.GoldApproxWeightGrams
+	loan.GoldApproxPurityKarat = body.GoldApproxPurityKarat
+	loan.GoldAlreadyPledged = body.GoldAlreadyPledged
+	loan.GoldLoanBranch = body.GoldLoanBranch
+	loan.BusinessName = body.BusinessName
+	loan.BusinessRegistrationType = body.BusinessRegistrationType
+	loan.BusinessAddress = body.BusinessAddress
+	loan.BusinessYearsInOperation = body.BusinessYearsInOperation
+	loan.BusinessMonthlyTurnover = body.BusinessMonthlyTurnover
+	loan.BusinessGSTNumber = body.BusinessGSTNumber
+	loan.MSMEUdyamNumber = body.MSMEUdyamNumber
+	loan.FarmerLandRecordType = body.FarmerLandRecordType
+	loan.FarmerLandRecordNumber = body.FarmerLandRecordNumber
+	loan.FarmerLandAreaAcres = body.FarmerLandAreaAcres
+	loan.FarmerLandLocation = body.FarmerLandLocation
+	loan.FarmerCropOrPurpose = body.FarmerCropOrPurpose
+	loan.FarmerKCCNumber = body.FarmerKCCNumber
 
 	loan = submitLoanApplication(loan)
 	attachOrphanedDocuments(user.ID, loan.ID)
@@ -165,6 +257,10 @@ func TopUpLoanHandler(c *gin.Context) {
 	}
 	if parent.Status != models.LoanStatusDisbursed {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Top-up is only available on a disbursed loan"})
+		return
+	}
+	if isInstantLoanCategory(parent.Category) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Top-up is not available on an Instant Loan — apply for a new Instant Loan once this one is repaid."})
 		return
 	}
 
@@ -287,7 +383,11 @@ func ListMyLoansHandler(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var loans []models.LoanApplication
+	// Must start non-nil: GORM's Find leaves a nil slice as nil when zero
+	// rows match, and a nil slice marshals to JSON `null` — the Flutter
+	// client's list decoder throws on that (`null as List`), surfacing as
+	// "Unexpected response from server." instead of an empty-loans state.
+	loans := []models.LoanApplication{}
 	database.DB.Where("customer_id = ?", user.ID).Order("created_at desc").Find(&loans)
 	c.JSON(http.StatusOK, loans)
 }

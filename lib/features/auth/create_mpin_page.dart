@@ -51,6 +51,10 @@ class _CreateMpinPageState extends State<CreateMpinPage> {
         _showNameCollisionDialog(e.message);
         return;
       }
+      if (e.statusCode == 409) {
+        _showExistingAccountDialog();
+        return;
+      }
       setState(() => _error = e.message);
     }
   }
@@ -69,6 +73,36 @@ class _CreateMpinPageState extends State<CreateMpinPage> {
               context.go('/register');
             },
             child: const Text('Edit Name'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// This mobile number already has a profile under a different (its
+  /// real) name than what was just typed on the Registration screen — the
+  /// MPIN/login step already succeeded (that's legitimate: OTP possession
+  /// proves phone ownership), but the app must not silently pretend the
+  /// just-typed name was accepted. Tell the customer plainly which
+  /// account they're actually in.
+  void _showExistingAccountDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Existing Account Found'),
+        content: const Text(
+          'This mobile number is already registered under a different name. '
+          "You've been logged in to that existing account — the name you just "
+          'entered was not saved. If this isn\'t your account, please contact support.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              context.go('/biometric');
+            },
+            child: const Text('Continue'),
           ),
         ],
       ),

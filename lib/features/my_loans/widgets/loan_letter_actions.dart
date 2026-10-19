@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/network/document_api_service.dart';
 import '../../../core/network/loan_api_service.dart';
@@ -54,6 +55,22 @@ class LoanLetterActionsSectionState extends State<LoanLetterActionsSection> {
   final GlobalKey sectionKey = GlobalKey();
   late Future<List<UploadedDocument>> _future = _load();
 
+  @override
+  void didUpdateWidget(covariant LoanLetterActionsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The parent (e.g. the loan detail sheet) can rebuild this widget with
+    // a new `loan` — most importantly a status transition like
+    // disbursement_processing -> disbursed, which is exactly when the
+    // Disbursement Letter document first comes into existence. Without
+    // this, the doc list fetched at construction time stays cached for
+    // the widget's lifetime, so a signed/system letter generated after
+    // that first fetch would silently be missing until the widget is
+    // torn down and recreated some other way.
+    if (oldWidget.loan.status != widget.loan.status) {
+      _refresh();
+    }
+  }
+
   Future<List<UploadedDocument>> _load() async {
     final token = AuthProvider.instance.token;
     if (token == null) return const [];
@@ -73,7 +90,7 @@ class LoanLetterActionsSectionState extends State<LoanLetterActionsSection> {
   List<_LetterKind> get _applicableLetters {
     final status = widget.loan.status;
     final out = <_LetterKind>[];
-    if (status == 'sanctioned' || status == 'disbursed') {
+    if (status == 'sanctioned' || status == 'disbursement_processing' || status == 'disbursed') {
       out.add(const _LetterKind(
         docType: 'Sanction Letter',
         signedDocType: 'Signed Sanction Letter',
@@ -90,6 +107,19 @@ class LoanLetterActionsSectionState extends State<LoanLetterActionsSection> {
     return out;
   }
 
+  // NOC Letter is separate from _applicableLetters: it's not tied to loan
+  // status (a "disbursed" loan can still have an NOC once fully repaid,
+  // which the backend generates automatically — see
+  // internal/loans/noc.go's CheckAndGenerateNOC) and it's never eSigned,
+  // so it doesn't fit the signed/unsigned _LetterRow model the other two
+  // letters use.
+  UploadedDocument? _nocLetter(List<UploadedDocument> docs) {
+    for (final d in docs) {
+      if (d.docType == 'NOC Letter' && d.loanId == widget.loan.id) return d;
+    }
+    return null;
+  }
+
   Future<void> _view(UploadedDocument doc) async {
     try {
       final bytes = base64Decode(doc.dataBase64);
@@ -103,35 +133,45 @@ class LoanLetterActionsSectionState extends State<LoanLetterActionsSection> {
     }
   }
 
-  /// Writes the document's bytes to a real file on disk and confirms the
-  /// write actually landed (non-zero length re-read) before reporting
-  /// success — a silent "wrote 0 bytes" or an exception swallowed by a
-  /// bare `catch (_)` is exactly the failure mode this guards against.
+  /// Sends the letter to WhatsApp/email/Drive/etc. via the OS share sheet
+  /// — distinct from [_download], which also goes through a share sheet
+  /// but is framed to the user as "save this file" (Printing.sharePdf's
+  /// sheet defaults to save-oriented targets first). This one writes a
+  /// real temp file and uses share_plus directly, matching the pattern
+  /// documents_screen.dart already uses for its own signed documents.
+  Future<void> _share(UploadedDocument doc) async {
+    try {
+      final bytes = base64Decode(doc.dataBase64);
+      if (bytes.isEmpty) {
+        throw Exception('This document has no content to share.');
+      }
+      final safeName = doc.fileName.trim().isNotEmpty ? doc.fileName.trim() : '${doc.docType}.pdf';
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$safeName');
+      await file.writeAsBytes(bytes, flush: true);
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: doc.docType));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not share this letter: $e')),
+      );
+    }
+  }
+
+  /// Hands the document's bytes to the OS share/save sheet (via
+  /// `Printing.sharePdf`) rather than silently writing to the app's
+  /// private storage directory — a private-storage write "succeeds" with
+  /// no error, but the file is invisible in Downloads/Files, which reads
+  /// to the user as a download that silently did nothing. The share sheet
+  /// lets them actually choose Save to Files/Drive/Downloads themselves.
   Future<void> _download(UploadedDocument doc) async {
     try {
       final bytes = base64Decode(doc.dataBase64);
       if (bytes.isEmpty) {
         throw Exception('This document has no content to save.');
       }
-      final dir = await getApplicationDocumentsDirectory();
       final safeName = doc.fileName.trim().isNotEmpty ? doc.fileName.trim() : '${doc.docType}.pdf';
-      final file = File('${dir.path}/$safeName');
-      await file.writeAsBytes(bytes, flush: true);
-
-      // Confirm the write actually completed rather than assuming success.
-      final exists = await file.exists();
-      final writtenLength = exists ? await file.length() : 0;
-      if (!exists || writtenLength != bytes.length) {
-        throw Exception('File was not saved correctly.');
-      }
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Saved "${doc.fileName}" to app storage.'),
-          action: SnackBarAction(label: 'Open', onPressed: () => _view(doc)),
-        ),
-      );
+      await Printing.sharePdf(bytes: bytes, filename: safeName);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -182,10 +222,18 @@ class LoanLetterActionsSectionState extends State<LoanLetterActionsSection> {
                   highlighted: widget.highlightLetterType == letters[i].docType,
                   onView: _view,
                   onDownload: _download,
+                  onShare: _share,
                   onEsign: () => _openEsign(letters[i]),
                 ),
-                if (i != letters.length - 1) const SizedBox(height: 14),
+                const SizedBox(height: 14),
               ],
+              if (_nocLetter(docs) != null)
+                _NocRow(
+                  doc: _nocLetter(docs)!,
+                  onView: _view,
+                  onDownload: _download,
+                  onShare: _share,
+                ),
             ],
           ),
         );
@@ -203,6 +251,7 @@ class _LetterRow extends StatelessWidget {
     required this.highlighted,
     required this.onView,
     required this.onDownload,
+    required this.onShare,
     required this.onEsign,
   });
 
@@ -213,6 +262,7 @@ class _LetterRow extends StatelessWidget {
   final bool highlighted;
   final ValueChanged<UploadedDocument> onView;
   final ValueChanged<UploadedDocument> onDownload;
+  final ValueChanged<UploadedDocument> onShare;
   final VoidCallback onEsign;
 
   UploadedDocument? _find(String docType) {
@@ -261,7 +311,7 @@ class _LetterRow extends StatelessWidget {
               child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
             )
           else if (systemLetter == null)
-            Text('Not yet available.', style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryLight))
+            Text('Not yet available.', style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryOf(context)))
           else
             Wrap(
               spacing: 8,
@@ -279,6 +329,12 @@ class _LetterRow extends StatelessWidget {
                     onPressed: () => onDownload(signedLetter),
                     icon: const Icon(Icons.download_rounded, size: 16),
                     label: const Text('Download'),
+                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, minimumSize: const Size(0, 36)),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => onShare(signedLetter),
+                    icon: const Icon(Icons.share_rounded, size: 16),
+                    label: const Text('Share'),
                     style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, minimumSize: const Size(0, 36)),
                   ),
                   Container(
@@ -318,6 +374,12 @@ class _LetterRow extends StatelessWidget {
                     label: const Text('Download'),
                     style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, minimumSize: const Size(0, 36)),
                   ),
+                  OutlinedButton.icon(
+                    onPressed: () => onShare(systemLetter),
+                    icon: const Icon(Icons.share_rounded, size: 16),
+                    label: const Text('Share'),
+                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, minimumSize: const Size(0, 36)),
+                  ),
                   ElevatedButton.icon(
                     onPressed: onEsign,
                     icon: const Icon(Icons.draw_rounded, size: 16),
@@ -329,6 +391,73 @@ class _LetterRow extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// A standalone row for the NOC Letter — no signed/unsigned states, no
+/// eSign button, since it's a one-directional certificate the lender
+/// issues rather than something the borrower countersigns.
+class _NocRow extends StatelessWidget {
+  const _NocRow({
+    required this.doc,
+    required this.onView,
+    required this.onDownload,
+    required this.onShare,
+  });
+
+  final UploadedDocument doc;
+  final ValueChanged<UploadedDocument> onView;
+  final ValueChanged<UploadedDocument> onDownload;
+  final ValueChanged<UploadedDocument> onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: const Icon(Icons.verified_rounded, color: AppColors.success, size: 18),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('NOC Letter (Loan Closure Certificate)')),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => onView(doc),
+              icon: const Icon(Icons.visibility_rounded, size: 16),
+              label: const Text('View'),
+              style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, minimumSize: const Size(0, 36)),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => onDownload(doc),
+              icon: const Icon(Icons.download_rounded, size: 16),
+              label: const Text('Download'),
+              style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, minimumSize: const Size(0, 36)),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => onShare(doc),
+              icon: const Icon(Icons.share_rounded, size: 16),
+              label: const Text('Share'),
+              style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, minimumSize: const Size(0, 36)),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -433,22 +562,28 @@ class _EsignScreenState extends State<_EsignScreen> {
     try {
       final bytes = base64Decode(doc.dataBase64);
       if (bytes.isEmpty) throw Exception('This document has no content to save.');
-      final dir = await getApplicationDocumentsDirectory();
       final safeName = doc.fileName.trim().isNotEmpty ? doc.fileName.trim() : '${doc.docType}.pdf';
-      final file = File('${dir.path}/$safeName');
-      await file.writeAsBytes(bytes, flush: true);
-      final exists = await file.exists();
-      final writtenLength = exists ? await file.length() : 0;
-      if (!exists || writtenLength != bytes.length) {
-        throw Exception('File was not saved correctly.');
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved "${doc.fileName}" to app storage.')),
-      );
+      await Printing.sharePdf(bytes: bytes, filename: safeName);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not download this letter: $e')));
+    }
+  }
+
+  Future<void> _shareSigned() async {
+    final doc = _result;
+    if (doc == null) return;
+    try {
+      final bytes = base64Decode(doc.dataBase64);
+      if (bytes.isEmpty) throw Exception('This document has no content to share.');
+      final safeName = doc.fileName.trim().isNotEmpty ? doc.fileName.trim() : '${doc.docType}.pdf';
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$safeName');
+      await file.writeAsBytes(bytes, flush: true);
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: doc.docType));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not share this letter: $e')));
     }
   }
 
@@ -513,6 +648,16 @@ class _EsignScreenState extends State<_EsignScreen> {
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _shareSigned,
+                  icon: const Icon(Icons.share_rounded, size: 18),
+                  label: const Text('Share'),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pop(_result),
                   child: const Text('Done'),
@@ -545,7 +690,7 @@ class _EsignScreenState extends State<_EsignScreen> {
               const SizedBox(height: 12),
               Text(
                 'By signing below, you confirm that you have read and accept the terms in this letter.',
-                style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryLight),
+                style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryOf(context)),
               ),
               const SizedBox(height: 20),
               Text('Your Signature', style: theme.textTheme.titleSmall),

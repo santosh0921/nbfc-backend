@@ -65,9 +65,16 @@ type FinancialMetrics struct {
 	ProcessingFeeIncomePaise int64 `json:"processingFeeIncomePaise"`
 	GSTCollectedPaise        int64 `json:"gstCollectedPaise"`
 	GSTPayablePaise          int64 `json:"gstPayablePaise"`
-	ExpensesPaise            int64 `json:"expensesPaise"`
-	NetProfitPaise           int64 `json:"netProfitPaise"`
-	BankBalancePaise         int64 `json:"bankBalancePaise"`
+	// CGST/SGST/IGST breakdown of GSTPayablePaise — CGST+SGST apply to
+	// intra-state supply, IGST to inter-state; never both on the same
+	// transaction, so CGSTPaise+SGSTPaise+IGSTPaise always equals
+	// GSTPayablePaise exactly (see models.GSTTransaction).
+	CGSTPaise                  int64 `json:"cgstPaise"`
+	SGSTPaise                  int64 `json:"sgstPaise"`
+	IGSTPaise                  int64 `json:"igstPaise"`
+	ExpensesPaise              int64 `json:"expensesPaise"`
+	NetProfitPaise             int64 `json:"netProfitPaise"`
+	BankBalancePaise           int64 `json:"bankBalancePaise"`
 	BorrowingsOutstandingPaise int64 `json:"borrowingsOutstandingPaise"`
 }
 
@@ -227,8 +234,14 @@ func financialMetrics(f MISFilters) FinancialMetrics {
 		}
 	}
 
-	var gstPayable int64
-	database.DB.Model(&models.GSTTransaction{}).Select("COALESCE(SUM(cgst_paise + sgst_paise + igst_paise),0)").Scan(&gstPayable)
+	var cgst, sgst, igst int64
+	database.DB.Model(&models.GSTTransaction{}).Where("created_at BETWEEN ? AND ?", from, to).
+		Select("COALESCE(SUM(cgst_paise),0)").Scan(&cgst)
+	database.DB.Model(&models.GSTTransaction{}).Where("created_at BETWEEN ? AND ?", from, to).
+		Select("COALESCE(SUM(sgst_paise),0)").Scan(&sgst)
+	database.DB.Model(&models.GSTTransaction{}).Where("created_at BETWEEN ? AND ?", from, to).
+		Select("COALESCE(SUM(igst_paise),0)").Scan(&igst)
+	gstPayable := cgst + sgst + igst
 
 	bs := accounting.BalanceSheet(to)
 	var bankBalance, borrowings int64
@@ -246,6 +259,7 @@ func financialMetrics(f MISFilters) FinancialMetrics {
 	return FinancialMetrics{
 		InterestIncomePaise: interestIncome, ProcessingFeeIncomePaise: feeIncome,
 		GSTCollectedPaise: gstPayable, GSTPayablePaise: gstPayable,
+		CGSTPaise: cgst, SGSTPaise: sgst, IGSTPaise: igst,
 		ExpensesPaise: pl.TotalExpensePaise, NetProfitPaise: pl.NetProfitPaise,
 		BankBalancePaise: bankBalance, BorrowingsOutstandingPaise: borrowings,
 	}

@@ -52,6 +52,18 @@ func GetProfile(c *gin.Context) {
 	var customerProfile models.CustomerProfile
 	database.DB.Where("user_id = ?", user.ID).First(&customerProfile)
 
+	// kyc_completed used to be CustomerProfile.ProfileCompleted — that
+	// flag only tracks whether basic profile fields (name/DOB/...) were
+	// filled in, nothing to do with actual identity verification. It was
+	// showing "KYC Verified" for every customer who'd merely filled the
+	// profile form, even with no Aadhaar/PAN submitted at all. Real KYC
+	// completion is: both Aadhaar and PAN submitted AND verified.
+	var aadhaar models.CustomerAadhaar
+	var pan models.CustomerPAN
+	hasVerifiedAadhaar := database.DB.Where("user_id = ? AND is_verified = ?", user.ID, true).First(&aadhaar).Error == nil
+	hasVerifiedPAN := database.DB.Where("user_id = ? AND is_verified = ?", user.ID, true).First(&pan).Error == nil
+	kycCompleted := hasVerifiedAadhaar && hasVerifiedPAN
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Profile fetched successfully",
 		"user": gin.H{
@@ -64,7 +76,7 @@ func GetProfile(c *gin.Context) {
 			"middle_name":        customerProfile.MiddleName,
 			"last_name":          customerProfile.LastName,
 			"email":              customerProfile.Email,
-			"kyc_completed":      customerProfile.ProfileCompleted,
+			"kyc_completed":      kycCompleted,
 		},
 	})
 }

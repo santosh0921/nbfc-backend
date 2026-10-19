@@ -17,11 +17,45 @@ func hashPassword(pw string) (string, error) {
 	return string(h), err
 }
 
+// EmployeeWithStats bundles an Employee with live workload numbers for the
+// admin panel's employee list — previously the admin had no way to see how
+// much work an employee had actually done, only their profile fields.
+type EmployeeWithStats struct {
+	models.Employee
+	CasesCompleted int `json:"casesCompleted"` // verified/sanctioned/disbursed loans (verification role) + resolved recovery cases (recovery role)
+	CasesPending   int `json:"casesPending"`    // currently assigned/open work
+}
+
 // AdminListHandler handles GET /admin/employees
 func AdminListHandler(c *gin.Context) {
 	var emps []models.Employee
 	database.DB.Find(&emps)
-	c.JSON(http.StatusOK, emps)
+
+	resp := make([]EmployeeWithStats, 0, len(emps))
+	for _, emp := range emps {
+		item := EmployeeWithStats{Employee: emp}
+		switch emp.Role {
+		case "recovery":
+			var completed, pending int64
+			database.DB.Model(&models.RecoveryCase{}).Where("assigned_employee_id = ? AND status = ?", emp.ID, "resolved").Count(&completed)
+			database.DB.Model(&models.RecoveryCase{}).Where("assigned_employee_id = ? AND status != ?", emp.ID, "resolved").Count(&pending)
+			item.CasesCompleted = int(completed)
+			item.CasesPending = int(pending)
+		default: // verification, supervisor
+			var completed, pending int64
+			database.DB.Model(&models.LoanApplication{}).
+				Where("assigned_employee_id = ? AND status IN ?", emp.ID,
+					[]string{models.LoanStatusVerified, models.LoanStatusSanctioned, models.LoanStatusDisbursed}).
+				Count(&completed)
+			database.DB.Model(&models.LoanApplication{}).
+				Where("assigned_employee_id = ? AND status = ?", emp.ID, models.LoanStatusAssigned).
+				Count(&pending)
+			item.CasesCompleted = int(completed)
+			item.CasesPending = int(pending)
+		}
+		resp = append(resp, item)
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // AdminCreateHandler handles POST /admin/employees

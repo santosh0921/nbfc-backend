@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/santosh0921/nbfc-backend/internal/audit"
+	"github.com/santosh0921/nbfc-backend/internal/customerinfo"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 	"github.com/santosh0921/nbfc-backend/internal/pagination"
@@ -25,6 +27,15 @@ import (
 // that assumed the array, and a deliberate one: silently truncating to a
 // page while still returning a bare array would have been worse, because
 // a caller could not tell a full result from a first page.
+// loanListRow adds the customer's live KYC pipeline status to each loan —
+// used by the KYC portal's cross-category "All Loans" review page, which
+// needs to show where a customer actually stands (not just the loan's own
+// status) without a second round-trip per row.
+type loanListRow struct {
+	models.LoanApplication
+	KYCStatus string `json:"kycStatus"`
+}
+
 func AdminListLoansHandler(c *gin.Context) {
 	category := c.Query("category")
 	status := c.Query("status")
@@ -35,6 +46,9 @@ func AdminListLoansHandler(c *gin.Context) {
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	if customerID := c.Query("customerId"); customerID != "" {
+		q = q.Where("customer_id = ?", customerID)
+	}
 
 	var total int64
 	q.Count(&total)
@@ -43,10 +57,77 @@ func AdminListLoansHandler(c *gin.Context) {
 	var loans []models.LoanApplication
 	q.Order("created_at desc").Limit(p.Limit).Offset(p.Offset()).Find(&loans)
 
+	customerIDs := make([]uuid.UUID, 0, len(loans))
+	seen := make(map[uuid.UUID]bool, len(loans))
+	for _, l := range loans {
+		if !seen[l.CustomerID] {
+			seen[l.CustomerID] = true
+			customerIDs = append(customerIDs, l.CustomerID)
+		}
+	}
+	kycStatusByCustomer := map[uuid.UUID]string{}
+	if len(customerIDs) > 0 {
+		var kycs []models.CustomerKYC
+		database.DB.Where("customer_id IN ?", customerIDs).Find(&kycs)
+		for _, k := range kycs {
+			kycStatusByCustomer[k.CustomerID] = k.Status
+		}
+	}
+
+	rows := make([]loanListRow, 0, len(loans))
+	for _, l := range loans {
+		status := kycStatusByCustomer[l.CustomerID]
+		if status == "" {
+			status = models.KYCStatusNotStarted
+		}
+		rows = append(rows, loanListRow{LoanApplication: l, KYCStatus: status})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"loans":      loans,
+		"loans":      rows,
 		"pagination": p.Meta(total, len(loans)),
 	})
+}
+
+// creditDecisionRow adds the customer's real name (batched lookup, never
+// fabricated) to the raw CreditDecision row.
+type creditDecisionRow struct {
+	models.CreditDecision
+	CustomerName string `json:"customerName,omitempty"`
+}
+
+// AdminListCreditDecisionsHandler handles GET /admin/credit-decisions —
+// requires LOAN_VIEW. Previously no HTTP route existed for this real,
+// already-populated table (internal/loans/eligibility.go writes rows to it
+// on every apply-time eligibility check and every sanction decision) —
+// the credit portal's "Credit Decision" screen showed an honest "not
+// available" placeholder rather than fabricating data, but the underlying
+// data was real and just unreachable. Optional ?customerId= / ?loanId=
+// filters narrow to one customer/loan's decision history.
+func AdminListCreditDecisionsHandler(c *gin.Context) {
+	q := database.DB.Model(&models.CreditDecision{})
+	if customerID := c.Query("customerId"); customerID != "" {
+		q = q.Where("customer_id = ?", customerID)
+	}
+	if loanID := c.Query("loanId"); loanID != "" {
+		q = q.Where("loan_id = ?", loanID)
+	}
+	var decisions []models.CreditDecision
+	q.Order("created_at desc").Limit(200).Find(&decisions)
+
+	ids := make([]string, 0, len(decisions))
+	for _, d := range decisions {
+		if d.CustomerID != uuid.Nil {
+			ids = append(ids, d.CustomerID.String())
+		}
+	}
+	names := customerinfo.BatchNamesByStringID(ids)
+
+	out := make([]creditDecisionRow, len(decisions))
+	for i, d := range decisions {
+		out[i] = creditDecisionRow{CreditDecision: d, CustomerName: names[d.CustomerID.String()]}
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 // AdminGetLoanHandler handles GET /admin/loans/:id
@@ -60,53 +141,21 @@ func AdminGetLoanHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, withReferences(loan))
 }
 
-// AdminReassignLoanHandler handles POST /admin/loans/:id/reassign — moves
-// a loan's verification assignment to a different (or first-time)
-// employee. Exists mainly to recover a loan that was auto-assigned (see
-// findVerificationEmployee, internal/loans/service.go) to an employee who
-// turned out to be unusable for it — most notably a self-registered
-// employee still awaiting approval, whose loans were invisible to
-// everyone since that employee couldn't log in to act on them. Only
-// allowed while the loan hasn't already moved past verification.
-func AdminReassignLoanHandler(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	var body struct {
-		EmployeeID uint `json:"employeeId" binding:"required"`
+// canDirectlyReject reports whether a loan in the given status may be
+// rejected outright via AdminDecisionHandler. This mirrors canRecommend's
+// pre-sanction state set (internal/loans/maker_checker_handler.go) plus
+// pending_claim (an employee re-verification loop that can still dead-end
+// in rejection). Anything from pending_sanction_approval onward has its own
+// dedicated exit and is not reachable through this endpoint — most
+// importantly, a disbursed loan can never be "rejected" here, since real
+// money has already moved.
+func canDirectlyReject(status string) bool {
+	switch status {
+	case models.LoanStatusSubmitted, models.LoanStatusAutoVerified, models.LoanStatusAssigned, models.LoanStatusVerified, models.LoanStatusPendingClaim:
+		return true
+	default:
+		return false
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
-
-	var loan models.LoanApplication
-	if err := database.DB.First(&loan, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "Loan not found"})
-		return
-	}
-	if loan.Status != models.LoanStatusSubmitted && loan.Status != models.LoanStatusAssigned {
-		c.JSON(http.StatusConflict, gin.H{"message": "Loan has already moved past verification and can no longer be reassigned"})
-		return
-	}
-
-	var emp models.Employee
-	if err := database.DB.First(&emp, body.EmployeeID).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Employee not found"})
-		return
-	}
-	if !emp.Active || !emp.Approved {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "That employee is not active/approved and cannot take this assignment"})
-		return
-	}
-
-	loan.AssignedEmployeeID = &emp.ID
-	loan.Status = models.LoanStatusAssigned
-	database.DB.Save(&loan)
-	createNotification("employee", itoa(emp.ID), "New verification task",
-		"Loan application #"+itoa(loan.ID)+" ("+loan.Category+") assigned to you for verification.")
-	audit.Record(c.GetString("admin_username"), "loan.reassign", "loan", strconv.Itoa(int(loan.ID)),
-		"Reassigned loan #"+itoa(loan.ID)+" to employee "+emp.Code+" ("+emp.Name+")")
-
-	c.JSON(http.StatusOK, withReferences(loan))
 }
 
 // AdminDecisionHandler handles POST /admin/loans/:id/decision — as of the
@@ -138,6 +187,19 @@ func AdminDecisionHandler(c *gin.Context) {
 	}
 	if body.Action != "reject" {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "action must be reject"})
+		return
+	}
+	// State whitelist: this endpoint is the pre-recommendation reject path
+	// (a reviewer who doesn't want to recommend the loan for sanction at
+	// all). A loan that has already progressed past that point has its own
+	// dedicated exit: pending_sanction_approval is rejected via
+	// AdminApproveSanctionHandler's approve=false branch (the checker
+	// declining the maker's recommendation); nothing past that (sanctioned
+	// and later) is reversible through "reject" — least of all a disbursed
+	// loan, where real money has already moved. rejected itself is
+	// terminal, so re-rejecting is refused rather than silently no-op'd.
+	if !canDirectlyReject(loan.Status) {
+		c.JSON(http.StatusConflict, gin.H{"message": "Loan in status '" + loan.Status + "' cannot be rejected via this endpoint"})
 		return
 	}
 

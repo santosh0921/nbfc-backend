@@ -2,11 +2,13 @@ package kyc
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"github.com/santosh0921/nbfc-backend/internal/audit"
+	"github.com/santosh0921/nbfc-backend/internal/corrections"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 )
@@ -45,6 +47,19 @@ func CustomerStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, record)
 }
 
+// queueRow adds two read-only, admin-UI-only conveniences to the raw
+// CustomerKYC row: the customer's real name (so a queue/dashboard screen
+// isn't stuck showing a bare UUID) and the distinct set of loan categories
+// the customer has actually applied under (so cases can be grouped by loan
+// type). Both are looked up from real rows — CustomerProfile and
+// LoanApplication — never invented; a customer with no profile row or no
+// loan applications yet simply gets an empty/omitted value, not a guess.
+type queueRow struct {
+	models.CustomerKYC
+	CustomerName   string   `json:"customerName,omitempty"`
+	LoanCategories []string `json:"loanCategories,omitempty"`
+}
+
 // AdminQueueHandler handles GET /admin/kyc/queue — requires KYC_VIEW.
 // Every customer whose most-recently-computed status needs an admin's
 // attention (VERIFICATION_PENDING or REQUIRES_REVIEW) — the "KYC
@@ -52,14 +67,76 @@ func CustomerStatusHandler(c *gin.Context) {
 func AdminQueueHandler(c *gin.Context) {
 	statusFilter := c.Query("status")
 	q := database.DB.Model(&models.CustomerKYC{})
-	if statusFilter != "" {
-		q = q.Where("status = ?", statusFilter)
-	} else {
+	switch {
+	case statusFilter == "":
 		q = q.Where("status IN ?", []string{models.KYCStatusVerificationPending, models.KYCStatusRequiresReview})
+	case strings.Contains(statusFilter, ","):
+		// Comma-separated list — lets the frontend ask for a broader
+		// "everything not yet decided" view (e.g. Pending Verification
+		// showing NOT_STARTED/INITIATED/DOCUMENTS_PENDING alongside
+		// VERIFICATION_PENDING/REQUIRES_REVIEW) without a second endpoint.
+		statuses := strings.Split(statusFilter, ",")
+		for i := range statuses {
+			statuses[i] = strings.TrimSpace(statuses[i])
+		}
+		q = q.Where("status IN ?", statuses)
+	default:
+		q = q.Where("status = ?", statusFilter)
 	}
 	var records []models.CustomerKYC
 	q.Order("updated_at asc").Find(&records)
-	c.JSON(http.StatusOK, records)
+
+	if len(records) == 0 {
+		c.JSON(http.StatusOK, []queueRow{})
+		return
+	}
+
+	customerIDs := make([]uuid.UUID, 0, len(records))
+	for _, r := range records {
+		customerIDs = append(customerIDs, r.CustomerID)
+	}
+
+	// Batch-fetch names and loan categories for every customer in this page
+	// in two queries total, not N+1 — this handler can be called on a
+	// dashboard that renders on every page load.
+	var profiles []models.CustomerProfile
+	database.DB.Where("user_id IN ?", customerIDs).Find(&profiles)
+	nameByCustomer := make(map[uuid.UUID]string, len(profiles))
+	for _, p := range profiles {
+		name := p.FirstName
+		if p.LastName != "" {
+			if name != "" {
+				name += " "
+			}
+			name += p.LastName
+		}
+		if name != "" {
+			nameByCustomer[p.UserID] = name
+		}
+	}
+
+	var loans []models.LoanApplication
+	database.DB.Select("customer_id", "category").Where("customer_id IN ?", customerIDs).Find(&loans)
+	categoriesByCustomer := make(map[uuid.UUID]map[string]bool, len(customerIDs))
+	for _, l := range loans {
+		if l.Category == "" {
+			continue
+		}
+		if categoriesByCustomer[l.CustomerID] == nil {
+			categoriesByCustomer[l.CustomerID] = map[string]bool{}
+		}
+		categoriesByCustomer[l.CustomerID][l.Category] = true
+	}
+
+	out := make([]queueRow, 0, len(records))
+	for _, r := range records {
+		row := queueRow{CustomerKYC: r, CustomerName: nameByCustomer[r.CustomerID]}
+		for cat := range categoriesByCustomer[r.CustomerID] {
+			row.LoanCategories = append(row.LoanCategories, cat)
+		}
+		out = append(out, row)
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 // AdminDetailHandler handles GET /admin/kyc/:customerId — requires
@@ -85,6 +162,11 @@ func AdminDetailHandler(c *gin.Context) {
 
 type decisionRequest struct {
 	Reason string `json:"reason"`
+	// ReasonCode is the fixed dropdown selection the KYC portal shows on
+	// reject (e.g. DOCUMENT_NOT_VISIBLE, CUSTOMER_UNCOOPERATIVE) — Reason
+	// stays the free-text detail. Optional: a reject without a code still
+	// works exactly as before, it just raises no CorrectionCase.
+	ReasonCode string `json:"reasonCode"`
 }
 
 // AdminApproveHandler handles POST /admin/kyc/:customerId/approve —
@@ -105,6 +187,24 @@ func AdminRejectHandler(c *gin.Context) {
 		return
 	}
 	setReviewAndRecompute(c, "REJECTED", body.Reason)
+	if c.Writer.Status() != http.StatusOK {
+		return // setReviewAndRecompute already wrote an error response
+	}
+	if body.ReasonCode != "" {
+		if customerID, err := uuid.Parse(c.Param("customerId")); err == nil {
+			adminID, username, role := toAdminIDCtx(c), c.GetString("admin_username"), c.GetString("admin_role")
+			if _, err := corrections.Raise(models.CorrectionDomainKYC, customerID, "", body.ReasonCode, body.Reason, adminID, username, role); err != nil {
+				// Best-effort: the KYC rejection itself already succeeded and
+				// was already returned to the caller above — a failure to
+				// raise the follow-up case must never look like the reject
+				// failed.
+				audit.RecordDetailed(c, audit.Entry{
+					ActorType: "system", Action: "correction.raise_failed", TargetType: "customer_kyc", TargetID: customerID.String(),
+					Result: audit.ResultFailure, Reason: err.Error(),
+				})
+			}
+		}
+	}
 }
 
 // AdminRequireReviewHandler handles
@@ -187,4 +287,39 @@ func toAdminIDCtx(c *gin.Context) uint {
 		}
 	}
 	return 0
+}
+
+// AdminBackfillRecomputeHandler handles POST /admin/kyc/backfill-recompute
+// — a one-time operational fix, not part of the normal request flow.
+// Recompute previously only ran at loan-submission eligibility checks and
+// admin decisions, so a customer who submitted PAN/Aadhaar/Selfie but
+// never attempted a loan had a stale or missing CustomerKYC row — making
+// them invisible to every admin-facing KYC queue even though they'd
+// genuinely made progress. Document-submission handlers now call
+// Recompute themselves going forward (see internal/profile), but that
+// only fixes new activity; this walks every existing user once so
+// already-submitted documents are reflected immediately instead of only
+// on that customer's next action.
+func AdminBackfillRecomputeHandler(c *gin.Context) {
+	var userIDs []uuid.UUID
+	if err := database.DB.Model(&models.User{}).Pluck("id", &userIDs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Database error"})
+		return
+	}
+
+	updated, failed := 0, 0
+	for _, id := range userIDs {
+		if _, err := Recompute(id, "admin", adminActor(c)); err != nil {
+			failed++
+			continue
+		}
+		updated++
+	}
+
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "admin", ActorID: toAdminIDCtx(c), ActorRef: c.GetString("admin_username"), ActorRole: c.GetString("admin_role"),
+		Action: "kyc.backfill_recompute", TargetType: "customer_kyc", TargetID: "all",
+		Result: audit.ResultSuccess,
+	})
+	c.JSON(http.StatusOK, gin.H{"totalUsers": len(userIDs), "recomputed": updated, "failed": failed})
 }

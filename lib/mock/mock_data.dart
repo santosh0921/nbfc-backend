@@ -62,19 +62,25 @@ class MockData {
       id: 'instant_loan',
       category: LoanCategory.instantLoan,
       name: 'Instant Loan',
-      shortDescription: 'For daily earners — ₹1,000 to ₹50,000',
+      shortDescription: 'For daily earners — ₹1,000 to ₹50,000, repay in 35 days',
       icon: Icons.currency_rupee_rounded,
       gradient: AppColors.gradientEmerald,
-      interestRateFrom: 18.0,
-      aprFrom: 19.5,
-      tenureRange: '3–12 months',
+      // interestRateFrom is repurposed as the flat one-time fee percentage
+      // for this product (8%), not an annual reducing-balance rate —
+      // matches internal/loans/eligibility.go's instantLoanFlatFeePercent
+      // exactly. QuickApplyScreen branches on
+      // LoanCategory.instantLoan to compute/display it correctly rather
+      // than running the regular EMI formula against this number.
+      interestRateFrom: 8.0,
+      aprFrom: 8.0,
+      tenureRange: '35 days (fixed)',
       maxAmount: '₹50,000',
-      processingFee: 'Flat ₹99 + GST',
+      processingFee: 'No separate fee — 8% is charged once, all-inclusive',
       benefits: [
         'Designed for daily-wage and gig earners',
         'Minimal documentation, no collateral',
-        'Disbursal in as fast as 15 minutes',
-        'Flexible daily / weekly repayment options',
+        'One flat 8% fee — no monthly interest, no hidden charges',
+        'Single repayment 35 days after disbursal — no EMIs to track',
       ],
       eligibility: [
         'Age 18–60 years',
@@ -86,7 +92,8 @@ class MockData {
       faqs: [
         {'q': 'Who is this loan for?', 'a': 'Daily-wage workers, street vendors, gig workers, and small earners who need quick, small-ticket funds without heavy paperwork.'},
         {'q': 'How much can I borrow?', 'a': 'Between ₹1,000 and ₹50,000 based on your income and repayment history.'},
-        {'q': 'How fast is disbursal?', 'a': 'Funds can be disbursed in as fast as 15 minutes after document verification.'},
+        {'q': 'How do I repay it?', 'a': 'One single payment 35 days after disbursal — the amount you borrowed plus a flat 8% fee. For example, ₹10,000 borrowed means ₹10,800 repaid on day 35. There are no monthly EMIs for this product.'},
+        {'q': 'What if I miss the day-35 repayment?', 'a': 'The loan becomes overdue and is handled the same way as any missed payment — our collections team will follow up. There is no separate penalty on top of the 8% fee.'},
       ],
     ),
     const LoanProduct(

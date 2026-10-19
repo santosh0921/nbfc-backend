@@ -18,6 +18,7 @@ class SliderInputField extends StatefulWidget {
     this.suffix,
     this.displayFormatter,
     this.fieldWidth = 108,
+    this.helperText,
   });
 
   final String label;
@@ -29,6 +30,11 @@ class SliderInputField extends StatefulWidget {
 
   /// Shown after the typed number, e.g. " months".
   final String? suffix;
+
+  /// Shown below the slider, e.g. "Enter an amount between ₹50,000 and
+  /// ₹50,00,000" — makes the min/max range visible without the user
+  /// having to drag to the end of the slider to discover it.
+  final String? helperText;
 
   /// If set, overrides the plain number shown in the field's read-out
   /// (the field itself always edits a plain number) — used for the
@@ -80,6 +86,8 @@ class _SliderInputFieldState extends State<SliderInputField> {
     widget.onChanged(clamped);
   }
 
+  int get _maxDigits => widget.max.round().toString().length;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -109,7 +117,10 @@ class _SliderInputFieldState extends State<SliderInputField> {
                       focusNode: _focusNode,
                       textAlign: TextAlign.right,
                       keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(_maxDigits),
+                      ],
                       style: theme.textTheme.titleSmall,
                       decoration: InputDecoration(
                         isDense: true,
@@ -146,6 +157,14 @@ class _SliderInputFieldState extends State<SliderInputField> {
             if (!_focusNode.hasFocus) _controller.text = v.round().toString();
           },
         ),
+        if (widget.helperText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              widget.helperText!,
+              style: theme.textTheme.labelSmall?.copyWith(color: theme.hintColor),
+            ),
+          ),
       ],
     );
   }

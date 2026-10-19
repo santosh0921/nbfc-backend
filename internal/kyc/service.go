@@ -6,11 +6,14 @@
 package kyc
 
 import (
+	"log"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/santosh0921/nbfc-backend/internal/audit"
+	"github.com/santosh0921/nbfc-backend/internal/bureau"
+	"github.com/santosh0921/nbfc-backend/internal/config"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 )
@@ -90,7 +93,18 @@ func Recompute(customerID uuid.UUID, actorType, actorRef string) (*models.Custom
 	case hasReview && review.Status == "REJECTED":
 		newStatus = models.KYCStatusRejected
 		failureReason = review.RejectionReason
-	case hasReview && review.Status == "APPROVED" && allProviderVerified:
+	case hasReview && review.Status == "APPROVED" && documentsSubmitted == requiredDocuments:
+		// Admin approval is authoritative once all three documents are
+		// actually on file — this no longer additionally requires each
+		// provider's own IsVerified flag. Aadhaar and Selfie have no
+		// automated provider configured in this deployment by design
+		// (every submission already routes to manual review — see the
+		// KYC portal's own case-review page copy), so allProviderVerified
+		// could never become true for them and this branch was previously
+		// dead code: an admin could click Approve and nothing would ever
+		// happen. A KYC_APPROVE admin who has reviewed all three submitted
+		// documents and explicitly approves IS the verification for the
+		// providers that have none.
 		newStatus = models.KYCStatusVerified
 	case allProviderVerified && (!hasReview || review.Status == "PENDING"):
 		// Every automated check passed but an admin hasn't signed off yet
@@ -110,6 +124,8 @@ func Recompute(customerID uuid.UUID, actorType, actorRef string) (*models.Custom
 	default:
 		newStatus = models.KYCStatusNotStarted
 	}
+
+	justVerified := newStatus == models.KYCStatusVerified && record.Status != models.KYCStatusVerified
 
 	record.Status = newStatus
 	record.FailureReason = failureReason
@@ -131,7 +147,44 @@ func Recompute(customerID uuid.UUID, actorType, actorRef string) (*models.Custom
 		Result: audit.ResultSuccess, Details: before, After: record,
 	})
 
+	// The first time (and only the first time — Recompute runs on every
+	// KYC-adjacent event, not just approval) a customer crosses into
+	// VERIFIED, hand them off to the credit bureau automatically instead
+	// of waiting for a loan application to trigger the pull (previously
+	// the ONLY trigger — internal/loans.getOrCreateCibilScore, called at
+	// apply-time). This mirrors that exact same sandbox-consent pattern.
+	// Best-effort: a bureau failure must never undo or block the KYC
+	// approval that already succeeded above — in production, where no
+	// customer-facing consent-capture screen exists yet (see that
+	// function's comment), this will simply fail closed with no score,
+	// exactly like the loan-apply path already does today.
+	if justVerified {
+		go triggerBureauCheckAfterApproval(customerID)
+	}
+
 	return record, nil
+}
+
+// triggerBureauCheckAfterApproval runs the bureau pull off the request
+// goroutine — PullScore makes a real (sandboxed outside production)
+// provider call and there's no reason the admin's "Approve" click should
+// block on it. Database/bureau errors are logged, not surfaced anywhere,
+// since by this point the KYC approval itself has already been
+// committed; a failed bureau pull just leaves the customer without a
+// score yet, the same recoverable state they'd be in if they applied for
+// a loan and the pull failed there.
+func triggerBureauCheckAfterApproval(customerID uuid.UUID) {
+	bureauName := models.BureauCIBIL
+	if !config.IsProduction() {
+		bureauName = models.BureauSandbox
+		if _, err := bureau.RecordConsent(customerID, bureauName, "KYC approval — credit bureau check", "v0-implicit-preconsent-flow", "", "", ""); err != nil {
+			log.Printf("kyc: post-approval bureau consent record failed for customer %s: %v", customerID, err)
+			return
+		}
+	}
+	if _, err := bureau.PullScore(customerID, bureauName); err != nil {
+		log.Printf("kyc: post-approval bureau pull failed for customer %s: %v", customerID, err)
+	}
 }
 
 // IsSubmissionEligible implements the "KYC completeness" gate loan

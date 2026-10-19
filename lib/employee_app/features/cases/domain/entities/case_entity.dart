@@ -4,7 +4,7 @@ enum LoanType { personal, gold, home, business, vehicle, education, msme }
 
 enum CasePriority { high, medium, low }
 
-enum CaseStatus { assigned, inProgress, pendingReview, completed, rejected }
+enum CaseStatus { pendingClaim, assigned, inProgress, pendingReview, completed, rejected }
 
 extension LoanTypeX on LoanType {
   String get label => switch (this) {
@@ -47,6 +47,7 @@ extension CasePriorityX on CasePriority {
 
 extension CaseStatusX on CaseStatus {
   String get label => switch (this) {
+        CaseStatus.pendingClaim => 'Available to Claim',
         CaseStatus.assigned => 'Assigned',
         CaseStatus.inProgress => 'In Progress',
         CaseStatus.pendingReview => 'Pending Review',
@@ -181,10 +182,14 @@ LoanType loanTypeFromBackendCategory(String category) {
 }
 
 /// Maps the backend's loan `status` string (internal/models/loan.go —
-/// `assigned`/`verified`/...) onto the app's [CaseStatus] enum. Only
-/// `assigned` and `verified` are reachable via the employee endpoints this
-/// app calls, but the mapping is total for safety.
+/// `assigned`/`verified`/...) onto the app's [CaseStatus] enum.
+/// `pending_claim` is a real, distinct status: this loan was broadcast to
+/// every verification employee in its city and nobody has claimed it yet
+/// (see submitLoanApplication's doc comment) — it must NOT collapse into
+/// `assigned`, or the UI would show it as already this employee's own
+/// task with no way to actually claim it first.
 CaseStatus caseStatusFromBackend(String status) => switch (status) {
+      'pending_claim' => CaseStatus.pendingClaim,
       'verified' || 'sanctioned' || 'disbursed' => CaseStatus.completed,
       'rejected' => CaseStatus.rejected,
       _ => CaseStatus.assigned,

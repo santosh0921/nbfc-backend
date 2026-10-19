@@ -56,7 +56,7 @@ class RecoveryDocumentSuccessPage extends StatelessWidget {
                   label: 'Share PDF Report',
                   icon: Icons.share_outlined,
                   variant: AppButtonVariant.outline,
-                  onPressed: () => Share.shareXFiles([XFile(pdfPath!)], text: shareText),
+                  onPressed: () => SharePlus.instance.share(ShareParams(files: [XFile(pdfPath!)], text: shareText)),
                 ),
                 const SizedBox(height: AppSpacing.sm),
               ],

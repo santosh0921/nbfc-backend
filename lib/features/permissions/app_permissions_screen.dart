@@ -20,6 +20,7 @@ class AppPermissionsScreen extends StatefulWidget {
 class _AppPermissionsScreenState extends State<AppPermissionsScreen> with WidgetsBindingObserver {
   bool? _notificationGranted;
   bool? _locationGranted;
+  bool? _batteryUnrestricted;
 
   @override
   void initState() {
@@ -43,10 +44,12 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen> with Widget
   Future<void> _refreshStatus() async {
     final notif = await PermissionService.isNotificationGranted();
     final loc = await PermissionService.isLocationGranted();
+    final battery = await PermissionService.isIgnoringBatteryOptimizations();
     if (!mounted) return;
     setState(() {
       _notificationGranted = notif;
       _locationGranted = loc;
+      _batteryUnrestricted = battery;
     });
   }
 
@@ -62,6 +65,13 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen> with Widget
     if (!mounted) return;
     setState(() => _locationGranted = granted);
     if (!granted) _showSettingsPrompt('Location');
+  }
+
+  Future<void> _requestBattery() async {
+    final granted = await PermissionService.requestIgnoreBatteryOptimizations();
+    if (!mounted) return;
+    setState(() => _batteryUnrestricted = granted);
+    if (!granted) _showSettingsPrompt('Background Notifications');
   }
 
   void _showSettingsPrompt(String label) {
@@ -83,7 +93,7 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen> with Widget
           padding: const EdgeInsets.all(20),
           children: [
             Text(
-              'Grant these permissions for the full NBFC Premium experience.',
+              'Grant these permissions for the full OneFinance experience.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
@@ -102,11 +112,21 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen> with Widget
               granted: _locationGranted,
               onRequest: _requestLocation,
             ),
+            const SizedBox(height: 14),
+            _PermissionCard(
+              icon: Icons.battery_charging_full_rounded,
+              title: 'Background Notifications',
+              description:
+                  'Some phones (Vivo, Oppo, Xiaomi and similar) block notifications while the app is closed unless it\'s '
+                  'exempted from battery optimization. Enable this so EMI reminders and updates arrive even when the app isn\'t open.',
+              granted: _batteryUnrestricted,
+              onRequest: _requestBattery,
+            ),
             const SizedBox(height: 24),
             if (_notificationGranted == true)
               OutlinedButton.icon(
                 onPressed: () => NotificationService.instance.show(
-                  title: 'NBFC Premium',
+                  title: 'OneFinance',
                   body: 'Notifications are working — you\'ll get real alerts like this one.',
                 ),
                 icon: const Icon(Icons.send_rounded, size: 18),

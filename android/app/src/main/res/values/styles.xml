@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is off -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <!-- Show a splash screen on the activity. Automatically removed when
              the Flutter engine draws its first frame -->
         <item name="android:windowBackground">@drawable/launch_background</item>
+        <!-- Without this, Android reserves a rectangular exclusion zone
+             around the camera cutout and draws the window background right
+             up to its edge — on a punch-hole phone that shows as a visible
+             border/frame around the cutout instead of app content flowing
+             naturally around it. shortEdges lets content extend into that
+             area on both the short edges (top/bottom), matching what
+             edge-to-edge already does for the status/nav bars. -->
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
     </style>
     <!-- Theme applied to the Android Window as soon as the process has started.
          This theme determines the color of the Android Window while your
@@ -14,6 +22,7 @@
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
     </style>
     <!-- image_cropper's crop screen (UCropActivity). fitsSystemWindows keeps
          its toolbar — and the Done checkmark on the right side of it —

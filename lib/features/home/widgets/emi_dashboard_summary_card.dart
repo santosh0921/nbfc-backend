@@ -28,6 +28,7 @@ class EmiDashboardSummaryCard extends StatelessWidget {
 
     return PremiumCard(
       onTap: onTap,
+      shine: true,
       child: Row(
         children: [
           Container(
@@ -70,7 +71,7 @@ class EmiDashboardSummaryCard extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondaryLight),
+          Icon(Icons.chevron_right_rounded, color: AppColors.textSecondaryOf(context)),
         ],
       ),
     );

@@ -20,6 +20,8 @@ class LoanAgreementPdf {
     required double emi,
     required String applicationId,
     required Uint8List signatureImage,
+    bool isInstantLoan = false,
+    int instantLoanTenureDays = 35,
   }) async {
     final pdf = pw.Document();
     final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ', decimalDigits: 0);
@@ -55,23 +57,25 @@ class LoanAgreementPdf {
               pw.Divider(),
               kfsRow('Loan Amount', currency.format(loanAmount)),
               pw.Divider(),
-              kfsRow('Tenure', '${tenureMonths.round()} months'),
+              kfsRow('Tenure', isInstantLoan ? '$instantLoanTenureDays days (fixed)' : '${tenureMonths.round()} months'),
               pw.Divider(),
-              kfsRow('Interest Rate', '$interestRate% p.a.'),
-              pw.Divider(),
-              kfsRow('Annual Percentage Rate (APR)', '$aprRate% p.a.'),
+              kfsRow(isInstantLoan ? 'Fee' : 'Interest Rate', isInstantLoan ? '${interestRate.round()}% flat, one-time' : '$interestRate% p.a.'),
+              if (!isInstantLoan) ...[
+                pw.Divider(),
+                kfsRow('Annual Percentage Rate (APR)', '$aprRate% p.a.'),
+              ],
               pw.Divider(),
               kfsRow('Processing Fee', processingFee),
               pw.Divider(),
               kfsRow('Overdue Charges', '2% p.m. on overdue amount'),
               pw.Divider(),
-              kfsRow('Estimated Monthly EMI', currency.format(emi)),
+              kfsRow(isInstantLoan ? 'Total Payable (due once)' : 'Estimated Monthly EMI', currency.format(emi)),
             ]),
           ),
           pw.SizedBox(height: 20),
           pw.Text('Terms & Conditions', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 8),
-          pw.Text(_termsText, style: const pw.TextStyle(fontSize: 9.5, lineSpacing: 2)),
+          pw.Text(isInstantLoan ? _instantLoanTermsText(instantLoanTenureDays) : _termsText, style: const pw.TextStyle(fontSize: 9.5, lineSpacing: 2)),
           pw.SizedBox(height: 28),
           pw.Text('Borrower Acknowledgement', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 8),
@@ -104,6 +108,36 @@ class LoanAgreementPdf {
 3. REPAYMENT: The borrower agrees to repay the loan through Equated Monthly Instalments (EMIs) as per the agreed schedule, via the registered bank account (NACH/auto-debit) or any other payment method made available in the app.
 
 4. OVERDUE CHARGES: In the event of delayed or missed EMI payments, overdue charges as stated in the Key Facts Statement will apply on the overdue amount, calculated from the due date until the date of actual payment.
+
+5. PREPAYMENT & FORECLOSURE: The borrower may prepay or foreclose the loan, in part or in full, subject to the applicable prepayment charges (if any) disclosed at the time of such request, in accordance with RBI's Fair Practices Code.
+
+6. CREDIT BUREAU REPORTING: The borrower authorizes the lender to obtain credit information from CIBIL and other credit information companies for assessment of this application, and to report the loan account status (including any delinquency) to such bureaus on an ongoing basis.
+
+7. COMMUNICATION CONSENT: The borrower consents to receive application status updates, payment reminders, and other service communication via SMS, email, WhatsApp, and push notification.
+
+8. GRIEVANCE REDRESSAL: Any grievance regarding this loan may be raised through the app's Support section or with the Nodal Officer, whose details are available under Compliance in the app. The lender will resolve grievances within the timelines prescribed by the RBI Fair Practices Code.
+
+9. GOVERNING LAW: This agreement is governed by the laws of India and is subject to the guidelines issued by the Reserve Bank of India for Non-Banking Financial Companies (NBFCs) and Digital Lending, as amended from time to time.
+
+10. DATA PRIVACY: Personal and financial information collected during this application will be used solely for loan processing, underwriting, servicing, and regulatory compliance, and will not be shared with third parties except as required by law or for the purposes disclosed in the app's Privacy Policy.
+
+By signing below, the borrower acknowledges having read, understood, and agreed to all the terms and conditions stated above in their entirety.
+''';
+
+  /// Instant Loan's own terms — sections 2/3/4 (interest, EMI repayment,
+  /// overdue) rewritten for a single flat-fee lump-sum repayment instead
+  /// of a reducing-balance EMI schedule; everything else (prepayment,
+  /// bureau reporting, communication consent, grievance redressal,
+  /// governing law, data privacy) is shared verbatim with the regular
+  /// agreement.
+  static String _instantLoanTermsText(int tenureDays) => '''
+1. LOAN DISBURSAL: The sanctioned loan amount will be disbursed to the borrower's registered bank account after successful completion of KYC verification and internal credit approval.
+
+2. FEE: A single, flat, one-time fee (stated in the Key Facts Statement above) is charged on the principal amount at disbursal. This is not a monthly or annual interest rate — no further interest accrues over the $tenureDays-day term.
+
+3. REPAYMENT: The borrower agrees to repay the full loan amount plus the flat fee (the "Total Payable" stated above) in a SINGLE payment, due $tenureDays days after the date of disbursal, via the registered bank account or any other payment method made available in the app. This is not an EMI (Equated Monthly Instalment) product — there is no monthly repayment schedule.
+
+4. OVERDUE CHARGES: In the event of delayed or missed repayment, this loan is treated the same as any other overdue loan on the platform — overdue charges as stated in the Key Facts Statement will apply on the overdue amount, and the account will be referred to collections, calculated from the due date until the date of actual payment.
 
 5. PREPAYMENT & FORECLOSURE: The borrower may prepay or foreclose the loan, in part or in full, subject to the applicable prepayment charges (if any) disclosed at the time of such request, in accordance with RBI's Fair Practices Code.
 

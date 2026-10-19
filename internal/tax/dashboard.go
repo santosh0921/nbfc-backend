@@ -26,6 +26,18 @@ type TaxDashboard struct {
 	DeducteeCount    int64 `json:"deducteeCount"`
 	TransactionCount int64 `json:"transactionCount"`
 
+	// GST breakdown (item H, GSTTransaction) — one row per taxable event
+	// (today: processing fee at disbursement). CGST+SGST apply to
+	// intra-state supply, IGST to inter-state — never both on the same
+	// transaction, so CGSTPaise+SGSTPaise+IGSTPaise always equals
+	// GSTPayablePaise exactly.
+	CGSTPaise       int64 `json:"cgstPaise"`
+	SGSTPaise       int64 `json:"sgstPaise"`
+	IGSTPaise       int64 `json:"igstPaise"`
+	GSTPayablePaise int64 `json:"gstPayablePaise"` // cgst + sgst + igst
+	GSTTaxableValuePaise int64 `json:"gstTaxableValuePaise"`
+	GSTTransactionCount  int64 `json:"gstTransactionCount"`
+
 	GeneratedAt time.Time `json:"generatedAt"`
 }
 
@@ -58,6 +70,21 @@ func GenerateTaxDashboard(from, to time.Time) TaxDashboard {
 
 	database.DB.Model(&models.TDSDeductee{}).Count(&d.DeducteeCount)
 	database.DB.Model(&models.TDSTransaction{}).Where("transaction_date BETWEEN ? AND ?", from, to).Count(&d.TransactionCount)
+
+	database.DB.Model(&models.GSTTransaction{}).
+		Where("created_at BETWEEN ? AND ?", from, to).
+		Select("COALESCE(SUM(cgst_paise), 0)").Scan(&d.CGSTPaise)
+	database.DB.Model(&models.GSTTransaction{}).
+		Where("created_at BETWEEN ? AND ?", from, to).
+		Select("COALESCE(SUM(sgst_paise), 0)").Scan(&d.SGSTPaise)
+	database.DB.Model(&models.GSTTransaction{}).
+		Where("created_at BETWEEN ? AND ?", from, to).
+		Select("COALESCE(SUM(igst_paise), 0)").Scan(&d.IGSTPaise)
+	database.DB.Model(&models.GSTTransaction{}).
+		Where("created_at BETWEEN ? AND ?", from, to).
+		Select("COALESCE(SUM(taxable_value_paise), 0)").Scan(&d.GSTTaxableValuePaise)
+	database.DB.Model(&models.GSTTransaction{}).Where("created_at BETWEEN ? AND ?", from, to).Count(&d.GSTTransactionCount)
+	d.GSTPayablePaise = d.CGSTPaise + d.SGSTPaise + d.IGSTPaise
 
 	return d
 }

@@ -50,6 +50,7 @@ class _RecoveryCaseDetailPageState extends State<RecoveryCaseDetailPage> {
 
     return Scaffold(
       body: CustomScrollView(
+        clipBehavior: Clip.none,
         slivers: [
           SliverToBoxAdapter(
             child: GradientHeader(
@@ -544,9 +545,11 @@ class _RecoveryActionsCard extends StatelessWidget {
                               label: const Text('Download'),
                             ),
                             TextButton.icon(
-                              onPressed: () => Share.shareXFiles(
-                                [XFile(receiptFile!.path)],
-                                text: 'Payment receipt for ${caseItem.customerName}',
+                              onPressed: () => SharePlus.instance.share(
+                                ShareParams(
+                                  files: [XFile(receiptFile!.path)],
+                                  text: 'Payment receipt for ${caseItem.customerName}',
+                                ),
                               ),
                               icon: const Icon(Icons.share_outlined, size: 18),
                               label: const Text('Share'),

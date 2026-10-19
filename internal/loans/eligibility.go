@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
@@ -42,6 +45,90 @@ const (
 	// retail-lending ceiling.
 	maxFOIRPercent = 50.0
 )
+
+// Instant Loan — a distinct short-term product, not just a Category label
+// on the regular EMI product. Single lump-sum repayment 35 days after
+// disbursement, a flat one-time fee instead of reducing-balance monthly
+// interest, and its own (smaller) amount band — none of the regular
+// min/maxLoanAmount, min/maxTenureMonths, or FOIR rules apply to it. See
+// evaluateInstantLoanEligibility and generateEmiSchedule's branch in
+// emi_service.go for where this actually takes effect.
+const (
+	instantLoanCategory       = "Instant Loan"
+	instantLoanMinAmount      = 1000.0
+	instantLoanMaxAmount      = 50000.0
+	instantLoanTenureDays     = 35
+	instantLoanFlatFeePercent = 8.0
+)
+
+// isInstantLoanCategory matches case-insensitively since Category is a
+// free-text field the client supplies, not a constrained enum.
+func isInstantLoanCategory(category string) bool {
+	return strings.EqualFold(category, instantLoanCategory)
+}
+
+const goldLoanCategory = "Gold Loan"
+
+// isGoldLoanCategory — same case-insensitive matching as isInstantLoanCategory.
+// Gold Loan uses the regular EMI eligibility rules (min/max amount, tenure,
+// FOIR) at apply time — what differs is repayment shape, not eligibility —
+// see generateGoldLoanInstallments in emi_service.go.
+func isGoldLoanCategory(category string) bool {
+	return strings.EqualFold(category, goldLoanCategory)
+}
+
+const farmerLoanCategory = "Farmer Loan"
+
+// isFarmerLoanCategory — same case-insensitive matching. Farmer Loan also
+// uses the regular EMI eligibility rules at apply time (see
+// isGoldLoanCategory's comment) — only repayment shape differs, handled
+// in generateFarmerLoanInstallment in emi_service.go.
+func isFarmerLoanCategory(category string) bool {
+	return strings.EqualFold(category, farmerLoanCategory)
+}
+
+// InstantLoanEligibilityResult mirrors EligibilityResult's shape closely
+// enough to reuse the same JSON response handling in SubmitLoanHandler,
+// but with fields that actually mean something for a flat-fee, fixed-term
+// product (no monthly EMI, no annual rate).
+type InstantLoanEligibilityResult struct {
+	Eligible       bool
+	Message        string
+	FlatFeePercent float64
+	TotalPayable   float64
+	DueInDays      int
+}
+
+// evaluateInstantLoanEligibility is evaluateEligibility's counterpart for
+// the Instant Loan product: same CIBIL-reject gate as every other loan
+// (item G/underwriting policy still applies to who gets approved at all),
+// but its own amount band and no FOIR/tenure checks — a 35-day, capped-at-
+// ₹50,000 obligation is a fundamentally different affordability shape than
+// a 5-year EMI, so reusing the monthly-FOIR math here would either reject
+// good customers or approve genuinely unaffordable ones for the wrong
+// reason.
+func evaluateInstantLoanEligibility(amount float64, cibil int) InstantLoanEligibilityResult {
+	if amount < instantLoanMinAmount || amount > instantLoanMaxAmount {
+		return InstantLoanEligibilityResult{
+			Eligible: false,
+			Message:  fmt.Sprintf("Instant Loan amount must be between ₹%s and ₹%s.", formatAmount(instantLoanMinAmount), formatAmount(instantLoanMaxAmount)),
+		}
+	}
+	if _, ok := rateForCibil(cibil); !ok {
+		return InstantLoanEligibilityResult{
+			Eligible: false,
+			Message:  "Based on your credit profile, this application can't be processed right now.",
+		}
+	}
+
+	totalPayable := round2(amount * (1 + instantLoanFlatFeePercent/100))
+	return InstantLoanEligibilityResult{
+		Eligible:       true,
+		FlatFeePercent: instantLoanFlatFeePercent,
+		TotalPayable:   totalPayable,
+		DueInDays:      instantLoanTenureDays,
+	}
+}
 
 // EligibilityResult is what the apply flow needs to either proceed (with
 // the real EMI/rate the customer will be offered) or show a specific,
@@ -160,6 +247,37 @@ func formatAmount(v float64) string {
 // own BureauRequest) and separate from the sanction-time decision
 // recorded in maker_checker_handler.go. loanID is nil when the
 // application was rejected before a LoanApplication row ever existed.
+// recordInstantLoanEligibilityDecision is recordEligibilityDecision's
+// counterpart for the Instant Loan product, so its apply-time decisions
+// show up in the same Credit Decision audit trail as every other loan's.
+func recordInstantLoanEligibilityDecision(customerID uuid.UUID, loanID uint, result InstantLoanEligibilityResult, cibil int, amount float64) {
+	decision := "ELIGIBLE"
+	reasonCodes := ""
+	if !result.Eligible {
+		decision = "REJECTED"
+		if amount < instantLoanMinAmount || amount > instantLoanMaxAmount {
+			reasonCodes = "INSTANT_LOAN_AMOUNT_OUT_OF_RANGE"
+		} else {
+			reasonCodes = "CIBIL_BELOW_THRESHOLD"
+		}
+	}
+
+	inputs, _ := json.Marshal(map[string]interface{}{
+		"amountRequested": amount, "cibilScore": cibil,
+		"flatFeePercent": result.FlatFeePercent, "totalPayable": result.TotalPayable, "dueInDays": result.DueInDays,
+	})
+
+	var loanIDPtr *uint
+	if loanID != 0 {
+		loanIDPtr = &loanID
+	}
+
+	database.DB.Create(&models.CreditDecision{
+		LoanID: loanIDPtr, CustomerID: customerID, PolicyVersion: PolicyVersion + "-instant", InputsJSON: string(inputs),
+		Decision: decision, ReasonCodes: reasonCodes, ReviewerOrSystem: "system",
+	})
+}
+
 func recordEligibilityDecision(loanID uint, result EligibilityResult, cibil int, amount, monthlyIncome float64) {
 	decision := "ELIGIBLE"
 	reasonCodes := ""

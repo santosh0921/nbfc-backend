@@ -6,6 +6,7 @@ import '../providers/agency_provider.dart';
 import '../providers/connectivity_provider.dart';
 import '../providers/theme_provider.dart';
 import '../network/api_client.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../storage/local_storage_service.dart';
 import '../storage/mpin_service.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
@@ -44,7 +45,6 @@ List<SingleChildWidget> appProviders({EmployeeAppModule module = EmployeeAppModu
         final auth = AuthProvider(
           loginUseCase: sl.get<LoginUseCase>(),
           registerUseCase: sl.get<RegisterUseCase>(),
-          biometricLoginUseCase: sl.get<BiometricLoginUseCase>(),
           logoutUseCase: sl.get<LogoutUseCase>(),
           forgotPasswordUseCase: sl.get<ForgotPasswordUseCase>(),
           authRepository: sl.get<AuthRepository>(),
@@ -56,6 +56,21 @@ List<SingleChildWidget> appProviders({EmployeeAppModule module = EmployeeAppModu
         // a dead/expired restored session into an actual logout instead
         // of a dashboard full of silently-failing 401s.
         sl.get<ApiClient>().onUnauthorized = () => auth.logout();
+
+        // Register this device's FCM token against whichever employee
+        // just authenticated. Uses the Dio instance directly (not a
+        // second ApiClient wrapper) since ApiClient's interceptor already
+        // attaches the current Authorization header from secure storage
+        // automatically — no token needs to be threaded through here.
+        final dio = sl.get<ApiClient>().dio;
+        PushNotificationService.instance.setRegisterCallback(
+          (fcmToken) => dio.post('/device-token', data: {'token': fcmToken, 'platform': 'android'}),
+        );
+        auth.addListener(() {
+          if (auth.status == AuthStatus.authenticated) {
+            PushNotificationService.instance.registerTokenForCurrentUser();
+          }
+        });
         return auth;
       },
     ),

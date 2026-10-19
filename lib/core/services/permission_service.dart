@@ -21,5 +21,22 @@ class PermissionService {
     return status.isGranted;
   }
 
+  /// Whether the OS is currently allowed to kill this app in the
+  /// background / throttle its wake-ups. Notification permission alone
+  /// does not guarantee a push actually arrives while the app isn't in
+  /// the foreground — on Vivo, Oppo, Xiaomi and similar OEMs' aggressive
+  /// battery managers, an app that isn't exempted from battery
+  /// optimization gets its process frozen or FCM wake-ups dropped
+  /// entirely, so notifications only ever show up while the app happens
+  /// to already be open. That's a device-level restriction, not something
+  /// server-side push code can work around — this exemption is the actual
+  /// fix.
+  static Future<bool> isIgnoringBatteryOptimizations() async => Permission.ignoreBatteryOptimizations.isGranted;
+
+  static Future<bool> requestIgnoreBatteryOptimizations() async {
+    final status = await Permission.ignoreBatteryOptimizations.request();
+    return status.isGranted;
+  }
+
   static Future<void> openSettings() => openAppSettings();
 }

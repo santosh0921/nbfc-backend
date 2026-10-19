@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -70,6 +71,13 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    // Previously nothing checked this at all — the profile photo was
+    // purely decorative on this screen, so an employee could tap "Save &
+    // Continue" having never opened the camera.
+    if (_photoPath == null) {
+      AppSnackbar.danger(context, 'Tap the circle above to take your profile photo before continuing');
+      return;
+    }
     setState(() => _isSaving = true);
     await context.read<AuthProvider>().completeProfileSetup();
     if (!mounted) return;
@@ -135,7 +143,9 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                 controller: _phoneController,
                 prefixIcon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
-                validator: (v) => (v == null || v.trim().length < 10) ? 'Enter a valid mobile number' : null,
+                maxLength: 10,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: (v) => (v == null || v.trim().length != 10) ? 'Enter a valid 10-digit mobile number' : null,
               ),
               const SizedBox(height: AppSpacing.md),
               AppTextField(
@@ -165,7 +175,9 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                 controller: _emergencyContactController,
                 prefixIcon: Icons.emergency_outlined,
                 keyboardType: TextInputType.phone,
-                validator: (v) => (v == null || v.trim().length < 10) ? 'Enter a valid contact number' : null,
+                maxLength: 10,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: (v) => (v == null || v.trim().length != 10) ? 'Enter a valid 10-digit contact number' : null,
               ),
               const SizedBox(height: AppSpacing.xl),
               AppButton(label: 'Save & Continue', isLoading: _isSaving, onPressed: _save),

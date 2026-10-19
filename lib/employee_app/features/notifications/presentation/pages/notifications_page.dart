@@ -38,12 +38,26 @@ class _NotificationsPageState extends State<NotificationsPage> {
       padding: const EdgeInsets.all(AppSpacing.md),
       body: provider.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : provider.items.isEmpty
+          : provider.loadError != null
+              ? RefreshIndicator(
+                  onRefresh: provider.load,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      const SizedBox(height: AppSpacing.xxl),
+                      Icon(Icons.cloud_off_outlined, size: 40, color: Theme.of(context).textTheme.bodySmall?.color),
+                      const SizedBox(height: AppSpacing.sm),
+                      Center(child: Text(provider.loadError!, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium)),
+                    ],
+                  ),
+                )
+              : provider.items.isEmpty
               ? Center(child: Text('No notifications yet', style: Theme.of(context).textTheme.bodyMedium))
               : RefreshIndicator(
                   onRefresh: provider.load,
                   child: ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),
+                    clipBehavior: Clip.none,
                     itemCount: provider.items.length,
                     separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                     itemBuilder: (context, index) {

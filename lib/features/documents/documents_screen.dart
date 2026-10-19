@@ -205,14 +205,14 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceLight,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceOf(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderLight, borderRadius: BorderRadius.circular(4))),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderOf(context), borderRadius: BorderRadius.circular(4))),
             const SizedBox(height: 16),
             Text('What document is this?', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
@@ -261,14 +261,14 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceLight,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceOf(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderLight, borderRadius: BorderRadius.circular(4))),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderOf(context), borderRadius: BorderRadius.circular(4))),
             const SizedBox(height: 16),
             Text('Add document', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
@@ -333,15 +333,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       return (bytes, picked.name);
     }
 
-    final result = await FilePicker.pickFiles(
+    final picked = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: const ['jpg', 'jpeg', 'png', 'pdf'],
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return null;
-    final picked = result.files.single;
-    final bytes = picked.bytes ?? (picked.path != null ? await File(picked.path!).readAsBytes() : null);
-    if (bytes == null) return null;
+    if (picked == null) return null;
+    final bytes = await picked.readAsBytes();
     return (bytes, picked.name);
   }
 
@@ -447,7 +444,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       if (doc.isPdf) {
         await Printing.sharePdf(bytes: await file.readAsBytes(), filename: doc.fileName);
       } else {
-        await Share.shareXFiles([XFile(file.path)], text: doc.docType);
+        await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: doc.docType));
       }
     } catch (e) {
       if (!mounted) return;
@@ -696,7 +693,7 @@ class _UploadedDocumentsSection extends StatelessWidget {
       return PremiumCard(
         child: Row(
           children: [
-            const Icon(Icons.folder_off_outlined, color: AppColors.textSecondaryLight),
+            Icon(Icons.folder_off_outlined, color: AppColors.textSecondaryOf(context)),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -766,7 +763,7 @@ class _UploadedDocumentTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondaryLight),
+        icon: Icon(Icons.more_vert_rounded, color: AppColors.textSecondaryOf(context)),
         onSelected: (value) {
           switch (value) {
             case 'view':

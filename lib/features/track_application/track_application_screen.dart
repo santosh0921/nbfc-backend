@@ -123,7 +123,7 @@ class _TrackApplicationScreenState extends State<TrackApplicationScreen> with Ti
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.description_outlined, size: 48, color: AppColors.textSecondaryLight),
+                      Icon(Icons.description_outlined, size: 48, color: AppColors.textSecondaryOf(context)),
                       const SizedBox(height: 12),
                       Text('No loan applications yet.', style: theme.textTheme.titleMedium),
                     ],
@@ -352,7 +352,7 @@ class _StageTile extends StatelessWidget {
     final color = switch (state) {
       _StageState.done => AppColors.success,
       _StageState.active => AppColors.primary,
-      _StageState.pending => AppColors.textSecondaryLight,
+      _StageState.pending => AppColors.textSecondaryOf(context),
     };
     return IntrinsicHeight(
       child: Row(
@@ -407,8 +407,8 @@ class _StageTile extends StatelessWidget {
                     builder: (context, value, _) => Container(
                       width: 2,
                       margin: const EdgeInsets.symmetric(vertical: 2),
-                      decoration: const BoxDecoration(
-                        color: AppColors.borderLight,
+                      decoration: BoxDecoration(
+                        color: AppColors.borderOf(context),
                       ),
                       child: FractionallySizedBox(
                         alignment: Alignment.topCenter,
@@ -430,7 +430,7 @@ class _StageTile extends StatelessWidget {
                   Text(
                     stage.title,
                     style: theme.textTheme.titleSmall?.copyWith(
-                      color: state == _StageState.pending ? AppColors.textSecondaryLight : null,
+                      color: state == _StageState.pending ? AppColors.textSecondaryOf(context) : null,
                       fontWeight: state == _StageState.active ? FontWeight.w700 : FontWeight.w600,
                     ),
                   ),

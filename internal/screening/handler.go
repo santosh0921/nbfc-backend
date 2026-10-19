@@ -6,9 +6,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/santosh0921/nbfc-backend/internal/customerinfo"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 )
+
+// screeningRequestRow adds the customer's real name (batched lookup, never
+// fabricated — omitted when no CustomerProfile row exists) to the raw
+// ScreeningRequest row.
+type screeningRequestRow struct {
+	models.ScreeningRequest
+	CustomerName string `json:"customerName,omitempty"`
+}
 
 // AdminListHandler handles GET /admin/screening — the "Screening Results"
 // admin panel screen. Defaults to only PENDING-decision rows (the
@@ -20,7 +29,18 @@ func AdminListHandler(c *gin.Context) {
 	}
 	var records []models.ScreeningRequest
 	q.Order("screened_at desc").Limit(200).Find(&records)
-	c.JSON(http.StatusOK, records)
+
+	ids := make([]uuid.UUID, len(records))
+	for i, r := range records {
+		ids[i] = r.CustomerID
+	}
+	names := customerinfo.BatchNames(ids)
+
+	out := make([]screeningRequestRow, len(records))
+	for i, r := range records {
+		out[i] = screeningRequestRow{ScreeningRequest: r, CustomerName: names[r.CustomerID]}
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 // AdminRunHandler handles POST /admin/screening/:customerId/run — triggers

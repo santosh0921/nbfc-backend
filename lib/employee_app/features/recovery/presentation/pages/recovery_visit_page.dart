@@ -374,7 +374,12 @@ class _PhotosStepState extends State<_PhotosStep> {
 
     return _StepScaffold(
       title: 'Photo Capture',
-      footer: AppButton(label: 'Next: Documents', onPressed: widget.onNext),
+      footer: AppButton(
+        label: visit.photoPaths.isEmpty ? 'Capture at least one photo to continue' : 'Next: Documents',
+        // Previously enabled unconditionally, letting the officer skip
+        // photo evidence for a visit entirely.
+        onPressed: visit.photoPaths.isEmpty ? null : widget.onNext,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

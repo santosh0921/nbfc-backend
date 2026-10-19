@@ -18,10 +18,12 @@ class AppColors {
   static const Color secondary = Color(0xFF14151A); // near-black — CTAs, headings
   static const Color accent = Color(0xFF1E3A8A); // reserved, used sparingly (links)
 
-  // Surfaces
-  static const Color background = Color(0xFFFFFFFF);
+  // Surfaces — warm off-white canvas (matches the customer app's
+  // background/surface split) rather than pure white, so both apps read
+  // as one product rather than two different whites side by side.
+  static const Color background = Color(0xFFFAFAF7);
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceMuted = Color(0xFFF7F7F9);
+  static const Color surfaceMuted = Color(0xFFF7F7F1);
   static const Color darkBackground = Color(0xFF0E0E11);
   static const Color darkSurfaceBase = Color(0xFF1B1C21);
 

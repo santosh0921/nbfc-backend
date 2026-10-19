@@ -90,8 +90,8 @@ class _DocumentUploadTileState extends State<DocumentUploadTile> {
   Future<void> _pickPdf() async {
     Navigator.of(context).pop(); // close the bottom sheet
     try {
-      final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
-      final path = result?.files.single.path;
+      final picked = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: ['pdf']);
+      final path = picked?.path;
       if (path == null) return;
 
       setState(() {
@@ -119,14 +119,14 @@ class _DocumentUploadTileState extends State<DocumentUploadTile> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceLight,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceOf(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderLight, borderRadius: BorderRadius.circular(4))),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderOf(context), borderRadius: BorderRadius.circular(4))),
             const SizedBox(height: 16),
             Text('Upload ${widget.label}', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
@@ -204,7 +204,7 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (status) {
       case DocStatus.notUploaded:
-        return Text('Tap to upload', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryLight));
+        return Text('Tap to upload', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryOf(context)));
       case DocStatus.verifying:
         return Row(
           mainAxisSize: MainAxisSize.min,

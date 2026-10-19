@@ -14,6 +14,7 @@ import '../../core/services/notification_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/utils/statement_pdf_generator.dart';
+import '../../core/widgets/gateway_payment_screen.dart';
 import '../../core/widgets/gradient_container.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../core/widgets/success_celebration.dart';
@@ -170,13 +171,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (confirmed == true) await _completePayment();
   }
 
-  /// Demo mode: actually settles the installment server-side
-  /// (`POST .../demo-pay`) rather than just faking a delay — so the app's
-  /// own upcoming-EMI and payment-history views reflect a real state
-  /// change, not a UI-only illusion. See CustomerDemoPayEmiHandler's doc
-  /// comment for why this is safe (DEMO_MODE-gated, ownership-checked, no
-  /// customer-supplied "proof" accepted) and distinct from the real
-  /// gateway path used when a payment gateway is actually configured.
+  /// Creates a real gateway order and opens the actual Razorpay checkout
+  /// via [GatewayPaymentScreen] — the payment-method fields on this
+  /// screen (UPI ID, card number, bank) are cosmetic pre-fill only, never
+  /// sent anywhere themselves; the real charge happens entirely inside
+  /// Razorpay's own checkout UI against the order the backend created.
+  /// Falls back to demo settlement (`POST .../demo-pay`, DEMO_MODE-gated)
+  /// only when the backend reports no gateway is configured (503) — see
+  /// CustomerDemoPayEmiHandler's doc comment for why that path is safe.
   Future<void> _completePayment() async {
     final loan = _cachedLoan;
     final token = AuthProvider.instance.token;
@@ -186,6 +188,46 @@ class _PaymentScreenState extends State<PaymentScreen> {
       _isProcessing = true;
       _payError = null;
     });
+    try {
+      final order = await EmiApiService.createPaymentOrder(token, loan.rawLoanId, loan.nextInstallmentId);
+      if (!mounted) return;
+      final settled = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => GatewayPaymentScreen(
+            order: order,
+            amount: loan.nextEmiAmount,
+            label: 'EMI for ${loan.productName}',
+          ),
+        ),
+      );
+      if (!mounted) return;
+      if (settled == true) {
+        setState(() {
+          _isProcessing = false;
+          _isPaid = true;
+        });
+        NotificationService.instance.show(
+          title: 'Payment Successful',
+          body: 'Your EMI payment for ${loan.productName} was received successfully.',
+        );
+      } else {
+        setState(() => _isProcessing = false);
+      }
+    } on ApiException catch (e) {
+      if (e.statusCode == 503) {
+        await _completeDemoPayment(token, loan);
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _payError = e.message;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _completeDemoPayment(String token, ActiveLoan loan) async {
     try {
       await EmiApiService.demoPay(token, loan.rawLoanId, loan.nextInstallmentId);
       if (!mounted) return;
@@ -496,7 +538,7 @@ class _PaymentSuccessViewState extends State<_PaymentSuccessView> with SingleTic
     final date = DateFormat('d MMM yyyy, h:mm a').format(DateTime.now());
 
     return Scaffold(
-      backgroundColor: AppColors.backgroundLight,
+      backgroundColor: AppColors.backgroundOf(context),
       appBar: AppBar(title: const Text('Payment Successful')),
       body: SafeArea(
         child: ListView(
@@ -707,7 +749,7 @@ class _BankList extends StatelessWidget {
                 title: Text(_banks[i], style: theme.textTheme.titleSmall),
                 trailing: Icon(
                   selectedBank == _banks[i] ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: selectedBank == _banks[i] ? AppColors.primary : AppColors.textSecondaryLight,
+                  color: selectedBank == _banks[i] ? AppColors.primary : AppColors.textSecondaryOf(context),
                 ),
               ),
               if (i != _banks.length - 1) const Divider(height: 1, indent: 16),
@@ -763,7 +805,7 @@ class _MethodTile extends StatelessWidget {
           ),
           Icon(
             selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-            color: selected ? AppColors.primary : AppColors.textSecondaryLight,
+            color: selected ? AppColors.primary : AppColors.textSecondaryOf(context),
           ),
         ],
       ),

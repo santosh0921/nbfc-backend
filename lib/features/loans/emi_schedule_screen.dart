@@ -9,6 +9,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/utils/statement_pdf_generator.dart';
+import '../../core/widgets/gateway_payment_screen.dart';
 import '../../core/widgets/premium_card.dart';
 import '../../models/emi_schedule.dart';
 import 'widgets/emi_calendar_view.dart';
@@ -87,7 +88,11 @@ class _EmiScheduleScreenState extends State<EmiScheduleScreen> {
       if (!mounted) return;
       final settled = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
-          builder: (_) => _PaymentProcessingScreen(order: order, installment: installment),
+          builder: (_) => GatewayPaymentScreen(
+            order: order,
+            amount: installment.amount,
+            label: 'Installment #${installment.installmentNumber}',
+          ),
         ),
       );
       if (settled == true && mounted) {
@@ -297,7 +302,7 @@ class _ScheduleHeader extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.event_rounded, size: 16, color: AppColors.textSecondaryLight),
+                Icon(Icons.event_rounded, size: 16, color: AppColors.textSecondaryOf(context)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -471,7 +476,7 @@ class _EmptyState extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.event_note_rounded, size: 56, color: AppColors.textSecondaryLight),
+                  Icon(Icons.event_note_rounded, size: 56, color: AppColors.textSecondaryOf(context)),
                   const SizedBox(height: 12),
                   Text('No EMI schedule yet for this loan', style: theme.textTheme.titleMedium),
                 ],
@@ -511,141 +516,3 @@ class _ErrorState extends StatelessWidget {
   }
 }
 
-/// Full-screen payment status — Processing/Success/Failed/Pending. This
-/// screen NEVER declares the payment successful itself: it only polls
-/// GET /auth/payments/:paymentId, which reflects whatever the backend's
-/// gateway webhook has already independently verified. In a deployment
-/// with no live payment gateway configured, this will keep polling
-/// INITIATED (nothing external ever confirms it) — expected, and stated
-/// in the Phase 2 report; wiring up the actual checkout SDK/redirect
-/// requires real gateway credentials this environment doesn't have.
-class _PaymentProcessingScreen extends StatefulWidget {
-  const _PaymentProcessingScreen({required this.order, required this.installment});
-
-  final PaymentOrder order;
-  final EmiInstallment installment;
-
-  @override
-  State<_PaymentProcessingScreen> createState() => _PaymentProcessingScreenState();
-}
-
-class _PaymentProcessingScreenState extends State<_PaymentProcessingScreen> {
-  PaymentStatus? _status;
-  Timer? _pollTimer;
-  int _elapsedSeconds = 0;
-  static const _maxWaitSeconds = 180;
-
-  @override
-  void initState() {
-    super.initState();
-    _startPolling();
-  }
-
-  void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      _elapsedSeconds += 3;
-      final token = AuthProvider.instance.token;
-      if (token == null) return;
-      try {
-        final status = await EmiApiService.paymentStatus(token, widget.order.paymentId);
-        if (!mounted) return;
-        setState(() => _status = status);
-        if (status.status == 'SUCCESS' || status.status == 'FAILED' || status.status == 'CANCELLED') {
-          _pollTimer?.cancel();
-        } else if (_elapsedSeconds >= _maxWaitSeconds) {
-          _pollTimer?.cancel();
-        }
-      } catch (_) {
-        // Transient network error — keep polling silently rather than
-        // showing a scary error for what's usually a blip.
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _pollTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final status = _status?.status ?? 'INITIATED';
-    final timedOut = _elapsedSeconds >= _maxWaitSeconds && (status == 'INITIATED' || status == 'PENDING');
-
-    return PopScope(
-      canPop: status == 'SUCCESS' || status == 'FAILED' || status == 'CANCELLED',
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) Navigator.of(context).pop(status == 'SUCCESS');
-      },
-      child: Scaffold(
-        backgroundColor: AppColors.primary,
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (status == 'SUCCESS') ...[
-                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 72),
-                  const SizedBox(height: 20),
-                  const Text('Payment Successful', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  Text('Installment #${widget.installment.installmentNumber} settled.',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 14)),
-                  const SizedBox(height: 8),
-                  Text('Reference: ${widget.order.gatewayOrderId}',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
-                ] else if (status == 'FAILED' || status == 'CANCELLED') ...[
-                  const Icon(Icons.error_rounded, color: Colors.white, size: 72),
-                  const SizedBox(height: 20),
-                  const Text('Payment Failed', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  if (_status?.failureReason?.isNotEmpty == true) ...[
-                    const SizedBox(height: 8),
-                    Text(_status!.failureReason!, textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 14)),
-                  ],
-                ] else if (timedOut) ...[
-                  const Icon(Icons.hourglass_bottom_rounded, color: Colors.white, size: 72),
-                  const SizedBox(height: 20),
-                  const Text('Payment Pending', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  Text('Still waiting for confirmation — you can safely close this and check back later. We\'ll update your EMI once it\'s confirmed.',
-                      textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 14)),
-                ] else ...[
-                  const SizedBox(
-                    width: 56,
-                    height: 56,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text('Processing Payment…', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  Text('₹${widget.installment.amount.toStringAsFixed(2)} · Installment #${widget.installment.installmentNumber}',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 14)),
-                  const SizedBox(height: 4),
-                  Text('Complete the payment in your UPI/banking app. This screen updates automatically — never tap away.',
-                      textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
-                ],
-                const SizedBox(height: 36),
-                if (status == 'SUCCESS' || status == 'FAILED' || status == 'CANCELLED' || timedOut)
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(status == 'SUCCESS'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.primary,
-                        minimumSize: const Size.fromHeight(52),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
-                      ),
-                      child: const Text('Done', style: TextStyle(fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

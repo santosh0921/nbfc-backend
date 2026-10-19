@@ -95,7 +95,7 @@ class _HistoryCard extends StatelessWidget {
                   label: const Text('View PDF'),
                 ),
                 TextButton.icon(
-                  onPressed: () => Share.shareXFiles([XFile(record.pdfPath!)], text: 'Verification report for ${record.customerName}'),
+                  onPressed: () => SharePlus.instance.share(ShareParams(files: [XFile(record.pdfPath!)], text: 'Verification report for ${record.customerName}')),
                   icon: const Icon(Icons.share_outlined, size: 18),
                   label: const Text('Share'),
                 ),

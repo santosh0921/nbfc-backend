@@ -351,7 +351,7 @@ class _TourTooltip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceOf(context),
         borderRadius: BorderRadius.circular(AppRadius.xl),
         border: Border.all(color: step.gradient.last.withValues(alpha: 0.22)),
         boxShadow: [
@@ -392,9 +392,9 @@ class _TourTooltip extends StatelessWidget {
               ),
               GestureDetector(
                 onTap: onSkip,
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close_rounded, size: 18, color: AppColors.textSecondaryLight),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(Icons.close_rounded, size: 18, color: AppColors.textSecondaryOf(context)),
                 ),
               ),
             ],
@@ -421,7 +421,7 @@ class _TourTooltip extends StatelessWidget {
             children: [
               TextButton(
                 onPressed: onSkip,
-                style: TextButton.styleFrom(foregroundColor: AppColors.textSecondaryLight),
+                style: TextButton.styleFrom(foregroundColor: AppColors.textSecondaryOf(context)),
                 child: const Text('Skip Tour'),
               ),
               const Spacer(),

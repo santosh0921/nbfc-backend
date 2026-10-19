@@ -15,6 +15,7 @@ class AppScaffold extends StatelessWidget {
     this.bottomNavigationBar,
     this.backgroundColor,
     this.padding,
+    this.drawer,
   });
 
   final Widget body;
@@ -27,11 +28,13 @@ class AppScaffold extends StatelessWidget {
   final Widget? bottomNavigationBar;
   final Color? backgroundColor;
   final EdgeInsets? padding;
+  final Widget? drawer;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
+      drawer: drawer,
       appBar: showAppBar && title != null
           ? AppTopBar(title: title!, subtitle: subtitle, actions: actions, leading: leading)
           : null,

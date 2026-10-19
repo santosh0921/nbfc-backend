@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/premium_button.dart';
 import 'widgets/auth_illustration.dart';
 import 'widgets/code_boxes.dart';
 
@@ -161,22 +162,16 @@ class _OtpVerifyPageState extends State<OtpVerifyPage> {
                 ),
               ),
               const SizedBox(height: 32),
-              ElevatedButton(
+              PremiumButton(
+                label: 'Continue',
+                loading: _isVerifying,
                 onPressed: _code.length == 6 && !_isVerifying ? _verify : null,
-                style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-                child: _isVerifying
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2.4, valueColor: AlwaysStoppedAnimation(Colors.white)),
-                      )
-                    : const Text('Continue'),
               ),
               const SizedBox(height: 10),
-              OutlinedButton(
+              PremiumButton(
+                label: 'Change Mobile Number',
+                variant: PremiumButtonVariant.secondary,
                 onPressed: () => context.pop(),
-                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-                child: const Text('Change Mobile Number'),
               ),
             ],
           ),

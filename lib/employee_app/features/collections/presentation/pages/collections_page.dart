@@ -101,9 +101,11 @@ class _CollectionsPageState extends State<CollectionsPage> {
                         label: 'Share',
                         icon: Icons.share_outlined,
                         variant: AppButtonVariant.outline,
-                        onPressed: () => Share.shareXFiles(
-                          [XFile(receiptFile!.path)],
-                          text: 'Payment receipt for ${item.customerName}',
+                        onPressed: () => SharePlus.instance.share(
+                          ShareParams(
+                            files: [XFile(receiptFile!.path)],
+                            text: 'Payment receipt for ${item.customerName}',
+                          ),
                         ),
                       ),
                     ),
@@ -131,6 +133,7 @@ class _CollectionsPageState extends State<CollectionsPage> {
               onRefresh: provider.load,
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
+                clipBehavior: Clip.none,
                 slivers: [
                   SliverToBoxAdapter(
                     child: GradientHeader(

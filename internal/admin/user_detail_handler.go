@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/base64"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +11,7 @@ import (
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/models"
 	"github.com/santosh0921/nbfc-backend/internal/security"
+	"github.com/santosh0921/nbfc-backend/internal/storage"
 )
 
 func GetUserDetailHandler(c *gin.Context) {
@@ -100,8 +102,16 @@ func GetUserDetailHandler(c *gin.Context) {
 
 	var selfie models.CustomerSelfie
 	if err := database.DB.Where("user_id = ?", userID).First(&selfie).Error; err == nil {
+		imagePath := selfie.ImagePath
+		if selfie.StorageReference != "" {
+			if provider := storage.Active(); provider != nil {
+				if raw, retrieveErr := provider.Retrieve(selfie.StorageReference); retrieveErr == nil {
+					imagePath = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(raw)
+				}
+			}
+		}
 		response["selfie"] = gin.H{
-			"image_path":                  selfie.ImagePath,
+			"image_path":                  imagePath,
 			"verification_status":         selfie.VerificationStatus,
 			"is_verified":                 selfie.IsVerified,
 			"verification_failure_reason": selfie.VerificationFailureReason,

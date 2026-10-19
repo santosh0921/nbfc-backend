@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -188,6 +189,7 @@ class _DetailsStep extends StatefulWidget {
 }
 
 class _DetailsStepState extends State<_DetailsStep> {
+  final _formKey = GlobalKey<FormState>();
   final _occupationController = TextEditingController();
   final _incomeController = TextEditingController();
   final _remarksController = TextEditingController();
@@ -209,6 +211,11 @@ class _DetailsStepState extends State<_DetailsStep> {
       footer: AppButton(
         label: 'Next: Witnesses',
         onPressed: () {
+          // Previously had no validation at all — every field here could
+          // be left blank and the officer could still tap through to the
+          // next step, submitting a "verification" with no actual field
+          // data captured.
+          if (!(_formKey.currentState?.validate() ?? false)) return;
           draft.updateDetails(
             occupation: _occupationController.text.trim(),
             monthlyIncome: _incomeController.text.trim(),
@@ -217,52 +224,68 @@ class _DetailsStepState extends State<_DetailsStep> {
           widget.onNext();
         },
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Customer', style: Theme.of(context).textTheme.bodySmall),
-          Text(draft.customerName, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(draft.loanType, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-          if (widget.customerPhone != null && widget.customerPhone!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.phone_outlined, size: 16, color: AppColors.textSecondary),
-                const SizedBox(width: 6),
-                Text(widget.customerPhone!, style: Theme.of(context).textTheme.bodyMedium),
-              ],
-            ),
-          ],
-          if (widget.timingPreference != null && widget.timingPreference!.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Icon(Icons.schedule_outlined, size: 16, color: AppColors.textSecondary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Preferred call time: ${widget.timingPreference}',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Customer', style: Theme.of(context).textTheme.bodySmall),
+            Text(draft.customerName, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(draft.loanType, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+            if (widget.customerPhone != null && widget.customerPhone!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.phone_outlined, size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: 6),
+                  Text(widget.customerPhone!, style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ),
+            ],
+            if (widget.timingPreference != null && widget.timingPreference!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.schedule_outlined, size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Preferred call time: ${widget.timingPreference}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            AppTextField(
+              label: 'Occupation',
+              hint: 'Enter occupation',
+              controller: _occupationController,
+              prefixIcon: Icons.work_outline,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the customer\'s occupation' : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppTextField(
+              label: 'Monthly Income (₹)',
+              controller: _incomeController,
+              prefixIcon: Icons.currency_rupee,
+              keyboardType: TextInputType.number,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the customer\'s monthly income' : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppTextField(
+              label: 'Field Remarks',
+              hint: 'Enter field remarks',
+              controller: _remarksController,
+              prefixIcon: Icons.notes_outlined,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your field remarks' : null,
             ),
           ],
-          const SizedBox(height: AppSpacing.lg),
-          AppTextField(label: 'Occupation', hint: 'Enter occupation', controller: _occupationController, prefixIcon: Icons.work_outline),
-          const SizedBox(height: AppSpacing.md),
-          AppTextField(
-            label: 'Monthly Income (₹)',
-            controller: _incomeController,
-            prefixIcon: Icons.currency_rupee,
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          AppTextField(label: 'Field Remarks', hint: 'Enter field remarks', controller: _remarksController, prefixIcon: Icons.notes_outlined),
-        ],
+        ),
       ),
     );
   }
@@ -417,7 +440,14 @@ class _WitnessesStepState extends State<_WitnessesStep> {
                 const SizedBox(height: AppSpacing.sm),
                 AppTextField(label: 'Relation', hint: 'e.g. Neighbour, Colleague', controller: _relationController),
                 const SizedBox(height: AppSpacing.sm),
-                AppTextField(label: 'Phone', hint: 'Enter phone number', controller: _phoneController, keyboardType: TextInputType.phone),
+                AppTextField(
+                  label: 'Phone',
+                  hint: 'Enter phone number',
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  maxLength: 10,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 AppTextField(label: 'Date of Birth', controller: _dobController, hint: 'DD/MM/YYYY'),
                 const SizedBox(height: AppSpacing.sm),
@@ -554,8 +584,11 @@ class _DocumentsStepState extends State<_DocumentsStep> {
     return _StepScaffold(
       title: 'Document Verification',
       footer: AppButton(
-        label: allCaptured ? 'Next: Site Photo' : 'Next (${capturedTypes.length}/${widget.checklist.length} captured)',
-        onPressed: widget.onNext,
+        label: allCaptured ? 'Next: Site Photo' : 'Capture all documents to continue (${capturedTypes.length}/${widget.checklist.length})',
+        // Previously always enabled regardless of capture count — the
+        // label showed "2/4 captured" but tapping it still let the
+        // officer skip straight past the remaining 2 required documents.
+        onPressed: allCaptured ? widget.onNext : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -847,7 +880,7 @@ class _ReviewStep extends StatelessWidget {
     final record = await draft.submit();
     if (context.mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => VerificationSuccessPage(record: record)),
+        MaterialPageRoute(builder: (_) => VerificationSuccessPage(record: record, reportUploadFailed: draft.reportUploadFailed)),
       );
     }
   }

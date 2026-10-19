@@ -57,6 +57,7 @@ func setupTestApp(t *testing.T) *gin.Engine {
 	adminGroup.POST("/loans/:id/prepare-disbursement", middleware.RequirePermission(rbac.LoanDisbursePrep), loans.AdminPrepareDisbursementHandler)
 	adminGroup.POST("/loans/:id/approve-disbursement", middleware.RequirePermission(rbac.LoanDisburse), loans.AdminApproveDisbursementHandler)
 	adminGroup.GET("/loans/:id", middleware.RequirePermission(rbac.LoanView), loans.AdminGetLoanHandler)
+	adminGroup.POST("/loans/:id/decision", middleware.RequirePermission(rbac.LoanReject), loans.AdminDecisionHandler)
 	return r
 }
 
@@ -421,7 +422,39 @@ func createTestLoan(t *testing.T, status string) models.LoanApplication {
 		t.Fatalf("create test loan: %v", err)
 	}
 	t.Cleanup(func() { database.DB.Unscoped().Delete(&loan) })
+	// AdminRecommendSanctionHandler now requires an approved bureau
+	// request for the customer (see requireApprovedBureauRequest) — every
+	// existing caller of this fixture already assumes "recommend will
+	// succeed" is just a matter of permissions/maker-checker, so seed
+	// that precondition here rather than forcing every test to know
+	// about it. Tests that specifically exercise the new gate build their
+	// own loan+customer deliberately WITHOUT this, via createTestLoan's
+	// sibling in bureau_gate_test.go.
+	seedApprovedBureauRequest(t, loan.CustomerID)
 	return loan
+}
+
+// seedApprovedBureauRequest gives a customer a COMPLETED + APPROVED
+// bureau request, the precondition requireApprovedBureauRequest checks
+// before underwriting may recommend a sanction.
+func seedApprovedBureauRequest(t *testing.T, customerID uuid.UUID) models.BureauRequest {
+	t.Helper()
+	consent := models.BureauConsent{CustomerID: customerID, Bureau: models.BureauSandbox, Purpose: "test", ConsentVersion: "v0-test", ConsentedAt: time.Now()}
+	if err := database.DB.Create(&consent).Error; err != nil {
+		t.Fatalf("create test bureau consent: %v", err)
+	}
+	t.Cleanup(func() { database.DB.Unscoped().Delete(&consent) })
+
+	req := models.BureauRequest{
+		CustomerID: customerID, Bureau: models.BureauSandbox, ConsentID: consent.ID,
+		Status: models.BureauRequestStatusCompleted, Score: 780, RequestedAt: time.Now(),
+		ReviewStatus: models.BureauReviewStatusApproved, ReviewedByUsername: "sectest_fixture",
+	}
+	if err := database.DB.Create(&req).Error; err != nil {
+		t.Fatalf("create test bureau request: %v", err)
+	}
+	t.Cleanup(func() { database.DB.Unscoped().Delete(&req) })
+	return req
 }
 
 func testCustomerID() uuid.UUID {

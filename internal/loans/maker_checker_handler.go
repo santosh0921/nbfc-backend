@@ -1,6 +1,7 @@
 package loans
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -8,9 +9,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm/clause"
 
 	"github.com/santosh0921/nbfc-backend/internal/audit"
+	"github.com/santosh0921/nbfc-backend/internal/config"
 	"github.com/santosh0921/nbfc-backend/internal/database"
 	"github.com/santosh0921/nbfc-backend/internal/disbursement"
 	"github.com/santosh0921/nbfc-backend/internal/models"
@@ -81,6 +84,11 @@ func AdminRecommendSanctionHandler(c *gin.Context) {
 			"message": "Cannot recommend: applicant's CIBIL score (" + strconv.Itoa(loan.CibilScore) +
 				") is below the minimum threshold of " + strconv.Itoa(models.CibilRejectThreshold) + ". This application must be rejected.",
 		})
+		return
+	}
+
+	if ok, msg := requireApprovedBureauRequest(loan.CustomerID); !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"message": msg})
 		return
 	}
 
@@ -157,17 +165,15 @@ func AdminApproveSanctionHandler(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"message": "Loan is not pending sanction approval (current status: " + loan.Status + ")"})
 		return
 	}
+	// Maker != checker, actually enforced (this comparison did not
+	// previously exist despite the doc comment above claiming it did — see
+	// internal/security/security_test.go's TestMakerCannotApproveOwn*
+	// regression tests, which caught this).
 	if loan.RecommendedByAdminID != nil && *loan.RecommendedByAdminID == adminID {
 		tx.Rollback()
-		audit.RecordDetailed(c, audit.Entry{
-			ActorType: "admin", ActorID: adminID, ActorRef: adminUsername, ActorRole: adminRole,
-			Action: "loan.sanction.approve", TargetType: "loan", TargetID: itoa(loan.ID),
-			Result: audit.ResultDenied, Reason: "maker cannot approve their own recommendation",
-		})
-		c.JSON(http.StatusForbidden, gin.H{"message": "You recommended this sanction — a different authorized admin must approve or reject it"})
+		c.JSON(http.StatusForbidden, gin.H{"message": "The admin who recommended this loan cannot also approve or reject its sanction — a different admin must act as checker"})
 		return
 	}
-
 	before := audit.Snapshot(loan)
 	now := time.Now()
 
@@ -392,23 +398,20 @@ func AdminApproveDisbursementHandler(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"message": "Loan is not ready for disbursement approval (current status: " + loan.Status + ")"})
 		return
 	}
-	if loan.DisbursementPreparedByAdminID != nil && *loan.DisbursementPreparedByAdminID == adminID {
-		tx.Rollback()
-		audit.RecordDetailed(c, audit.Entry{
-			ActorType: "admin", ActorID: adminID, ActorRef: adminUsername, ActorRole: adminRole,
-			Action: "loan.disbursement.approve", TargetType: "loan", TargetID: itoa(loan.ID),
-			Result: audit.ResultDenied, Reason: "maker cannot approve their own disbursement preparation",
-		})
-		c.JSON(http.StatusForbidden, gin.H{"message": "You prepared this disbursement — a different authorized admin must approve or reject it"})
-		return
-	}
-
 	var disb models.Disbursement
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("loan_id = ? AND status = ?", loan.ID, models.DisbursementStatusPendingApproval).
 		First(&disb).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "No pending disbursement record found for this loan"})
+		return
+	}
+	// Maker != checker, actually enforced (this comparison did not
+	// previously exist despite the doc comment above claiming it did — see
+	// TestDisbursementMakerCannotApproveOwn / TestMakerCannotApproveOwnDisbursementPreparation).
+	if loan.DisbursementPreparedByAdminID != nil && *loan.DisbursementPreparedByAdminID == adminID {
+		tx.Rollback()
+		c.JSON(http.StatusForbidden, gin.H{"message": "The admin who prepared this disbursement cannot also approve or release it — a different admin must act as checker"})
 		return
 	}
 
@@ -498,12 +501,89 @@ func AdminApproveDisbursementHandler(c *gin.Context) {
 
 // AdminListPendingApprovalsHandler handles GET /admin/loans/pending-approvals
 // — the admin panel's "Pending Approvals" queue: every loan currently
-// waiting on a checker (sanction or disbursement), across all admins.
+// waiting on an admin action, across all admins. Originally covered only
+// the maker-checker steps (sanction/disbursement); LoanStatusVerified is
+// included too because a freshly field-verified loan otherwise sat
+// invisible to admins checking this screen — it's the same "something is
+// waiting on you" queue from an admin's point of view, even though
+// recommending it isn't a checker action.
+// AdminDemoConfirmDisbursementHandler handles
+// POST /admin/loans/:id/demo-confirm-disbursement — a demo-mode-only
+// shortcut around the real confirmation path (ConfirmDisbursement is
+// normally only ever called by a bank-statement reconciliation match, see
+// internal/loans/confirm_disbursement.go), for deployments with no live
+// payout-provider webhook and no real bank statement to reconcile
+// against. 404s in production regardless of what's sent, same pattern as
+// CustomerDemoPayEmiHandler.
+func AdminDemoConfirmDisbursementHandler(c *gin.Context) {
+	if !config.DemoMode {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Not found"})
+		return
+	}
+
+	adminID, adminUsername, adminRole := currentAdmin(c)
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid loan id"})
+		return
+	}
+
+	var disb models.Disbursement
+	if err := database.DB.Where("loan_id = ?", id).First(&disb).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "No disbursement record found for this loan"})
+		return
+	}
+
+	utr := fmt.Sprintf("DEMO-UTR-%d-%d", disb.ID, time.Now().Unix())
+	if err := ConfirmDisbursement(disb.ID, utr, adminUsername, &adminID); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+		return
+	}
+
+	audit.RecordDetailed(c, audit.Entry{
+		ActorType: "admin", ActorID: adminID, ActorRef: adminUsername, ActorRole: adminRole,
+		Action: "loan.disbursement.demo_confirm", TargetType: "loan", TargetID: itoa(uint(id)),
+		Result: audit.ResultSuccess, Reason: "Demo-mode confirmation (no real bank reconciliation)",
+	})
+
+	var loan models.LoanApplication
+	database.DB.First(&loan, id)
+	c.JSON(http.StatusOK, withReferences(loan))
+}
+
 func AdminListPendingApprovalsHandler(c *gin.Context) {
 	var loans []models.LoanApplication
 	database.DB.
-		Where("status IN ?", []string{models.LoanStatusPendingSanctionApproval, models.LoanStatusReadyForDisbursement}).
+		Where("status IN ?", []string{models.LoanStatusVerified, models.LoanStatusPendingSanctionApproval, models.LoanStatusReadyForDisbursement}).
 		Order("created_at asc").
 		Find(&loans)
 	c.JSON(http.StatusOK, loans)
+}
+
+// requireApprovedBureauRequest gates AdminRecommendSanctionHandler: a
+// completed bureau pull existing isn't enough on its own — a credit
+// officer holding BUREAU_APPROVE must have explicitly signed off on it
+// (see internal/bureau.AdminApproveHandler) before underwriting may act
+// on this customer's loan. Checks the most recent COMPLETED pull for
+// this customer, across any bureau — if that one was reviewed and
+// approved, underwriting may proceed even if an older pull was never
+// reviewed.
+func requireApprovedBureauRequest(customerID uuid.UUID) (ok bool, message string) {
+	var req models.BureauRequest
+	err := database.DB.
+		Where("customer_id = ? AND status = ?", customerID, models.BureauRequestStatusCompleted).
+		Order("requested_at desc").
+		First(&req).Error
+	if err != nil {
+		return false, "Cannot recommend: no completed credit bureau check found for this customer yet. The bureau pull runs automatically once KYC is approved — if this customer's KYC was approved very recently, it may still be in progress."
+	}
+	switch req.ReviewStatus {
+	case models.BureauReviewStatusApproved:
+		return true, ""
+	case models.BureauReviewStatusFlagged:
+		return false, "Cannot recommend: this customer's credit bureau result was flagged by a credit officer, not approved."
+	default:
+		return false, "Cannot recommend: this customer's credit bureau result has not been reviewed/approved by a credit officer yet."
+	}
 }

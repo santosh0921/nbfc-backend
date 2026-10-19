@@ -15,6 +15,14 @@ import (
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
+	// ExpectedRole is optional, sent by portals that ask the user to pick
+	// their role on the login screen (e.g. "COMPLIANCE_OFFICER" on the KYC
+	// portal). When present it is enforced, not just displayed: a login
+	// succeeds only if it matches adminUser.Role exactly, so an account
+	// can never be presented as (or JWT-issued for) a role it doesn't
+	// actually hold in RolePermissions. Omitted entirely, login behaves
+	// exactly as before — this is additive.
+	ExpectedRole string `json:"expectedRole"`
 }
 
 const (
@@ -55,6 +63,16 @@ func LoginHandler(c *gin.Context) {
 			Result: audit.ResultFailure, Reason: "unknown username",
 		})
 		c.JSON(http.StatusUnauthorized, gin.H{"message": genericInvalidCredentials})
+		return
+	}
+
+	if !adminUser.Approved {
+		audit.RecordDetailed(c, audit.Entry{
+			ActorType: "admin", ActorID: adminUser.ID, ActorRef: adminUser.Username, ActorRole: adminUser.Role,
+			Action: "admin.login.failed", TargetType: "admin_user", TargetID: itoa(adminUser.ID),
+			Result: audit.ResultDenied, Reason: "pending super admin approval",
+		})
+		c.JSON(http.StatusForbidden, gin.H{"message": "Your account is pending approval by a Super Admin"})
 		return
 	}
 
@@ -108,6 +126,17 @@ func LoginHandler(c *gin.Context) {
 			resp["attemptsRemaining"] = maxFailedLoginAttempts - adminUser.FailedLoginAttempts
 		}
 		c.JSON(http.StatusUnauthorized, resp)
+		return
+	}
+
+	if req.ExpectedRole != "" && req.ExpectedRole != adminUser.Role {
+		audit.RecordDetailed(c, audit.Entry{
+			ActorType: "admin", ActorID: adminUser.ID, ActorRef: adminUser.Username, ActorRole: adminUser.Role,
+			Action: "admin.login.failed", TargetType: "admin_user", TargetID: itoa(adminUser.ID),
+			Result: audit.ResultDenied, Reason: "role mismatch",
+			Details: "selected=" + req.ExpectedRole + " actual=" + adminUser.Role,
+		})
+		c.JSON(http.StatusForbidden, gin.H{"message": "This account is not registered under the selected role"})
 		return
 	}
 

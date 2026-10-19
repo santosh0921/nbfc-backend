@@ -5,6 +5,13 @@ abstract class CasesRepository {
   Future<CaseEntity> fetchCaseById(String id);
   Future<List<CaseTimelineEvent>> fetchTimeline(String caseId);
 
+  /// Claims a `pending_claim` loan broadcast to this employee's city —
+  /// first-come-first-served, `POST /employee/loans/:id/claim`. Throws
+  /// if another employee claimed it first (backend 409) — callers should
+  /// re-fetch the list on failure since that case means this entry needs
+  /// to be removed from view, not retried.
+  Future<CaseEntity> claimCase(String id);
+
   /// Submits a verification report for the loan, transitioning it to
   /// `verified` — `POST /employee/loans/:id/verify`.
   Future<CaseEntity> verifyLoan(

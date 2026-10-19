@@ -165,7 +165,7 @@ class _EmiPaymentsScreenState extends State<EmiPaymentsScreen> {
                       child: Center(
                         child: Column(
                           children: [
-                            const Icon(Icons.receipt_long_outlined, size: 48, color: AppColors.textSecondaryLight),
+                            Icon(Icons.receipt_long_outlined, size: 48, color: AppColors.textSecondaryOf(context)),
                             const SizedBox(height: 12),
                             Text('No loan applications yet.', style: theme.textTheme.titleMedium),
                           ],
@@ -245,12 +245,12 @@ class _LoanEmiTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     isActive ? 'NBFC-APP-${loan.id} · Tap for EMI schedule' : 'NBFC-APP-${loan.id} · ${info.label}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryLight),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryOf(context)),
                   ),
                 ],
               ),
             ),
-            if (isActive) const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondaryLight),
+            if (isActive) Icon(Icons.chevron_right_rounded, color: AppColors.textSecondaryOf(context)),
           ],
         ),
       ),

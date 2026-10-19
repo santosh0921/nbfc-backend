@@ -39,7 +39,13 @@ func CustomerTransactionsHandler(c *gin.Context) {
 	var loanList []models.LoanApplication
 	database.DB.Where("customer_id = ?", user.ID).Find(&loanList)
 
-	var txns []CustomerTransaction
+	// Must start as an empty slice, not nil — encoding/json marshals a nil
+	// slice as the JSON literal `null`, and the Flutter client's list
+	// decoder (ApiClient._sendList) does `jsonDecode(body) as List` and
+	// throws on null, surfacing as "Unexpected response from server."
+	// instead of the empty-state UI for any customer with zero
+	// transactions (a nil slice never gets appended to and stays nil).
+	txns := []CustomerTransaction{}
 	for _, loan := range loanList {
 		if loan.DisbursedAt != nil {
 			txns = append(txns, CustomerTransaction{

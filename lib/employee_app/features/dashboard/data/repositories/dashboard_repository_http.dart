@@ -37,6 +37,6 @@ class DashboardRepositoryHttp {
 
   TaskStatus _statusFromCase(CaseStatus status) => switch (status) {
         CaseStatus.completed || CaseStatus.rejected => TaskStatus.completed,
-        CaseStatus.assigned || CaseStatus.inProgress || CaseStatus.pendingReview => TaskStatus.remaining,
+        CaseStatus.pendingClaim || CaseStatus.assigned || CaseStatus.inProgress || CaseStatus.pendingReview => TaskStatus.remaining,
       };
 }

@@ -52,12 +52,22 @@ func processOneLoan(loan models.LoanApplication, asOf time.Time) error {
 		checkBucketChangeAlert(loan.ID, bucket.Name, dpd)
 	}
 
+	var classificationBefore models.LoanClassification
+	hadClassificationBefore := database.DB.First(&classificationBefore, "loan_id = ?", loan.ID).Error == nil
+
 	classification, err := ClassifyLoan(loan.ID, loan.Category, "", dpd, asOf, "system")
 	if err != nil && err != ErrNoApprovedRule {
 		return err
 	}
 	if classification != "" {
-		checkClassificationAlert(loan.ID, classification)
+		// classification only actually CHANGED if there was no prior row, or
+		// the prior row's value differs — ClassifyLoan itself is a silent
+		// no-op (same row, no new history) when nothing changed, so this
+		// durable before/after DB comparison is the real change signal, not
+		// an in-memory flag that forgets everything on restart.
+		if !hadClassificationBefore || classificationBefore.Classification != classification {
+			checkClassificationAlert(loan.ID, classification)
+		}
 		if _, provErr := CalculateProvision(loan.ID, classification, asOf, "system"); provErr != nil && provErr != ErrNoApprovedProvisioningRule {
 			return provErr
 		}
@@ -75,25 +85,39 @@ func processOneLoan(loan models.LoanApplication, asOf time.Time) error {
 			CreateAlert("LARGE_OVERDUE", models.AlertSeverityWarning, &loan.ID,
 				"Loan #"+itoa(loan.ID)+" has overdue amount exceeding the configured large-overdue alert threshold")
 		}
+	} else {
+		// DPD is back to 0 — auto-close any still-open case for this loan.
+		// Without this, a case that TouchCase opened while the loan was
+		// overdue had no path back to CLOSED/RESOLVED even after the
+		// borrower paid in full; it just sat in OVERDUE/ASSIGNED/ESCALATED
+		// forever (see the Phase 5 report's gaps).
+		collections.AutoResolveIfCaughtUp(loan.ID)
 	}
 
 	return nil
 }
 
-var lastKnownBucket = map[uint]string{}
-var lastKnownClassification = map[uint]string{}
-
-// checkBucketChangeAlert / checkClassificationAlert use a simple
-// in-process map as a cheap same-run dedup guard against re-alerting for
-// the same loan repeatedly within one job execution — not a durable
-// "already alerted" record. A DB-backed alert-suppression window is a
-// reasonable follow-up (see the Phase 5 report's gaps) but out of scope
-// for this phase's job implementation.
+// checkBucketChangeAlert's "did this actually change" check is backed by
+// LoanBucketState — one row per loan in the database — rather than an
+// in-process map. The map version reset to empty on every backend
+// restart, so the next job run after any restart treated every
+// still-overdue loan as a brand-new bucket change and re-fired its alert;
+// a durable row doesn't have that problem. checkClassificationAlert needs
+// no equivalent of its own: its caller (processOneLoan) already gates on
+// a before/after comparison of the durable LoanClassification row.
 func checkBucketChangeAlert(loanID uint, bucketName string, dpd int) {
-	if lastKnownBucket[loanID] == bucketName {
+	var state models.LoanBucketState
+	hadState := database.DB.First(&state, "loan_id = ?", loanID).Error == nil
+	if hadState && state.BucketName == bucketName {
 		return
 	}
-	lastKnownBucket[loanID] = bucketName
+	if hadState {
+		state.BucketName = bucketName
+		database.DB.Save(&state)
+	} else {
+		database.DB.Create(&models.LoanBucketState{LoanID: loanID, BucketName: bucketName})
+	}
+
 	severity := models.AlertSeverityInfo
 	if bucketName == "NPA" || bucketName == "HIGH_RISK" {
 		severity = models.AlertSeverityCritical
@@ -107,11 +131,10 @@ func checkBucketChangeAlert(loanID uint, bucketName string, dpd int) {
 	}
 }
 
+// checkClassificationAlert itself does no dedup — its caller already
+// confirmed this is a genuine change against the durable LoanClassification
+// row before calling it.
 func checkClassificationAlert(loanID uint, classification string) {
-	if lastKnownClassification[loanID] == classification {
-		return
-	}
-	lastKnownClassification[loanID] = classification
 	CreateAlert("CLASSIFICATION_CHANGE", models.AlertSeverityWarning, &loanID,
 		"Loan #"+itoa(loanID)+" classification is now "+classification)
 }

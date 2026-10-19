@@ -160,11 +160,23 @@ func CallSignalHandler(c *gin.Context) {
 	role := "customer"
 	if empID := c.GetUint("employee_id"); empID != 0 {
 		role = "employee"
+	} else if adminID := c.GetUint("admin_id"); adminID != 0 {
+		// KYC officer calling from the admin portal joins the same
+		// "staff" side of the room as an employee — the room only ever
+		// distinguishes "customer" from everyone-else-by-role-string, so
+		// reusing "employee" here avoids touching room/eviction logic.
+		role = "employee"
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Println("signaling: upgrade failed:", err)
+		// Temporary diagnostic: logs exactly what this origin instance
+		// received for the two headers gorilla/websocket's Upgrade()
+		// validates, to distinguish "the reverse-proxy chain (CloudFront /
+		// ALB / nginx) is stripping these before they reach us" from any
+		// other cause. Remove once the real signaling path is confirmed
+		// working end-to-end from a real device.
+		log.Printf("signaling: upgrade failed: %v (Upgrade=%q Connection=%q)", err, c.Request.Header.Get("Upgrade"), c.Request.Header.Get("Connection"))
 		return
 	}
 

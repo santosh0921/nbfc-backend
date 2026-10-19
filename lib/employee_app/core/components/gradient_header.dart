@@ -24,9 +24,10 @@ class GradientHeader extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: AppColors.heroGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(AppSpacing.radiusLg)),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: AppColors.heroGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(AppSpacing.radiusLg)),
+        boxShadow: [BoxShadow(color: AppColors.primaryDark.withValues(alpha: 0.28), blurRadius: 24, offset: const Offset(0, 10))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

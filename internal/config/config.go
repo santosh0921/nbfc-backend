@@ -177,6 +177,9 @@ func (c *Config) ValidateProductionSafety() {
 	if os.Getenv("DOCUMENT_ENCRYPTION_KEY") == "" {
 		problems = append(problems, "DOCUMENT_ENCRYPTION_KEY is not set — required in production for KYC document-at-rest encryption")
 	}
+	if os.Getenv("DOCUMENT_STORAGE_BUCKET") == "" {
+		problems = append(problems, "DOCUMENT_STORAGE_BUCKET is not set — production must never fall back to local-disk document storage, which is wiped on every deploy/instance replacement (see internal/storage/s3.go)")
+	}
 	if c.SurepassBearerToken == "" {
 		problems = append(problems, "SUREPASS_BEARER_TOKEN is not set — PAN verification cannot run without a real provider credential in production")
 	}

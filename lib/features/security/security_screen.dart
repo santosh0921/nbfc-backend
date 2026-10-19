@@ -53,7 +53,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
     if (mpin == null || mpin.length != 6) return;
     try {
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Enable fingerprint login for NBFC Premium',
+        localizedReason: 'Enable fingerprint login for OneFinance',
         options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
       );
       if (!authenticated) return;
@@ -109,7 +109,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     ListTile(
                       leading: Icon(
                         _sessions[i].$3 ? Icons.smartphone_rounded : Icons.devices_other_rounded,
-                        color: _sessions[i].$3 ? AppColors.success : AppColors.textSecondaryLight,
+                        color: _sessions[i].$3 ? AppColors.success : AppColors.textSecondaryOf(context),
                       ),
                       title: Text(_sessions[i].$1),
                       subtitle: Text(_sessions[i].$2),

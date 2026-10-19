@@ -11,9 +11,10 @@ import '../widgets/incoming_call_listener.dart';
 /// EMI Payments, Profile) plus a floating Quick Apply FAB, per the
 /// StatefulShellRoute branch navigator passed in by [navigationShell].
 ///
-/// Back-button behavior: on every bottom-nav tab (Home, Loans, EMI,
-/// Profile), back requires a second press within 2s to actually exit the
-/// app — first press just shows a confirmation snackbar.
+/// Back-button behavior: if the active tab isn't Home, back switches to
+/// Home first. Once already on Home, back requires a second press within
+/// 2s to actually exit the app — first press just shows a confirmation
+/// snackbar.
 class AppShell extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
 
@@ -31,9 +32,16 @@ class _AppShellState extends State<AppShell> {
     (icon: Icons.person_rounded, outlinedIcon: Icons.person_outline_rounded, label: 'Profile'),
   ];
 
+  static const _homeIndex = 0;
+
   DateTime? _lastBackPress;
 
   Future<void> _handleBack() async {
+    if (widget.navigationShell.currentIndex != _homeIndex) {
+      widget.navigationShell.goBranch(_homeIndex);
+      return;
+    }
+
     final now = DateTime.now();
     if (_lastBackPress != null && now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
       SystemNavigator.pop();
@@ -79,7 +87,7 @@ class _AppShellState extends State<AppShell> {
           bottomNavigationBar: BottomAppBar(
             shape: const CircularNotchedRectangle(),
             notchMargin: 8,
-            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            color: isDark ? AppColors.surfaceDark : AppColors.surfaceOf(context),
             elevation: 0,
             padding: EdgeInsets.zero,
             child: SizedBox(

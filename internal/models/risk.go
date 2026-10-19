@@ -103,6 +103,21 @@ type ClassificationRule struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// LoanBucketState is the CURRENT delinquency bucket name for one loan — a
+// single mutable row per loan, durable change-detection for the daily
+// risk job's bucket-change alert (internal/risk/process.go). Replaces an
+// earlier in-process-map-only implementation: that map reset to empty on
+// every backend restart, so the very next job run after any restart
+// treated every still-overdue loan as a "new" bucket change and re-fired
+// its alert — a real duplicate-alert bug on a portfolio of any size, not
+// just a cosmetic one, since a routine restart (crash, redeploy) could
+// happen on any day the job also runs.
+type LoanBucketState struct {
+	LoanID     uint      `gorm:"primaryKey" json:"loanId"`
+	BucketName string    `gorm:"not null" json:"bucketName"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
 // LoanClassification is the CURRENT classification for one loan — a
 // single mutable row per loan, always written together with a new
 // LoanClassificationHistory row in the same transaction (see

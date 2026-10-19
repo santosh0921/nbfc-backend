@@ -78,7 +78,7 @@ class _CreditScoreScreenState extends State<CreditScoreScreen> with SingleTicker
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundOf(context),
       appBar: AppBar(title: const Text('Credit Health')),
       body: SafeArea(
         child: FutureBuilder<CreditScoreResult?>(
@@ -157,7 +157,7 @@ class _CreditScoreScreenState extends State<CreditScoreScreen> with SingleTicker
                           const SizedBox(width: 6),
                           Text(
                             'Live monitoring active · updated today',
-                            style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryLight),
+                            style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryOf(context)),
                           ),
                         ],
                       ),
@@ -232,7 +232,7 @@ class _CibilCalculatorSheetState extends State<_CibilCalculatorSheet> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          color: Theme.of(context).brightness == Brightness.dark ? AppColors.surfaceDark : AppColors.surfaceOf(context),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
         ),
         child: SingleChildScrollView(
@@ -241,7 +241,7 @@ class _CibilCalculatorSheetState extends State<_CibilCalculatorSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(
-                child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderLight, borderRadius: BorderRadius.circular(4))),
+                child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderOf(context), borderRadius: BorderRadius.circular(4))),
               ),
               const SizedBox(height: 16),
               Text('Calculate My CIBIL Score', style: theme.textTheme.titleLarge),

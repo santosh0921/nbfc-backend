@@ -10,12 +10,23 @@ class NotificationsProvider extends ChangeNotifier {
   bool isLoading = false;
   List<NotificationEntity> items = const [];
 
+  /// Set when [load] fails so the screen can tell "genuinely no
+  /// notifications yet" apart from "the request failed" — previously
+  /// both looked identical (an empty list) because a thrown exception
+  /// here left [isLoading] stuck at true forever with nothing shown.
+  String? loadError;
+
   int get unreadCount => items.where((n) => !n.isRead).length;
 
   Future<void> load() async {
     isLoading = true;
+    loadError = null;
     notifyListeners();
-    items = await _repository.fetchAll();
+    try {
+      items = await _repository.fetchAll();
+    } catch (_) {
+      loadError = 'Could not load notifications. Pull down to try again.';
+    }
     isLoading = false;
     notifyListeners();
   }

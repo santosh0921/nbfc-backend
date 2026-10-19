@@ -88,15 +88,12 @@ class _BankDocumentUploadTileState extends State<BankDocumentUploadTile> {
 
   Future<void> _pickFromFiles() async {
     Navigator.of(context).pop();
-    final result = await FilePicker.pickFiles(
+    final picked = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: _allowedExtensions,
-      withData: true,
     );
-    final picked = result?.files.single;
     if (picked == null) return;
-    final bytes = picked.bytes ?? (picked.path != null ? await File(picked.path!).readAsBytes() : null);
-    if (bytes == null) return;
+    final bytes = await picked.readAsBytes();
     final ext = (picked.extension ?? 'pdf').toLowerCase();
     final mimeType = ext == 'pdf' ? 'application/pdf' : (ext == 'png' ? 'image/png' : 'image/jpeg');
     await _uploadBytes(bytes, picked.name, mimeType);
@@ -108,14 +105,14 @@ class _BankDocumentUploadTileState extends State<BankDocumentUploadTile> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceLight,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceOf(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderLight, borderRadius: BorderRadius.circular(4))),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.borderOf(context), borderRadius: BorderRadius.circular(4))),
             const SizedBox(height: 16),
             Text('Upload ${widget.label}', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
@@ -187,7 +184,7 @@ class _StatusIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (state) {
       case _UploadState.idle:
-        return Text('Optional', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryLight));
+        return Text('Optional', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondaryOf(context)));
       case _UploadState.uploading:
         return const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.warning));
       case _UploadState.uploaded:

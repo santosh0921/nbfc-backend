@@ -17,7 +17,9 @@ import '../../core/widgets/signature_pad.dart';
 import '../../core/widgets/slider_input_field.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/widgets/success_celebration.dart';
+import '../../mock/india_banks.dart';
 import '../../mock/india_locations.dart';
+import '../../models/branch.dart';
 import '../../models/loan_product.dart';
 import 'widgets/aadhaar_number_field.dart';
 import 'widgets/apply_form_field.dart';
@@ -58,8 +60,23 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
   bool get _skipVideoKyc => false;
 
   bool get _isBusinessLoan => widget.product?.category == LoanCategory.business;
+  bool get _isHomeLoan => widget.product?.category == LoanCategory.housing;
+  bool get _isGoldLoan => widget.product?.category == LoanCategory.gold;
+  bool get _isMSMELoan => widget.product?.category == LoanCategory.msme;
+  bool get _showsBusinessProfile => _isBusinessLoan || _isMSMELoan;
+  bool get _isFarmerLoan => widget.product?.category == LoanCategory.farmer;
+  /// Instant Loan is a distinct fixed-term, flat-fee product — matches
+  /// internal/loans/eligibility.go's isInstantLoanCategory exactly (this
+  /// app's Category string, sent verbatim as `_productName`, is what the
+  /// backend actually branches on). Everywhere the regular EMI amount/
+  /// tenure sliders and reducing-balance math would otherwise apply, this
+  /// flag swaps in the real ₹1,000–₹50,000 range and the flat 8%/35-day
+  /// terms instead.
+  bool get _isInstantLoan => widget.product?.category == LoanCategory.instantLoan;
   bool get _showsProcessingNotice =>
-      widget.product?.category == LoanCategory.housing || widget.product?.category == LoanCategory.business;
+      widget.product?.category == LoanCategory.housing ||
+      widget.product?.category == LoanCategory.business ||
+      widget.product?.category == LoanCategory.msme;
 
   int get _stepCount => 6;
   int get _kycStep => 2;
@@ -89,6 +106,9 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
   final _emailController = TextEditingController();
   _EmploymentType _employmentType = _EmploymentType.salaried;
   final _monthlyIncomeController = TextEditingController();
+  // Initialized properly (₹10,000, N/A tenure) once the product is known,
+  // in initState — see _applyProductDefaults. These starting values only
+  // matter for the brief window before that runs.
   double _loanAmount = 500000;
   double _tenureMonths = 36;
 
@@ -122,6 +142,66 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
   File? _gstCertificateFile;
   File? _businessPremisesFile;
 
+  // Home Loan only — the builder/property details a construction-linked
+  // property purchase actually needs (a demand letter from the builder,
+  // in real life, references exactly this: which project, which stage).
+  final _builderNameController = TextEditingController();
+  final _projectNameController = TextEditingController();
+  final _propertyAddressController = TextEditingController();
+  final _agreementValueController = TextEditingController();
+  String? _constructionStage;
+  static const List<String> _constructionStages = [
+    'Booking / agreement stage',
+    'Foundation',
+    'Plinth',
+    'Slab-wise construction',
+    'Brickwork & finishing',
+    'Ready for possession',
+  ];
+
+  // Gold Loan only — customer's own estimate; the branch's physical
+  // appraisal (purity test, weighing) is what actually sets the loan
+  // amount, not these fields.
+  String? _goldOrnamentType;
+  static const List<String> _goldOrnamentTypes = ['Necklace', 'Bangles', 'Rings', 'Coins', 'Chain', 'Other'];
+  final _goldWeightController = TextEditingController();
+  int? _goldPurityKarat;
+  static const List<int> _goldPurityOptions = [24, 22, 18, 14];
+  bool _goldAlreadyPledgedElsewhere = false;
+  bool _goldPledgeDeclarationAgreed = false;
+  List<Branch> _branches = [];
+  String? _selectedBranchId;
+  bool _branchesLoading = false;
+
+  // Business Loan and MSME Loan only — the business's own identity,
+  // separate from the applicant's personal KYC (already collected: GST
+  // Certificate and Business Premises documents, in the KYC step below).
+  final _businessNameController = TextEditingController();
+  String? _businessRegistrationType;
+  static const List<String> _businessRegistrationTypes = [
+    'Proprietorship', 'Partnership', 'LLP', 'Private Limited', 'Public Limited', 'Other',
+  ];
+  final _businessAddressController = TextEditingController();
+  final _businessYearsController = TextEditingController();
+  final _businessTurnoverController = TextEditingController();
+  final _businessGstController = TextEditingController();
+  // MSME Loan only — qualifies the loan for CGTMSE collateral-free processing.
+  final _msmeUdyamController = TextEditingController();
+
+  // Farmer Loan only — land record details; repayment is a single bullet
+  // payment after harvest, not monthly EMIs (see _isFarmerLoan usage at
+  // the tenure slider and the backend's generateFarmerLoanInstallment).
+  String? _farmerLandRecordType;
+  static const List<String> _farmerLandRecordTypes = [
+    '7/12 Extract (Maharashtra)', 'Patta/Chitta (Tamil Nadu)', 'Khasra-Khatauni (UP/Bihar)',
+    'RTC / Pahani (Karnataka)', 'Jamabandi (Punjab/Haryana)', 'Other',
+  ];
+  final _farmerLandRecordNumberController = TextEditingController();
+  final _farmerLandAreaController = TextEditingController();
+  final _farmerLandLocationController = TextEditingController();
+  final _farmerCropController = TextEditingController();
+  final _farmerKccController = TextEditingController();
+
   // The field displays the number grouped as "1234 5678 9012" for
   // readability, so every length/validity check needs the spaces
   // stripped first — comparing the raw controller text against 12
@@ -132,12 +212,13 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
       _aadhaarVerified &&
       _panVerified &&
       _photoVerified &&
+      _photoFile != null &&
       _electricityBillVerified &&
       _bankStatementVerified &&
       (!_isRented || _rentalAgreementVerified) &&
       _aadhaarDigits.length == 12 &&
       _aadhaarConsent &&
-      (!_isBusinessLoan || (_gstCertificateVerified && _businessPremisesVerified));
+      (!_showsBusinessProfile || (_gstCertificateVerified && _businessPremisesVerified));
 
   // Step 3: Bank Details
   final _bankFormKey = GlobalKey<FormState>();
@@ -167,7 +248,16 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
   bool _submitted = false;
   String _applicationId = 'NBFC-APP-${DateTime.now().millisecondsSinceEpoch % 1000000}';
 
+  /// For a regular loan this is the real monthly EMI (reducing-balance).
+  /// For an Instant Loan it's repurposed as the ONE-TIME total payable
+  /// (principal + flat 8% fee) — there is no monthly EMI concept for this
+  /// product, but every screen downstream (Terms, Success, the PDF
+  /// agreement) already plumbs a single "amount due" number through this
+  /// getter, so reusing it here (with isInstantLoan-aware labeling at each
+  /// call site) is simpler than threading a second number through all of
+  /// them.
   double get _emi {
+    if (_isInstantLoan) return _loanAmount * (1 + _instantLoanFlatFeePercent / 100);
     final rate = _interestRate / 12 / 100;
     final n = _tenureMonths;
     double compounded = 1;
@@ -177,10 +267,62 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
     return _loanAmount * rate * compounded / (compounded - 1);
   }
 
+  // Must match internal/loans/eligibility.go's instantLoanFlatFeePercent/
+  // instantLoanMinAmount/instantLoanMaxAmount exactly — this is a display/
+  // slider-bounds mirror, not the source of truth; the backend re-validates
+  // independently and is what actually accepts or rejects the amount.
+  static const double _instantLoanFlatFeePercent = 8.0;
+  static const double _instantLoanMinAmount = 1000;
+  static const double _instantLoanMaxAmount = 50000;
+  static const int _instantLoanTenureDays = 35;
+
   @override
   void initState() {
     super.initState();
     _prefillFromProfile();
+    if (_isInstantLoan) {
+      // The regular-loan defaults (₹5,00,000 / 36 months) are both outside
+      // Instant Loan's real ₹1,000–₹50,000 range — without this the amount
+      // slider would open already past its own max.
+      _loanAmount = 10000;
+      _tenureMonths = _instantLoanTenureDays.toDouble();
+    }
+    // These dropdowns render a fallback default value (`value ?? list.first`)
+    // purely so they're never shown blank — but a fallback display is NOT
+    // the same as the field actually being set. Without seeding the real
+    // state here, a customer who never touches a dropdown (because its
+    // pre-shown value already looks right) hits a silent, unexplained
+    // block at Continue — the validator correctly refuses a null value,
+    // but nothing on screen says why. Found by manually walking a live
+    // Gold Loan application through every field.
+    if (_isHomeLoan) _constructionStage = _constructionStages.first;
+    if (_isGoldLoan) {
+      _goldOrnamentType = _goldOrnamentTypes.first;
+      _goldPurityKarat = _goldPurityOptions.first;
+      _loadBranches();
+    }
+    if (_showsBusinessProfile) _businessRegistrationType = _businessRegistrationTypes.first;
+    if (_isFarmerLoan) _farmerLandRecordType = _farmerLandRecordTypes.first;
+  }
+
+  Future<void> _loadBranches() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return;
+    setState(() => _branchesLoading = true);
+    try {
+      final list = await LoanApiService.branches(token);
+      if (!mounted) return;
+      setState(() {
+        _branches = list;
+        _branchesLoading = false;
+        // Same reasoning as above — branches load asynchronously, so this
+        // can't be seeded in initState; seed it the moment the list
+        // actually arrives instead.
+        _selectedBranchId ??= list.isNotEmpty ? list.first.id : null;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _branchesLoading = false);
+    }
   }
 
   /// Best-effort prefill of name/email from the customer's real saved
@@ -229,11 +371,41 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
     _ifscController.dispose();
     _bankNameController.dispose();
     _aadhaarNumberController.dispose();
+    _builderNameController.dispose();
+    _projectNameController.dispose();
+    _propertyAddressController.dispose();
+    _agreementValueController.dispose();
+    _goldWeightController.dispose();
+    _businessNameController.dispose();
+    _businessAddressController.dispose();
+    _businessYearsController.dispose();
+    _businessTurnoverController.dispose();
+    _businessGstController.dispose();
+    _msmeUdyamController.dispose();
+    _farmerLandRecordNumberController.dispose();
+    _farmerLandAreaController.dispose();
+    _farmerLandLocationController.dispose();
+    _farmerCropController.dispose();
+    _farmerKccController.dispose();
     super.dispose();
   }
 
   bool get _canProceedFromCurrentStep {
-    if (_step == 0) return _detailsFormKey.currentState?.validate() ?? false;
+    if (_step == 0) {
+      if (!(_detailsFormKey.currentState?.validate() ?? false)) return false;
+      if (_isHomeLoan && _constructionStage == null) return false;
+      if (_isGoldLoan &&
+          (_goldOrnamentType == null ||
+              _goldPurityKarat == null ||
+              _selectedBranchId == null ||
+              !_goldPledgeDeclarationAgreed)) {
+        return false;
+      }
+      if (_showsBusinessProfile && _businessRegistrationType == null) return false;
+      if (_isMSMELoan && _msmeUdyamController.text.trim().isEmpty) return false;
+      if (_isFarmerLoan && _farmerLandRecordType == null) return false;
+      return true;
+    }
     if (_step == 1) return _addressFormKey.currentState?.validate() ?? false;
     if (_step == _kycStep) return _allDocumentsVerified;
     if (_step == _bankStep) return _bankFormKey.currentState?.validate() ?? false;
@@ -290,7 +462,16 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
     }
   }
 
-  bool get _canSubmit => _signatureBytes != null;
+  // _photoFile is checked here too, not just _photoVerified (which the
+  // KYC step's own gate already requires) — they're set by two separate
+  // callbacks off the same DocumentUploadTile, and the backend's actual
+  // KYC-completeness check (internal/kyc.Recompute) cares specifically
+  // about the selfie having been uploaded via createSelfie, which never
+  // fires if _photoFile ended up null for any reason. Catching that here
+  // gives an immediate, clear error instead of the confusing "documents
+  // still missing" rejection the loan-apply call would otherwise surface
+  // moments later.
+  bool get _canSubmit => _signatureBytes != null && _photoFile != null;
 
   String get _employmentTypeLabel => switch (_employmentType) {
         _EmploymentType.salaried => 'Salaried',
@@ -303,11 +484,25 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
   /// reject a second submission outright rather than upserting, which
   /// would otherwise block every retry of a partially-submitted
   /// application (e.g. one that failed on a later step).
+  ///
+  /// PAN and Aadhaar's endpoints (internal/profile/{pan,aadhaar}_handler.go)
+  /// return 409 for two genuinely different situations that must NOT be
+  /// treated the same: this customer's own record already existing (safe
+  /// to skip — the case this method exists for) vs. the PAN/Aadhaar
+  /// NUMBER already belonging to a DIFFERENT customer (this customer
+  /// still has no record at all; silently skipping here leaves their KYC
+  /// permanently stuck on "documents missing" with no visible error).
+  /// The backend uses a distinct, unambiguous message for the latter
+  /// ("...already registered to a different account") specifically so
+  /// this can be denylisted rather than guessing at every phrasing of
+  /// the safe/own-record case — only that specific wording rethrows.
   Future<void> _submitOrSkipIfExists(Future<void> Function() call) async {
     try {
       await call();
     } on ApiException catch (e) {
-      if (e.statusCode == 409) return;
+      if (e.statusCode == 409 && !e.message.toLowerCase().contains('registered to a different account')) {
+        return;
+      }
       rethrow;
     }
   }
@@ -384,6 +579,31 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
       timingPreference: _timingPreference,
       visitDate: _visitDate,
       visitTimeSlot: _visitTimeSlot,
+      builderName: _isHomeLoan ? _builderNameController.text.trim() : null,
+      projectName: _isHomeLoan ? _projectNameController.text.trim() : null,
+      propertyAddress: _isHomeLoan ? _propertyAddressController.text.trim() : null,
+      agreementValue: _isHomeLoan ? double.tryParse(_agreementValueController.text.trim()) : null,
+      constructionStage: _isHomeLoan ? _constructionStage : null,
+      goldOrnamentType: _isGoldLoan ? _goldOrnamentType : null,
+      goldApproxWeightGrams: _isGoldLoan ? double.tryParse(_goldWeightController.text.trim()) : null,
+      goldApproxPurityKarat: _isGoldLoan ? _goldPurityKarat : null,
+      goldAlreadyPledged: _isGoldLoan ? _goldAlreadyPledgedElsewhere : null,
+      goldLoanBranch: _isGoldLoan
+          ? _branches.firstWhere((b) => b.id == _selectedBranchId, orElse: () => _branches.first).name
+          : null,
+      businessName: _showsBusinessProfile ? _businessNameController.text.trim() : null,
+      businessRegistrationType: _showsBusinessProfile ? _businessRegistrationType : null,
+      businessAddress: _showsBusinessProfile ? _businessAddressController.text.trim() : null,
+      businessYearsInOperation: _showsBusinessProfile ? int.tryParse(_businessYearsController.text.trim()) : null,
+      businessMonthlyTurnover: _showsBusinessProfile ? double.tryParse(_businessTurnoverController.text.trim()) : null,
+      businessGstNumber: _showsBusinessProfile ? _businessGstController.text.trim() : null,
+      msmeUdyamNumber: _isMSMELoan ? _msmeUdyamController.text.trim() : null,
+      farmerLandRecordType: _isFarmerLoan ? _farmerLandRecordType : null,
+      farmerLandRecordNumber: _isFarmerLoan ? _farmerLandRecordNumberController.text.trim() : null,
+      farmerLandAreaAcres: _isFarmerLoan ? double.tryParse(_farmerLandAreaController.text.trim()) : null,
+      farmerLandLocation: _isFarmerLoan ? _farmerLandLocationController.text.trim() : null,
+      farmerCropOrPurpose: _isFarmerLoan ? _farmerCropController.text.trim() : null,
+      farmerKccNumber: _isFarmerLoan && _farmerKccController.text.trim().isNotEmpty ? _farmerKccController.text.trim() : null,
     );
     _applicationId = 'NBFC-APP-${loan.id}';
 
@@ -463,6 +683,8 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
         aprRate: _aprRate,
         processingFee: _processingFee,
         emi: _emi,
+        isInstantLoan: _isInstantLoan,
+        instantLoanTenureDays: _instantLoanTenureDays,
         applicationId: _applicationId,
         signatureImage: signature,
       );
@@ -514,6 +736,8 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
         visitTimeSlot: _visitTimeSlot,
         skipVideoKyc: _skipVideoKyc,
         showsProcessingNotice: _showsProcessingNotice,
+        isInstantLoan: _isInstantLoan,
+        instantLoanTenureDays: _instantLoanTenureDays,
       );
     }
 
@@ -535,7 +759,7 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
                         duration: const Duration(milliseconds: 200),
                         height: 4,
                         decoration: BoxDecoration(
-                          color: i <= _step ? AppColors.primary : AppColors.borderLight,
+                          color: i <= _step ? AppColors.primary : AppColors.borderOf(context),
                           borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
                       ),
@@ -566,6 +790,50 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
                     tenureMonths: _tenureMonths,
                     onTenureChanged: (v) => setState(() => _tenureMonths = v),
                     interestRate: _interestRate,
+                    isInstantLoan: _isInstantLoan,
+                    instantLoanMinAmount: _instantLoanMinAmount,
+                    instantLoanMaxAmount: _instantLoanMaxAmount,
+                    instantLoanFlatFeePercent: _instantLoanFlatFeePercent,
+                    instantLoanTenureDays: _instantLoanTenureDays,
+                    isHomeLoan: _isHomeLoan,
+                    builderNameController: _builderNameController,
+                    projectNameController: _projectNameController,
+                    propertyAddressController: _propertyAddressController,
+                    agreementValueController: _agreementValueController,
+                    constructionStage: _constructionStage,
+                    onConstructionStageChanged: (v) => setState(() => _constructionStage = v),
+                    isGoldLoan: _isGoldLoan,
+                    goldOrnamentType: _goldOrnamentType,
+                    onGoldOrnamentTypeChanged: (v) => setState(() => _goldOrnamentType = v),
+                    goldWeightController: _goldWeightController,
+                    goldPurityKarat: _goldPurityKarat,
+                    onGoldPurityKaratChanged: (v) => setState(() => _goldPurityKarat = v),
+                    goldAlreadyPledgedElsewhere: _goldAlreadyPledgedElsewhere,
+                    onGoldAlreadyPledgedChanged: (v) => setState(() => _goldAlreadyPledgedElsewhere = v ?? false),
+                    goldPledgeDeclarationAgreed: _goldPledgeDeclarationAgreed,
+                    onGoldPledgeDeclarationChanged: (v) => setState(() => _goldPledgeDeclarationAgreed = v ?? false),
+                    branches: _branches,
+                    branchesLoading: _branchesLoading,
+                    selectedBranchId: _selectedBranchId,
+                    onBranchChanged: (v) => setState(() => _selectedBranchId = v),
+                    showsBusinessProfile: _showsBusinessProfile,
+                    isMSMELoan: _isMSMELoan,
+                    businessNameController: _businessNameController,
+                    businessRegistrationType: _businessRegistrationType,
+                    onBusinessRegistrationTypeChanged: (v) => setState(() => _businessRegistrationType = v),
+                    businessAddressController: _businessAddressController,
+                    businessYearsController: _businessYearsController,
+                    businessTurnoverController: _businessTurnoverController,
+                    businessGstController: _businessGstController,
+                    msmeUdyamController: _msmeUdyamController,
+                    isFarmerLoan: _isFarmerLoan,
+                    farmerLandRecordType: _farmerLandRecordType,
+                    onFarmerLandRecordTypeChanged: (v) => setState(() => _farmerLandRecordType = v),
+                    farmerLandRecordNumberController: _farmerLandRecordNumberController,
+                    farmerLandAreaController: _farmerLandAreaController,
+                    farmerLandLocationController: _farmerLandLocationController,
+                    farmerCropController: _farmerCropController,
+                    farmerKccController: _farmerKccController,
                   ),
                   _AddressStep(
                     formKey: _addressFormKey,
@@ -597,7 +865,7 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
                     onIsRentedChanged: (v) => setState(() => _isRented = v ?? false),
                     onRentalAgreementChanged: (v) => setState(() => _rentalAgreementVerified = v),
                     onRentalAgreementFileCaptured: (f) => _rentalAgreementFile = f,
-                    isBusinessLoan: _isBusinessLoan,
+                    isBusinessLoan: _showsBusinessProfile,
                     onGstCertificateChanged: (v) => setState(() => _gstCertificateVerified = v),
                     onGstCertificateFileCaptured: (f) => _gstCertificateFile = f,
                     onBusinessPremisesChanged: (v) => setState(() => _businessPremisesVerified = v),
@@ -638,6 +906,8 @@ class _QuickApplyScreenState extends State<QuickApplyScreen> {
                     signatureBytes: _signatureBytes,
                     onSigned: (bytes) => setState(() => _signatureBytes = bytes),
                     onClearSignature: () => setState(() => _signatureBytes = null),
+                    isInstantLoan: _isInstantLoan,
+                    instantLoanTenureDays: _instantLoanTenureDays,
                   ),
                 ],
               ),
@@ -693,6 +963,50 @@ class _DetailsStep extends StatelessWidget {
     required this.tenureMonths,
     required this.onTenureChanged,
     required this.interestRate,
+    required this.isInstantLoan,
+    required this.instantLoanMinAmount,
+    required this.instantLoanMaxAmount,
+    required this.instantLoanFlatFeePercent,
+    required this.instantLoanTenureDays,
+    this.isHomeLoan = false,
+    this.builderNameController,
+    this.projectNameController,
+    this.propertyAddressController,
+    this.agreementValueController,
+    this.constructionStage,
+    this.onConstructionStageChanged,
+    this.isGoldLoan = false,
+    this.goldOrnamentType,
+    this.onGoldOrnamentTypeChanged,
+    this.goldWeightController,
+    this.goldPurityKarat,
+    this.onGoldPurityKaratChanged,
+    this.goldAlreadyPledgedElsewhere = false,
+    this.onGoldAlreadyPledgedChanged,
+    this.goldPledgeDeclarationAgreed = false,
+    this.onGoldPledgeDeclarationChanged,
+    this.branches = const [],
+    this.branchesLoading = false,
+    this.selectedBranchId,
+    this.onBranchChanged,
+    this.showsBusinessProfile = false,
+    this.isMSMELoan = false,
+    this.businessNameController,
+    this.businessRegistrationType,
+    this.onBusinessRegistrationTypeChanged,
+    this.businessAddressController,
+    this.businessYearsController,
+    this.businessTurnoverController,
+    this.businessGstController,
+    this.msmeUdyamController,
+    this.isFarmerLoan = false,
+    this.farmerLandRecordType,
+    this.onFarmerLandRecordTypeChanged,
+    this.farmerLandRecordNumberController,
+    this.farmerLandAreaController,
+    this.farmerLandLocationController,
+    this.farmerCropController,
+    this.farmerKccController,
   });
 
   final GlobalKey<FormState> formKey;
@@ -710,6 +1024,54 @@ class _DetailsStep extends StatelessWidget {
   final double tenureMonths;
   final ValueChanged<double> onTenureChanged;
   final double interestRate;
+  final bool isInstantLoan;
+  final double instantLoanMinAmount;
+  final double instantLoanMaxAmount;
+  final double instantLoanFlatFeePercent;
+  final int instantLoanTenureDays;
+
+  final bool isHomeLoan;
+  final TextEditingController? builderNameController;
+  final TextEditingController? projectNameController;
+  final TextEditingController? propertyAddressController;
+  final TextEditingController? agreementValueController;
+  final String? constructionStage;
+  final ValueChanged<String?>? onConstructionStageChanged;
+
+  final bool isGoldLoan;
+  final String? goldOrnamentType;
+  final ValueChanged<String?>? onGoldOrnamentTypeChanged;
+  final TextEditingController? goldWeightController;
+  final int? goldPurityKarat;
+  final ValueChanged<int?>? onGoldPurityKaratChanged;
+  final bool goldAlreadyPledgedElsewhere;
+  final ValueChanged<bool?>? onGoldAlreadyPledgedChanged;
+  final bool goldPledgeDeclarationAgreed;
+  final ValueChanged<bool?>? onGoldPledgeDeclarationChanged;
+  final List<Branch> branches;
+  final bool branchesLoading;
+  final String? selectedBranchId;
+  final ValueChanged<String?>? onBranchChanged;
+
+  final bool showsBusinessProfile;
+  final bool isMSMELoan;
+  final TextEditingController? businessNameController;
+  final String? businessRegistrationType;
+  final ValueChanged<String?>? onBusinessRegistrationTypeChanged;
+  final TextEditingController? businessAddressController;
+  final TextEditingController? businessYearsController;
+  final TextEditingController? businessTurnoverController;
+  final TextEditingController? businessGstController;
+  final TextEditingController? msmeUdyamController;
+
+  final bool isFarmerLoan;
+  final String? farmerLandRecordType;
+  final ValueChanged<String?>? onFarmerLandRecordTypeChanged;
+  final TextEditingController? farmerLandRecordNumberController;
+  final TextEditingController? farmerLandAreaController;
+  final TextEditingController? farmerLandLocationController;
+  final TextEditingController? farmerCropController;
+  final TextEditingController? farmerKccController;
 
   String _label(_EmploymentType type) => switch (type) {
         _EmploymentType.salaried => 'Salaried',
@@ -735,83 +1097,135 @@ class _DetailsStep extends StatelessWidget {
                 SliderInputField(
                   label: 'Loan Amount Required',
                   value: loanAmount,
-                  min: 50000,
-                  max: 5000000,
-                  divisions: 99,
+                  min: isInstantLoan ? instantLoanMinAmount : 50000,
+                  max: isInstantLoan ? instantLoanMaxAmount : 5000000,
+                  divisions: isInstantLoan ? 49 : 99,
                   fieldWidth: 130,
                   onChanged: onLoanAmountChanged,
+                  helperText: isInstantLoan
+                      ? 'Enter an amount between ₹1,000 and ₹50,000'
+                      : 'Enter an amount between ₹50,000 and ₹50,00,000',
                 ),
-                SliderInputField(
-                  label: 'Tenure',
-                  value: tenureMonths,
-                  min: 12,
-                  max: 60,
-                  divisions: 48,
-                  suffix: ' mo',
-                  onChanged: onTenureChanged,
-                ),
+                if (isInstantLoan)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.schedule_rounded, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Fixed repayment: $instantLoanTenureDays days after disbursal — no monthly EMIs for this product.',
+                            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  SliderInputField(
+                    label: 'Tenure',
+                    value: tenureMonths,
+                    min: 12,
+                    max: 60,
+                    divisions: 48,
+                    suffix: ' mo',
+                    onChanged: onTenureChanged,
+                    helperText: 'Enter a tenure between 12 and 60 months',
+                  ),
               ],
             ),
           ),
           const SizedBox(height: 12),
-          ValueListenableBuilder<TextEditingValue>(
-            valueListenable: monthlyIncomeController,
-            builder: (context, incomeValue, _) {
-              final income = double.tryParse(incomeValue.text.trim()) ?? 0;
-              if (income <= 0) return const SizedBox.shrink();
-
-              // Mirrors the backend's eligibility engine
-              // (internal/loans/eligibility.go) for a live estimate —
-              // the server has the final say (real CIBIL-based rate,
-              // enforced at submit), this is just an early, honest
-              // heads-up instead of letting the customer fill out the
-              // entire rest of the form before finding out the amount
-              // won't be approved.
-              final r = interestRate / 12 / 100;
-              final n = tenureMonths;
-              double compounded = 1;
-              for (int i = 0; i < n; i++) {
-                compounded *= 1 + r;
-              }
-              final emi = loanAmount * r * compounded / (compounded - 1);
-              final foirPercent = (emi / income) * 100;
-              final overLimit = foirPercent > 50;
-
-              return Padding(
-                padding: const EdgeInsets.only(top: 4, bottom: 4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: (overLimit ? AppColors.error : AppColors.success).withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    border: Border.all(color: (overLimit ? AppColors.error : AppColors.success).withValues(alpha: 0.25)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        overLimit ? Icons.warning_amber_rounded : Icons.check_circle_outline,
-                        size: 18,
-                        color: overLimit ? AppColors.error : AppColors.success,
+          if (isInstantLoan)
+            // No FOIR/monthly-income affordability check applies to this
+            // product (see evaluateInstantLoanEligibility on the backend,
+            // which deliberately skips FOIR for the same reason) — a flat
+            // one-time total-payable figure is the honest equivalent here.
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Borrow ₹${loanAmount.toStringAsFixed(0)} → repay ₹${(loanAmount * (1 + instantLoanFlatFeePercent / 100)).toStringAsFixed(0)} '
+                        'in one payment, $instantLoanTenureDays days after disbursal (flat ${instantLoanFlatFeePercent.toStringAsFixed(0)}% fee).',
+                        style: theme.textTheme.bodySmall?.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          overLimit
-                              ? 'Estimated EMI ₹${emi.toStringAsFixed(0)}/mo is ${foirPercent.toStringAsFixed(0)}% of your income — reduce the amount or increase the tenure to stay under 50%.'
-                              : 'Estimated EMI ₹${emi.toStringAsFixed(0)}/mo (${foirPercent.toStringAsFixed(0)}% of income) — within the usual eligibility range.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: overLimit ? AppColors.error : AppColors.success,
-                            fontWeight: FontWeight.w600,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: monthlyIncomeController,
+              builder: (context, incomeValue, _) {
+                final income = double.tryParse(incomeValue.text.trim()) ?? 0;
+                if (income <= 0) return const SizedBox.shrink();
+
+                // Mirrors the backend's eligibility engine
+                // (internal/loans/eligibility.go) for a live estimate —
+                // the server has the final say (real CIBIL-based rate,
+                // enforced at submit), this is just an early, honest
+                // heads-up instead of letting the customer fill out the
+                // entire rest of the form before finding out the amount
+                // won't be approved.
+                final r = interestRate / 12 / 100;
+                final n = tenureMonths;
+                double compounded = 1;
+                for (int i = 0; i < n; i++) {
+                  compounded *= 1 + r;
+                }
+                final emi = loanAmount * r * compounded / (compounded - 1);
+                final foirPercent = (emi / income) * 100;
+                final overLimit = foirPercent > 50;
+
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: (overLimit ? AppColors.error : AppColors.success).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      border: Border.all(color: (overLimit ? AppColors.error : AppColors.success).withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          overLimit ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                          size: 18,
+                          color: overLimit ? AppColors.error : AppColors.success,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            overLimit
+                                ? 'Estimated EMI ₹${emi.toStringAsFixed(0)}/mo is ${foirPercent.toStringAsFixed(0)}% of your income — reduce the amount or increase the tenure to stay under 50%.'
+                                : 'Estimated EMI ₹${emi.toStringAsFixed(0)}/mo (${foirPercent.toStringAsFixed(0)}% of income) — within the usual eligibility range.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: overLimit ? AppColors.error : AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
+                );
+              },
+            ),
           const SizedBox(height: 8),
           ApplyFormField(
             label: 'Full Name',
@@ -862,6 +1276,8 @@ class _DetailsStep extends StatelessWidget {
             controller: monthlyIncomeController,
             keyboardType: TextInputType.number,
             hint: 'Enter your monthly income',
+            helperText: 'Minimum ₹15,000 per month',
+            maxLength: 8,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             validator: (v) {
               if (v == null || v.trim().isEmpty) return 'Enter your monthly income';
@@ -869,6 +1285,235 @@ class _DetailsStep extends StatelessWidget {
               return null;
             },
           ),
+          if (isHomeLoan) ...[
+            const SizedBox(height: 20),
+            Text('Property & Builder Details', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'A construction-linked purchase disburses against your builder\'s demand letters as construction '
+              'progresses — these details are what the lender matches each demand letter against.',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            ApplyFormField(
+              label: 'Builder / Developer Name',
+              controller: builderNameController!,
+              hint: 'e.g. Lodha Group',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the builder name' : null,
+            ),
+            ApplyFormField(
+              label: 'Project Name',
+              controller: projectNameController!,
+              hint: 'e.g. Lodha Park, Tower B',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the project name' : null,
+            ),
+            ApplyFormField(
+              label: 'Property Address',
+              controller: propertyAddressController!,
+              hint: 'Flat/unit no., project address',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the property address' : null,
+            ),
+            ApplyFormField(
+              label: 'Agreement Value (₹)',
+              controller: agreementValueController!,
+              keyboardType: TextInputType.number,
+              hint: 'Total value as per builder-buyer agreement',
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the agreement value' : null,
+            ),
+            ApplyFormDropdown<String>(
+              label: 'Current Construction Stage',
+              value: constructionStage ?? _QuickApplyScreenState._constructionStages.first,
+              items: _QuickApplyScreenState._constructionStages,
+              labelBuilder: (s) => s,
+              onChanged: onConstructionStageChanged!,
+            ),
+          ],
+          if (isGoldLoan) ...[
+            const SizedBox(height: 20),
+            Text('Gold Details', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Your estimate — the branch will weigh and test purity in person, which is what actually sets '
+              'the loan amount.',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            ApplyFormDropdown<String>(
+              label: 'Ornament Type',
+              value: goldOrnamentType ?? _QuickApplyScreenState._goldOrnamentTypes.first,
+              items: _QuickApplyScreenState._goldOrnamentTypes,
+              labelBuilder: (s) => s,
+              onChanged: onGoldOrnamentTypeChanged!,
+            ),
+            ApplyFormField(
+              label: 'Approximate Weight (grams)',
+              controller: goldWeightController!,
+              keyboardType: TextInputType.number,
+              hint: 'e.g. 45',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter approximate weight' : null,
+            ),
+            ApplyFormDropdown<int>(
+              label: 'Approximate Purity',
+              value: goldPurityKarat ?? _QuickApplyScreenState._goldPurityOptions.first,
+              items: _QuickApplyScreenState._goldPurityOptions,
+              labelBuilder: (k) => '$k Karat',
+              onChanged: onGoldPurityKaratChanged!,
+            ),
+            if (branchesLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (branches.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text('Could not load branches — please try again.', style: theme.textTheme.bodySmall),
+              )
+            else
+              ApplyFormDropdown<String>(
+                label: 'Branch to visit',
+                value: selectedBranchId ?? branches.first.id,
+                items: branches.map((b) => b.id).toList(),
+                labelBuilder: (id) {
+                  final b = branches.firstWhere((b) => b.id == id, orElse: () => branches.first);
+                  return '${b.name}, ${b.city}';
+                },
+                onChanged: onBranchChanged!,
+              ),
+            const SizedBox(height: 4),
+            CheckboxListTile(
+              value: goldAlreadyPledgedElsewhere,
+              onChanged: onGoldAlreadyPledgedChanged,
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              activeColor: AppColors.primary,
+              title: Text('This gold is already pledged at another lender', style: theme.textTheme.bodySmall),
+            ),
+            CheckboxListTile(
+              value: goldPledgeDeclarationAgreed,
+              onChanged: onGoldPledgeDeclarationChanged,
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              activeColor: AppColors.primary,
+              title: Text(
+                'I declare this gold is genuinely owned by me and the details above are accurate.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          ],
+          if (showsBusinessProfile) ...[
+            const SizedBox(height: 20),
+            Text(isMSMELoan ? 'MSME Details' : 'Business Details', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Real underwriting for this product reads your business\'s own identity, not just your personal '
+              'income — this is checked against the GST Certificate and Business Premises proof you\'ll upload next.',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            ApplyFormField(
+              label: 'Business Name',
+              controller: businessNameController!,
+              hint: 'Registered business name',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the business name' : null,
+            ),
+            ApplyFormDropdown<String>(
+              label: 'Registration Type',
+              value: businessRegistrationType ?? _QuickApplyScreenState._businessRegistrationTypes.first,
+              items: _QuickApplyScreenState._businessRegistrationTypes,
+              labelBuilder: (s) => s,
+              onChanged: onBusinessRegistrationTypeChanged!,
+            ),
+            ApplyFormField(
+              label: 'Business Address',
+              controller: businessAddressController!,
+              hint: 'Shop/office/unit address (if different from your home address)',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the business address' : null,
+            ),
+            ApplyFormField(
+              label: 'Years in Operation',
+              controller: businessYearsController!,
+              keyboardType: TextInputType.number,
+              hint: 'e.g. 5',
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter years in operation' : null,
+            ),
+            ApplyFormField(
+              label: 'Average Monthly Turnover (₹)',
+              controller: businessTurnoverController!,
+              keyboardType: TextInputType.number,
+              hint: 'Self-declared — verified later via bank statements',
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter average monthly turnover' : null,
+            ),
+            ApplyFormField(
+              label: 'GST Number',
+              controller: businessGstController!,
+              hint: '22AAAAA0000A1Z5',
+              maxLength: 15,
+              inputFormatters: [UpperCaseTextFormatter()],
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the GST number' : null,
+            ),
+            if (isMSMELoan)
+              ApplyFormField(
+                label: 'Udyam Registration Number',
+                controller: msmeUdyamController!,
+                hint: 'UDYAM-XX-00-0000000',
+                inputFormatters: [UpperCaseTextFormatter()],
+                helperText: 'Qualifies this loan for collateral-free CGTMSE processing',
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your Udyam registration number' : null,
+              ),
+          ],
+          if (isFarmerLoan) ...[
+            const SizedBox(height: 20),
+            Text('Land Details', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'This loan repays as a single payment after harvest, not monthly EMIs — the tenure you picked '
+              'above is treated as months until repayment.',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            ApplyFormDropdown<String>(
+              label: 'Land Record Type',
+              value: farmerLandRecordType ?? _QuickApplyScreenState._farmerLandRecordTypes.first,
+              items: _QuickApplyScreenState._farmerLandRecordTypes,
+              labelBuilder: (s) => s,
+              onChanged: onFarmerLandRecordTypeChanged!,
+            ),
+            ApplyFormField(
+              label: 'Land Record Number',
+              controller: farmerLandRecordNumberController!,
+              hint: 'Survey/Gat number as on the record',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the land record number' : null,
+            ),
+            ApplyFormField(
+              label: 'Land Area (acres)',
+              controller: farmerLandAreaController!,
+              keyboardType: TextInputType.number,
+              hint: 'e.g. 3.5',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the land area' : null,
+            ),
+            ApplyFormField(
+              label: 'Land Location',
+              controller: farmerLandLocationController!,
+              hint: 'Village, taluka/tehsil, district',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the land location' : null,
+            ),
+            ApplyFormField(
+              label: 'Crop / Purpose',
+              controller: farmerCropController!,
+              hint: 'e.g. Sugarcane, dairy equipment, irrigation',
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the crop or purpose' : null,
+            ),
+            ApplyFormField(
+              label: 'Kisan Credit Card Number (optional)',
+              controller: farmerKccController!,
+              hint: 'If you already hold a KCC',
+              helperText: 'Links this loan to KCC scheme terms, where applicable',
+            ),
+          ],
         ],
       ),
     );
@@ -951,10 +1596,10 @@ class _StateDropdown extends StatelessWidget {
           validator: (v) => v == null ? 'Select your state' : null,
           decoration: InputDecoration(
             filled: true,
-            fillColor: Theme.of(context).brightness == Brightness.dark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            fillColor: AppColors.surfaceOf(context),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.borderLight)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.borderLight)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.primary, width: 1.6)),
           ),
         ),
@@ -986,10 +1631,10 @@ class _CityDropdown extends StatelessWidget {
           validator: (v) => v == null ? 'Select your city' : null,
           decoration: InputDecoration(
             filled: true,
-            fillColor: Theme.of(context).brightness == Brightness.dark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            fillColor: AppColors.surfaceOf(context),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.borderLight)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.borderLight)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.primary, width: 1.6)),
           ),
         ),
@@ -1099,7 +1744,7 @@ class _KycDocumentsStep extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           activeColor: AppColors.primary,
           title: Text(
-            'I consent to NBFC Premium verifying my Aadhaar details for this application.',
+            'I consent to OneFinance verifying my Aadhaar details for this application.',
             style: theme.textTheme.bodySmall,
           ),
         ),
@@ -1242,12 +1887,7 @@ class _BankDetailsStep extends StatelessWidget {
             hint: 'As per bank records',
             validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter the account holder name' : null,
           ),
-          ApplyFormField(
-            label: 'Bank Name',
-            controller: bankNameController,
-            hint: 'e.g. State Bank of India',
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your bank name' : null,
-          ),
+          _BankNameField(controller: bankNameController),
           ApplyFormField(
             label: 'Account Number',
             controller: accountNumberController,
@@ -1306,6 +1946,80 @@ class _BankDetailsStep extends StatelessWidget {
           const BankDocumentUploadTile(label: 'Passbook', icon: Icons.menu_book_rounded, docType: 'passbook'),
         ],
       ),
+    );
+  }
+}
+
+/// Bank Name field: a searchable dropdown over [IndiaBanks.names] instead
+/// of free text, so disbursement details always match a real bank — still
+/// lets the user type an unlisted bank (e.g. a small co-operative bank)
+/// since [Autocomplete] falls back to the raw typed text if it doesn't
+/// match any option.
+class _BankNameField extends StatelessWidget {
+  const _BankNameField({required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Bank Name', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        Autocomplete<String>(
+          initialValue: TextEditingValue(text: controller.text),
+          optionsBuilder: (textEditingValue) {
+            if (textEditingValue.text.isEmpty) return IndiaBanks.names;
+            final query = textEditingValue.text.toLowerCase();
+            return IndiaBanks.names.where((b) => b.toLowerCase().contains(query));
+          },
+          onSelected: (selection) => controller.text = selection,
+          fieldViewBuilder: (context, fieldController, focusNode, onFieldSubmitted) {
+            fieldController.addListener(() => controller.text = fieldController.text);
+            return TextFormField(
+              controller: fieldController,
+              focusNode: focusNode,
+              decoration: InputDecoration(
+                hintText: 'e.g. State Bank of India',
+                filled: true,
+                fillColor: Theme.of(context).brightness == Brightness.dark ? AppColors.surfaceDark : AppColors.surfaceOf(context),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide(color: AppColors.borderOf(context))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: const BorderSide(color: AppColors.primary, width: 1.6)),
+              ),
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your bank name' : null,
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260, maxWidth: 400),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      return ListTile(
+                        dense: true,
+                        title: Text(option),
+                        onTap: () => onSelected(option),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 }
@@ -1386,7 +2100,7 @@ class _VerificationSchedulingStep extends StatelessWidget {
                   color: timingPreference == slot ? AppColors.primary : null,
                   fontWeight: timingPreference == slot ? FontWeight.w700 : FontWeight.w500,
                 ),
-                side: BorderSide(color: timingPreference == slot ? AppColors.primary : AppColors.borderLight),
+                side: BorderSide(color: timingPreference == slot ? AppColors.primary : AppColors.borderOf(context)),
               ),
           ],
         ),
@@ -1432,7 +2146,7 @@ class _VerificationSchedulingStep extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(color: AppColors.borderLight),
+                border: Border.all(color: AppColors.borderOf(context)),
               ),
               child: Row(
                 children: [
@@ -1463,7 +2177,7 @@ class _VerificationSchedulingStep extends StatelessWidget {
                     color: visitTimeSlot == slot ? AppColors.secondaryDark : null,
                     fontWeight: visitTimeSlot == slot ? FontWeight.w700 : FontWeight.w500,
                   ),
-                  side: BorderSide(color: visitTimeSlot == slot ? AppColors.secondaryDark : AppColors.borderLight),
+                  side: BorderSide(color: visitTimeSlot == slot ? AppColors.secondaryDark : AppColors.borderOf(context)),
                 ),
             ],
           ),
@@ -1585,6 +2299,8 @@ class _TermsStep extends StatefulWidget {
     required this.signatureBytes,
     required this.onSigned,
     required this.onClearSignature,
+    required this.isInstantLoan,
+    required this.instantLoanTenureDays,
   });
 
   final String productName;
@@ -1597,6 +2313,8 @@ class _TermsStep extends StatefulWidget {
   final Uint8List? signatureBytes;
   final ValueChanged<Uint8List> onSigned;
   final VoidCallback onClearSignature;
+  final bool isInstantLoan;
+  final int instantLoanTenureDays;
 
   @override
   State<_TermsStep> createState() => _TermsStepState();
@@ -1711,17 +2429,28 @@ class _TermsStepState extends State<_TermsStep> {
                     const Divider(height: 20),
                     _KfsRow(label: 'Loan Amount', value: currency.format(widget.loanAmount)),
                     const Divider(height: 20),
-                    _KfsRow(label: 'Tenure', value: '${widget.tenureMonths.round()} months'),
+                    _KfsRow(
+                      label: 'Tenure',
+                      value: widget.isInstantLoan ? '${widget.instantLoanTenureDays} days (fixed)' : '${widget.tenureMonths.round()} months',
+                    ),
                     const Divider(height: 20),
-                    _KfsRow(label: 'Interest Rate', value: '${widget.interestRate}% p.a.'),
-                    const Divider(height: 20),
-                    _KfsRow(label: 'Annual Percentage Rate (APR)', value: '${widget.aprRate}% p.a.'),
+                    _KfsRow(
+                      label: widget.isInstantLoan ? 'Fee' : 'Interest Rate',
+                      value: widget.isInstantLoan ? '${widget.interestRate.toStringAsFixed(0)}% flat, one-time' : '${widget.interestRate}% p.a.',
+                    ),
+                    if (!widget.isInstantLoan) ...[
+                      const Divider(height: 20),
+                      _KfsRow(label: 'Annual Percentage Rate (APR)', value: '${widget.aprRate}% p.a.'),
+                    ],
                     const Divider(height: 20),
                     _KfsRow(label: 'Processing Fee', value: widget.processingFee),
                     const Divider(height: 20),
                     const _KfsRow(label: 'Overdue Charges', value: '2% p.m. on overdue amount'),
                     const Divider(height: 20),
-                    _KfsRow(label: 'Estimated Monthly EMI', value: currency.format(widget.emi)),
+                    _KfsRow(
+                      label: widget.isInstantLoan ? 'Total Payable (due once)' : 'Estimated Monthly EMI',
+                      value: currency.format(widget.emi),
+                    ),
                   ],
                 ),
               ),
@@ -1759,7 +2488,7 @@ class _TermsStepState extends State<_TermsStep> {
                     child: Text(
                       'Scroll to the end of the terms to continue.',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryLight),
+                      style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryOf(context)),
                     ),
                   ),
                 ElevatedButton(
@@ -1860,6 +2589,8 @@ class _SuccessView extends StatelessWidget {
     required this.visitTimeSlot,
     required this.skipVideoKyc,
     required this.showsProcessingNotice,
+    required this.isInstantLoan,
+    required this.instantLoanTenureDays,
   });
 
   final String applicationId;
@@ -1872,6 +2603,8 @@ class _SuccessView extends StatelessWidget {
   final DateTime? visitDate;
   final String? visitTimeSlot;
   final bool skipVideoKyc;
+  final bool isInstantLoan;
+  final int instantLoanTenureDays;
 
   /// Housing Loan / Business Loan only — shows a "may take up to 1 month"
   /// processing-time notice on the success screen.
@@ -1910,9 +2643,15 @@ class _SuccessView extends StatelessWidget {
                     const Divider(height: 20),
                     _KfsRow(label: 'Loan Amount', value: currency.format(loanAmount)),
                     const Divider(height: 20),
-                    _KfsRow(label: 'Tenure', value: '${tenureMonths.round()} months'),
+                    _KfsRow(
+                      label: 'Tenure',
+                      value: isInstantLoan ? '$instantLoanTenureDays days (fixed)' : '${tenureMonths.round()} months',
+                    ),
                     const Divider(height: 20),
-                    _KfsRow(label: 'Est. EMI', value: currency.format(emi)),
+                    _KfsRow(
+                      label: isInstantLoan ? 'Total Payable (due once)' : 'Est. EMI',
+                      value: currency.format(emi),
+                    ),
                   ],
                 ),
               ),

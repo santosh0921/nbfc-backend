@@ -43,7 +43,7 @@ enum CallPhase {
 class CallService extends ChangeNotifier {
   CallService({required this.wsBaseUrl});
 
-  /// e.g. "https://nbfc-backend-gr1t.onrender.com" — converted internally
+  /// e.g. "https://d2jg5nm4lwkwia.cloudfront.net" — converted internally
   /// to the matching wss:// signaling URL.
   final String wsBaseUrl;
 
@@ -80,17 +80,26 @@ class CallService extends ChangeNotifier {
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
   bool _remoteDescriptionSet = false;
   Timer? _keepAliveTimer;
+  Timer? _disconnectGraceTimer;
 
-  // Public STUN only (no TURN relay configured) — this is a genuine
-  // peer-to-peer call as requested: STUN merely helps each device
-  // discover its own reachable address for the other side to connect
-  // to directly, it never relays media itself. On networks where a
-  // direct P2P path isn't reachable (symmetric NAT, some carrier
-  // networks) the call may fail to connect without a TURN server, which
-  // would need a paid/hosted relay to add.
+  // STUN handles the easy case (each device discovers its own reachable
+  // address for a direct P2P path); the self-hosted coturn TURN server
+  // below is what actually makes calls connect on carrier-grade NAT
+  // (very common on Indian mobile networks — Jio/Airtel), where no
+  // direct P2P path is possible and media has to be relayed instead.
+  // This was the root cause of "video call never connects" before this
+  // existed. Server: self-hosted coturn container "nbfc_turn" on the
+  // nbfc-deploy server (192.168.1.222), alternate ports 3479/5350 since
+  // that host's default 3478/5349 are already used by another project's
+  // coturn instance.
   static const _iceServers = [
     {'urls': 'stun:stun.l.google.com:19302'},
     {'urls': 'stun:stun1.l.google.com:19302'},
+    {
+      'urls': 'turn:onefinance.duckdns.org:3479',
+      'username': 'nbfcturn',
+      'credential': 'mzgR2ITQYWQ_9x17U889TD8Bpzq6XosQ',
+    },
   ];
 
   Future<void> _initRenderers() async {
@@ -319,12 +328,40 @@ class CallService extends ChangeNotifier {
       }
     };
     _pc!.onConnectionState = (state) {
-      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
         if (phase == CallPhase.active || phase == CallPhase.connecting) {
           _fail('Call connection lost.');
         }
+        return;
       }
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        // "Disconnected" is not necessarily fatal — a brief network handoff
+        // (switching Wi-Fi to mobile data, a momentary carrier-NAT drop,
+        // very common mid-call on Indian mobile networks) puts the
+        // connection here transiently and it often recovers back to
+        // "connected" within a few seconds on its own, without ever
+        // reaching "failed". Ending the call immediately on this state
+        // (the previous behavior) was dropping calls that would have
+        // self-healed — give it a grace window and only treat it as a
+        // real failure if the connection is still down once that expires.
+        if (phase == CallPhase.active || phase == CallPhase.connecting) {
+          _disconnectGraceTimer?.cancel();
+          _disconnectGraceTimer = Timer(const Duration(seconds: 8), () {
+            final current = _pc?.connectionState;
+            if (current == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+                current == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+              if (phase == CallPhase.active || phase == CallPhase.connecting) {
+                _fail('Call connection lost.');
+              }
+            }
+          });
+        }
+        return;
+      }
+      // Any other state (connected, completed, ...) means the path is
+      // healthy again — a pending grace-period failure must not fire.
+      _disconnectGraceTimer?.cancel();
+      _disconnectGraceTimer = null;
     };
   }
 
@@ -380,6 +417,8 @@ class CallService extends ChangeNotifier {
     _stopRinging();
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    _disconnectGraceTimer?.cancel();
+    _disconnectGraceTimer = null;
     _pc?.close();
     _pc = null;
     _remoteDescriptionSet = false;

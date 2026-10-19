@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/auth/domain/entities/employee_entity.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/mpin_setup_page.dart';
@@ -32,12 +33,25 @@ class AppRouter {
 
   static bool _isPublicPath(String path) => _publicPaths.any((p) => path.startsWith(p));
 
+  /// Which dashboard an authenticated employee lands on — derived from
+  /// their actual [EmployeeEntity.role] returned by the login response,
+  /// not a module the user had to guess/pick before authenticating (the
+  /// old flow: role-select -> agency-select -> THEN login, rejecting the
+  /// login afterwards if the guess didn't match the account's real role).
+  /// Every employee has exactly one role/module today, so this is the only
+  /// signal needed; if that ever stops being true, this is the one place
+  /// to add a workspace-selector redirect.
+  static String _homePathFor(EmployeeEntity? employee) {
+    if (employee?.role == EmployeeRole.collectionAgent) return RouteNames.recoveryDashboardPath;
+    return RouteNames.dashboardPath;
+  }
+
   static GoRouter build(
     AuthProvider authProvider,
     AgencyProvider agencyProvider, {
+    @Deprecated('Home path is now derived from the authenticated employee\'s role, not a pre-picked module.')
     EmployeeAppModule module = EmployeeAppModule.verification,
   }) {
-    final homePath = module == EmployeeAppModule.recovery ? RouteNames.recoveryDashboardPath : RouteNames.dashboardPath;
     return GoRouter(
       initialLocation: RouteNames.loginPath,
       refreshListenable: Listenable.merge([authProvider, agencyProvider]),
@@ -76,7 +90,7 @@ class AppRouter {
             path == RouteNames.mpinSetupPath ||
             path == RouteNames.mpinUnlockPath ||
             _isPublicPath(path);
-        if (isPreAuthPath) return homePath;
+        if (isPreAuthPath) return _homePathFor(authProvider.employee);
 
         return null;
       },

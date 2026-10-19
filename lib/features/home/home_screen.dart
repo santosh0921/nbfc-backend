@@ -6,12 +6,14 @@ import '../../core/network/auth_api_service.dart';
 import '../../core/network/credit_score_api_service.dart';
 import '../../core/network/emi_api_service.dart';
 import '../../core/network/notification_api_service.dart';
+import '../../core/network/video_verification_api_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/router/scale_fade_route.dart';
 import '../../core/services/active_loan_loader.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/shown_big_notifications_store.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/auto_refresh_mixin.dart';
 import '../../core/widgets/big_notification_page.dart';
 import '../../core/widgets/dashboard_tour.dart';
 import '../../core/widgets/section_header.dart';
@@ -20,6 +22,7 @@ import '../../models/active_loan.dart';
 import '../../models/backend_notification.dart';
 import '../../models/emi_schedule.dart';
 import '../../models/loan_product.dart';
+import '../../models/video_verification_request.dart';
 import '../my_loans/my_loans_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'widgets/credit_score_card.dart';
@@ -30,6 +33,7 @@ import 'widgets/hero_banner_carousel.dart';
 import 'widgets/loan_product_card.dart';
 import 'widgets/preapproved_card.dart';
 import 'widgets/quick_actions_grid.dart';
+import 'widgets/video_verification_request_page.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -38,7 +42,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin, AutoRefreshMixin {
   late Future<EmiDashboardSummary?> _emiSummaryFuture;
   late Future<ActiveLoan?> _activeLoanFuture;
   late Future<CreditScoreResult?> _creditScoreFuture;
@@ -58,6 +62,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   /// name rather than showing nothing.
   String? _displayName;
   String? _avatarInitials;
+
+  /// The newest `pending` video-verification request, if any — drives
+  /// the dashboard banner so the customer doesn't have to dig through
+  /// Notifications to find it. Null once there's nothing pending (either
+  /// none was ever requested, or the customer already responded).
+  VideoVerificationRequest? _pendingVideoVerification;
 
   late final AnimationController _bellController = AnimationController(
     vsync: this,
@@ -88,6 +98,47 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     Future.delayed(const Duration(seconds: 2), _showCongratulationsNotification);
     _loadNotificationState();
     _loadDisplayName();
+    _loadPendingVideoVerification();
+    startAutoRefresh();
+  }
+
+  @override
+  Future<void> onAutoRefresh() async {
+    if (!mounted) return;
+    setState(() {
+      _emiSummaryFuture = _loadEmiSummary();
+      _activeLoanFuture = _loadActiveLoan();
+      _creditScoreFuture = _loadCreditScore();
+    });
+    _loadNotificationState();
+    _loadPendingVideoVerification();
+  }
+
+  /// Best-effort, same pattern as the other dashboard loaders — a
+  /// failure (offline, token expired) just means the banner doesn't
+  /// show this time rather than blocking the rest of the dashboard.
+  Future<void> _loadPendingVideoVerification() async {
+    final token = AuthProvider.instance.token;
+    if (token == null) return;
+    try {
+      final requests = await VideoVerificationApiService.list(token);
+      final pending = requests.where((r) => r.isPending).toList();
+      if (!mounted) return;
+      setState(() => _pendingVideoVerification = pending.isEmpty ? null : pending.first);
+    } catch (_) {
+      // Non-fatal.
+    }
+  }
+
+  Future<void> _openVideoVerification() async {
+    final request = _pendingVideoVerification;
+    if (request == null) return;
+    await Navigator.of(context, rootNavigator: true).push(
+      ScaleFadeRoute(builder: (_) => VideoVerificationRequestPage(request: request)),
+    );
+    // The customer may have just responded — refresh so the banner
+    // disappears once the request is no longer pending.
+    _loadPendingVideoVerification();
   }
 
   /// Best-effort, same pattern as [_loadNotificationState]/[_loadEmiSummary]:
@@ -122,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    stopAutoRefresh();
     _bellController.dispose();
     super.dispose();
   }
@@ -334,6 +386,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
             ),
+            if (_pendingVideoVerification != null)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                sliver: SliverToBoxAdapter(
+                  child: VideoVerificationBanner(
+                    request: _pendingVideoVerification!,
+                    onTap: _openVideoVerification,
+                  ),
+                ),
+              ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
               sliver: SliverToBoxAdapter(
